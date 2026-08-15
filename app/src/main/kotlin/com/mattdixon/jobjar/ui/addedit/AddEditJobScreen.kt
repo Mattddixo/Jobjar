@@ -33,6 +33,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -40,6 +41,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mattdixon.jobjar.data.JobRepository
 import com.mattdixon.jobjar.data.LONG_JOB_MINUTES
 import com.mattdixon.jobjar.data.Priority
+import com.mattdixon.jobjar.data.subtasksAvailableAsDependency
 import com.mattdixon.jobjar.ui.components.SubtasksSection
 import com.mattdixon.jobjar.util.formatMinutes
 import com.mattdixon.jobjar.util.formatRecurrenceInterval
@@ -181,6 +183,42 @@ fun AddEditJobScreen(
                             onClick = { viewModel.setPriority(priority) },
                             shape = SegmentedButtonDefaults.itemShape(index, Priority.entries.size)
                         ) { Text(priority.displayName) }
+                    }
+                }
+            }
+
+            // The opposite gate from below: only a subtask can depend on another subtask, and
+            // only among its own siblings (same parent).
+            val subtaskParentId = state.parentId
+            if (state.isLoaded && subtaskParentId != null) {
+                HorizontalDivider()
+
+                val siblingsFlow = remember(repository, subtaskParentId) { repository.subtasksOf(subtaskParentId) }
+                val siblings by siblingsFlow.collectAsState(initial = emptyList())
+                val candidates = subtasksAvailableAsDependency(siblings, excludingSelfId = state.id)
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Depends on", style = MaterialTheme.typography.labelLarge)
+                    Text(
+                        "Optional: this subtask stays out of the jar's random draw until the one it depends on is done. You can still check it off by hand any time.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        item {
+                            FilterChip(
+                                selected = state.dependsOnSubtaskId == null,
+                                onClick = { viewModel.setDependsOn(null) },
+                                label = { Text("None") }
+                            )
+                        }
+                        items(candidates) { candidate ->
+                            FilterChip(
+                                selected = state.dependsOnSubtaskId == candidate.id,
+                                onClick = { viewModel.setDependsOn(candidate.id) },
+                                label = { Text(candidate.title) }
+                            )
+                        }
                     }
                 }
             }

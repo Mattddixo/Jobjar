@@ -44,32 +44,46 @@ class JobRepository(private val dao: JobDao) {
         }
     }
 
-    /** Deleting a parent takes its subtasks with it - there's no meaningful orphan state for them. */
+    /**
+     * Deleting a parent takes its subtasks with it - there's no meaningful orphan state for
+     * them. Deleting a single subtask instead clears [Job.dependsOnSubtaskId] on any sibling
+     * that pointed at it, so nothing is left depending on a subtask that no longer exists.
+     */
     suspend fun deleteJob(job: Job) {
         if (job.parentId == null) {
             dao.getSubtasksSnapshot(job.id).forEach { dao.delete(it) }
+        } else {
+            dao.getSubtasksSnapshot(job.parentId)
+                .filter { it.dependsOnSubtaskId == job.id }
+                .forEach { dao.update(it.copy(dependsOnSubtaskId = null)) }
         }
         dao.delete(job)
     }
 
     /**
-     * A repeating job never persists isDone = true: "completing" it instead cycles it via
-     * [cycleRepeatingJob]. So this branch only ever un-does a one-off completion; there's no
-     * "undo" for a repeating job's last cycle in this version.
+     * A repeating job never persists isDone = true: "completing" it instead cycles it forward
+     * via [cycleRepeatingJob]. If it's currently resting (not due yet) - shown as "done" in the
+     * Jobs list - tapping it again means "make it available right now" instead, via
+     * [wakeRepeatingJob]. A one-off job keeps the plain isDone flip.
      */
     suspend fun toggleDone(job: Job) {
-        if (job.isDone) {
-            dao.markNotDone(job.id)
+        if (job.recurrenceDays != null) {
+            if (job.isPending()) cycleRepeatingJob(job) else wakeRepeatingJob(job)
             return
         }
-        if (job.recurrenceDays != null) {
-            cycleRepeatingJob(job)
+        if (job.isDone) {
+            dao.markNotDone(job.id)
         } else {
             dao.markDone(job.id, System.currentTimeMillis())
             if (job.parentId != null) {
                 autoCompleteParentIfFinished(job.parentId)
             }
         }
+    }
+
+    /** Clears a resting repeating job's schedule so it's immediately due again. Doesn't touch completionCount - the past completion still happened. */
+    private suspend fun wakeRepeatingJob(job: Job) {
+        dao.update(job.copy(nextDueAt = null))
     }
 
     /**
@@ -114,7 +128,9 @@ class JobRepository(private val dao: JobDao) {
      *
      * Eligibility is [Job.isPending], not just "not done": a repeating job that isn't due yet
      * is excluded even though it's technically not marked done, so the jar doesn't hand you a
-     * chore ahead of its schedule.
+     * chore ahead of its schedule. A subtask that's [Job.isUnblocked] = false (waiting on a
+     * linked sibling subtask) is excluded here too - that's the only place the link matters,
+     * since it's still fully completable by hand at any time.
      *
      * A top-level job with subtasks is matched by its *remaining* minutes (its own estimate
      * minus what completed subtasks already accounted for), so it becomes eligible for shorter
@@ -124,11 +140,13 @@ class JobRepository(private val dao: JobDao) {
     suspend fun drawJob(maxMinutes: Int, category: String?, excludeIds: List<Long>, longOnly: Boolean = false): Job? {
         val all = allJobsFlat.first()
         val subtasksByParent = all.filter { it.parentId != null }.groupBy { it.parentId }
+        val subtasksById = subtasksByParent.values.flatten().associateBy { it.id }
 
         val candidates = all.filter { job ->
             job.isPending() &&
                 job.id !in excludeIds &&
                 (category == null || job.category == category) &&
+                (job.parentId == null || job.isUnblocked(subtasksById)) &&
                 minutesNeeded(job, subtasksByParent).let { needed ->
                     if (longOnly) needed >= LONG_JOB_MINUTES else needed <= maxMinutes
                 }

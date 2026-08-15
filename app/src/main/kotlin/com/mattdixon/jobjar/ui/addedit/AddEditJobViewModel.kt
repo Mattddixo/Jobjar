@@ -23,6 +23,8 @@ data class AddEditFormState(
     val priority: Priority = Priority.NORMAL,
     /** Null = one-off job. Non-null = repeats every this many days once completed. */
     val recurrenceDays: Int? = null,
+    /** Only meaningful when [parentId] != null: the sibling subtask that must be done first, if any. */
+    val dependsOnSubtaskId: Long? = null,
     val isSaved: Boolean = false,
     /** True once we're sure [parentId] reflects reality - false only while an existing job is still loading. */
     val isLoaded: Boolean = false
@@ -56,6 +58,7 @@ class AddEditJobViewModel(
                         category = job.category,
                         priority = job.priority,
                         recurrenceDays = job.recurrenceDays,
+                        dependsOnSubtaskId = job.dependsOnSubtaskId,
                         isLoaded = true
                     )
                 } else {
@@ -87,6 +90,8 @@ class AddEditJobViewModel(
     }
 
     fun setRecurrenceDays(days: Int) { _formState.value = _formState.value.copy(recurrenceDays = days) }
+
+    fun setDependsOn(id: Long?) { _formState.value = _formState.value.copy(dependsOnSubtaskId = id) }
 
     fun save() {
         if (!_formState.value.isValid) return
@@ -125,7 +130,8 @@ class AddEditJobViewModel(
                     category = state.category.trim(),
                     priority = state.priority,
                     parentId = parentId,
-                    recurrenceDays = state.recurrenceDays
+                    recurrenceDays = state.recurrenceDays,
+                    dependsOnSubtaskId = state.dependsOnSubtaskId
                 )
             )
             _formState.value = _formState.value.copy(id = newId)
@@ -143,7 +149,8 @@ class AddEditJobViewModel(
                     recurrenceDays = state.recurrenceDays,
                     // Turning repeat off clears the stale schedule; turning it on (or leaving
                     // it on) keeps whatever nextDueAt already existed.
-                    nextDueAt = if (state.recurrenceDays == null) null else existing.nextDueAt
+                    nextDueAt = if (state.recurrenceDays == null) null else existing.nextDueAt,
+                    dependsOnSubtaskId = state.dependsOnSubtaskId
                 )
             )
         }

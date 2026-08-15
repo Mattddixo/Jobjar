@@ -5,6 +5,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -39,7 +41,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mattdixon.jobjar.data.Job
@@ -50,6 +60,7 @@ import com.mattdixon.jobjar.ui.components.InfoBadge
 import com.mattdixon.jobjar.ui.components.TimeBucketBadge
 import com.mattdixon.jobjar.util.formatMinutes
 import com.mattdixon.jobjar.util.formatRecurrenceInterval
+import kotlin.math.roundToInt
 
 private val TIME_PRESETS = listOf(15, 30, 45, 60, 90, 120)
 
@@ -80,6 +91,8 @@ fun DrawScreen(
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
+            JarMeter(available = state.availableCount, completed = state.completedCount)
+
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("How much time do you have?", style = MaterialTheme.typography.titleMedium)
                 Text(
@@ -207,6 +220,93 @@ fun DrawScreen(
                 TextButton(onClick = { showForceCompleteDialog = false }) { Text("Cancel") }
             }
         )
+    }
+}
+
+/**
+ * A jar-shaped fill meter: how much of the jar still has jobs left in it. [available] and
+ * [completed] are real counts from [DrawUiState] (every job and subtask, split by
+ * [com.mattdixon.jobjar.data.Job.isPending]) - the fill level is available/(available+completed),
+ * not a canned animation, so it visibly drains as jobs get done and refills as repeating ones
+ * come back due or new ones get added.
+ */
+@Composable
+private fun JarMeter(available: Int, completed: Int, modifier: Modifier = Modifier) {
+    val total = available + completed
+    val fraction = if (total == 0) 0f else available.toFloat() / total
+    val fillColor = MaterialTheme.colorScheme.primary
+    val outlineColor = MaterialTheme.colorScheme.outline
+    val trackColor = MaterialTheme.colorScheme.surfaceVariant
+
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(20.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Canvas(modifier = Modifier.size(width = 84.dp, height = 116.dp)) {
+            val neckWidth = size.width * 0.46f
+            val neckLeft = (size.width - neckWidth) / 2f
+            val bodyTop = size.height * 0.2f
+            val bodyCorner = size.width * 0.16f
+
+            val bodyPath = Path().apply {
+                addRoundRect(
+                    RoundRect(
+                        left = 0f,
+                        top = bodyTop,
+                        right = size.width,
+                        bottom = size.height,
+                        cornerRadius = CornerRadius(bodyCorner, bodyCorner)
+                    )
+                )
+            }
+            val neckPath = Path().apply {
+                addRoundRect(
+                    RoundRect(
+                        left = neckLeft,
+                        top = 0f,
+                        right = neckLeft + neckWidth,
+                        bottom = bodyTop + bodyCorner,
+                        cornerRadius = CornerRadius(bodyCorner * 0.6f, bodyCorner * 0.6f)
+                    )
+                )
+            }
+
+            clipPath(bodyPath) { drawRect(color = trackColor) }
+            drawPath(neckPath, color = trackColor)
+
+            val bodyHeight = size.height - bodyTop
+            val fillHeight = bodyHeight * fraction
+            if (fillHeight > 0f) {
+                clipPath(bodyPath) {
+                    drawRect(
+                        color = fillColor,
+                        topLeft = Offset(0f, size.height - fillHeight),
+                        size = Size(size.width, fillHeight)
+                    )
+                }
+            }
+
+            val strokeWidth = 2.5.dp.toPx()
+            drawPath(bodyPath, color = outlineColor, style = Stroke(width = strokeWidth))
+            drawPath(neckPath, color = outlineColor, style = Stroke(width = strokeWidth))
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("$available available", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "$completed completed",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (total > 0) {
+                Text(
+                    "Jar is ${(fraction * 100).roundToInt()}% full",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
     }
 }
 

@@ -50,6 +50,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mattdixon.jobjar.data.JobRepository
+import com.mattdixon.jobjar.data.isPending
 import com.mattdixon.jobjar.ui.components.CategoryBadge
 import com.mattdixon.jobjar.ui.components.InfoBadge
 import com.mattdixon.jobjar.ui.components.TimeBucketBadge
@@ -106,11 +107,13 @@ fun JobListScreen(
                 SegmentedButton(
                     selected = !state.showCompleted,
                     onClick = { viewModel.setShowCompleted(false) },
+                    enabled = !state.showRepeatingOnly,
                     shape = SegmentedButtonDefaults.itemShape(0, 2)
                 ) { Text("Active") }
                 SegmentedButton(
                     selected = state.showCompleted,
                     onClick = { viewModel.setShowCompleted(true) },
+                    enabled = !state.showRepeatingOnly,
                     shape = SegmentedButtonDefaults.itemShape(1, 2)
                 ) { Text("Completed") }
             }
@@ -158,7 +161,11 @@ fun JobListScreen(
             if (state.items.isEmpty()) {
                 Column(modifier = Modifier.fillMaxSize().padding(32.dp)) {
                     Text(
-                        text = if (state.showCompleted) "No completed jobs yet." else "No jobs yet. Tap + to add one.",
+                        text = when {
+                            state.showRepeatingOnly -> "No repeating jobs yet."
+                            state.showCompleted -> "No completed jobs yet."
+                            else -> "No jobs yet. Tap + to add one."
+                        },
                         style = MaterialTheme.typography.bodyLarge
                     )
                 }
@@ -173,7 +180,7 @@ fun JobListScreen(
                             onClick = { onOpenJob(item.job.id) },
                             onToggleDone = {
                                 val hasOpenSubtasks = item.subtaskTotal > 0 && item.subtaskDone < item.subtaskTotal
-                                if (!item.job.isDone && hasOpenSubtasks) {
+                                if (item.job.isPending() && hasOpenSubtasks) {
                                     itemPendingForceComplete = item
                                 } else {
                                     viewModel.toggleDone(item.job)
@@ -253,8 +260,8 @@ private fun JobRow(
         ) {
             IconButton(onClick = onToggleDone) {
                 Icon(
-                    imageVector = if (job.isDone) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
-                    contentDescription = if (job.isDone) "Mark not done" else "Mark done"
+                    imageVector = if (!job.isPending()) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
+                    contentDescription = if (!job.isPending()) "Mark not done" else "Mark done"
                 )
             }
             Column(
@@ -266,7 +273,7 @@ private fun JobRow(
                 Text(
                     text = job.title,
                     style = MaterialTheme.typography.titleMedium,
-                    textDecoration = if (job.isDone) TextDecoration.LineThrough else null
+                    textDecoration = if (!job.isPending()) TextDecoration.LineThrough else null
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     TimeBucketBadge(minutes = item.displayMinutes)

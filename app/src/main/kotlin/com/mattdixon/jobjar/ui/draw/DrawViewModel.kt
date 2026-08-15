@@ -5,10 +5,12 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.mattdixon.jobjar.data.Job
 import com.mattdixon.jobjar.data.JobRepository
+import com.mattdixon.jobjar.data.isPending
 import com.mattdixon.jobjar.data.remainingMinutes
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -30,7 +32,10 @@ data class DrawUiState(
     val drawnContext: DrawnJobContext? = null,
     val excludedIds: List<Long> = emptyList(),
     val isDrawing: Boolean = false,
-    val noMatchFound: Boolean = false
+    val noMatchFound: Boolean = false,
+    /** Every job in the jar (parents and subtasks alike), split by [Job.isPending] - drives the jar meter. */
+    val availableCount: Int = 0,
+    val completedCount: Int = 0
 )
 
 class DrawViewModel(private val repository: JobRepository) : ViewModel() {
@@ -40,8 +45,14 @@ class DrawViewModel(private val repository: JobRepository) : ViewModel() {
 
     init {
         viewModelScope.launch {
-            repository.categories.collect { categories ->
-                _uiState.value = _uiState.value.copy(categories = categories)
+            combine(repository.categories, repository.allJobsFlat) { categories, allJobs ->
+                categories to allJobs
+            }.collect { (categories, allJobs) ->
+                _uiState.value = _uiState.value.copy(
+                    categories = categories,
+                    availableCount = allJobs.count { it.isPending() },
+                    completedCount = allJobs.count { !it.isPending() }
+                )
             }
         }
     }

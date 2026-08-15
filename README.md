@@ -10,14 +10,16 @@ list.
 1. **Add a job** with a title, optional notes, a time estimate, a category,
    and a priority. Duration is picked from quick presets (5 min to 3 hr) or
    a **"4+ hrs"** option for jobs too big to size precisely up front.
-2. On the **Jar** tab, tell the app how much time you actually have (a
-   slider or quick-pick chips, capped at 4 hours) and, optionally, a
-   category. Tap **Draw a job** and it randomly picks one eligible job that
-   *fits* your time from the jar. From there you can **Skip** (redraw,
-   excluding jobs already shown this session), **Mark done**, or **View
-   details**. A separate **"4+ hrs"** chip flips the match from a ceiling to
-   a floor — instead of "what fits," it explicitly draws from jobs needing
-   4+ hours, which the slider alone can never reach.
+2. On the **Jar** tab, a jar-shaped meter shows at a glance how full the jar
+   still is — how many jobs (and subtasks) are available versus completed,
+   filled to that real proportion, not a canned animation. Tell the app how
+   much time you actually have (a slider or quick-pick chips, capped at 4
+   hours) and, optionally, a category. Tap **Draw a job** and it randomly
+   picks one eligible job that *fits* your time from the jar. From there you
+   can **Skip** (redraw, excluding jobs already shown this session), **Mark
+   done**, or **View details**. A separate **"4+ hrs"** chip flips the match
+   from a ceiling to a floor — instead of "what fits," it explicitly draws
+   from jobs needing 4+ hours, which the slider alone can never reach.
 3. The **Jobs** tab is the full list — filter by category or by **Repeating**,
    toggle Active/Completed, sort by time/priority/newest/category, tap into
    a job to view or edit it, or swipe into its overflow menu to delete it.
@@ -61,6 +63,16 @@ done manually at any point (a confirmation dialog warns if subtasks are
 still open, since they're left as-is, not force-completed). Deleting a
 parent cascades to its subtasks.
 
+A subtask can optionally **depend on** one sibling subtask (same parent,
+set via the "Depends on" picker on its own form — never itself, and never a
+subtask that would loop back to it). This is a **soft** block: a subtask
+whose dependency isn't done yet is excluded from the jar's random draw
+pool (`JobRepository.drawJob`), shown greyed out in the Subtasks list with
+a lock icon and "Waiting on: <title>", but its checkbox is never disabled —
+it can still be checked off by hand, out of order, at any time. Deleting a
+subtask clears the dependency on anything that pointed at it, so nothing is
+left waiting on a subtask that no longer exists.
+
 ### Repeating jobs
 
 Any top-level job (not a subtask) can repeat, set from the same job form
@@ -78,12 +90,22 @@ catch you up on missed occurrences. Concretely: a repeating `Job` never
 persists `isDone = true`. Completing it (`JobRepository.cycleRepeatingJob`)
 instead bumps `completionCount`, stamps `completedAt`, and sets `nextDueAt`
 to that moment plus the interval. `Job.isPending()` - not `isDone` - is
-what the Jar's draw pool actually checks, so a repeating job that isn't due
-yet is correctly excluded from being drawn even though it's technically
-"not done." It still always shows in the Jobs tab's Active list, though
-(with a "Next: in N days" line), since you should be able to find and
-review a repeating job regardless of where it is in its cycle - the
-**Repeating** filter chip is there specifically for that.
+what decides whether a repeating job is "active" everywhere in the app: the
+Jar's draw pool, and the Jobs tab's Active/Completed split. So completing a
+repeating job makes it disappear from Active the same way a normal job
+would - it shows in Completed instead, with a "Next: in N days" line - and
+it reappears back in Active on its own the moment `nextDueAt` passes,
+purely because `isPending()` is computed live off the current time, not
+because anything runs in the background to move it. Tapping a resting
+repeating job (in Completed, or its detail screen's "Make available now"
+button) clears its schedule so it's due immediately, for whenever you want
+to jump the queue.
+
+Since a repeating job is never really "gone," just resting, the **Repeating**
+filter chip is there for the case you want to see all of them regardless of
+where they are in their cycle: turning it on bypasses the Active/Completed
+split entirely (which is why that toggle is disabled while it's on) and
+lists every repeating job together, due or resting alike.
 
 If a repeating job has subtasks, its own cycle carries them: completing it
 (directly, or automatically once every subtask is done) resets its subtasks
@@ -153,7 +175,8 @@ data class Job(
     val parentId: Long? = null,                  // null = top-level job; set = subtask, one level deep
     val recurrenceDays: Int? = null,             // null = one-off; set = repeats every N days
     val nextDueAt: Long? = null,                 // repeating only: null/past = due now
-    val completionCount: Int = 0                 // repeating only: how many cycles completed
+    val completionCount: Int = 0,                // repeating only: how many cycles completed
+    val dependsOnSubtaskId: Long? = null         // subtask only: sibling subtask that must be done first
 )
 ```
 

@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.mattdixon.jobjar.data.Job
 import com.mattdixon.jobjar.data.JobRepository
+import com.mattdixon.jobjar.data.isPending
 import com.mattdixon.jobjar.data.remainingMinutes
 import com.mattdixon.jobjar.util.formatDueStatus
 import com.mattdixon.jobjar.util.formatRecurrenceInterval
@@ -87,10 +88,15 @@ class JobListViewModel(private val repository: JobRepository) : ViewModel() {
             )
         }
 
+        // A repeating job never persists isDone, so "completed" for it means "resting until its
+        // next cycle" - isPending() (not isDone) is what decides Active vs Completed for it, and
+        // for everything else it's equivalent to !isDone. When filtering to repeating jobs only,
+        // the Active/Completed split is bypassed entirely and both due and resting ones show
+        // together, so this is the one place you can see the full set regardless of state.
         val filtered = items
-            .filter { it.job.isDone == currentFilters.showCompleted }
             .filter { currentFilters.category == null || it.job.category == currentFilters.category }
             .filter { !currentFilters.repeatingOnly || it.job.recurrenceDays != null }
+            .filter { currentFilters.repeatingOnly || it.job.isPending() != currentFilters.showCompleted }
 
         val sorted = when (currentFilters.sort) {
             SortOrder.TIME_ASC -> filtered.sortedBy { it.displayMinutes }

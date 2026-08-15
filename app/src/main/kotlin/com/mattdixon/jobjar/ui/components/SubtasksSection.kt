@@ -9,6 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
@@ -26,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.mattdixon.jobjar.data.Job
 import com.mattdixon.jobjar.data.JobRepository
+import com.mattdixon.jobjar.data.isUnblocked
 import com.mattdixon.jobjar.data.remainingMinutesOf
 import com.mattdixon.jobjar.util.formatMinutes
 import kotlinx.coroutines.launch
@@ -80,10 +82,14 @@ fun SubtasksSection(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            val siblingsById = subtasks.associateBy { it.id }
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 subtasks.forEach { subtask ->
                     SubtaskRow(
                         subtask = subtask,
+                        waitingOnTitle = subtask.dependsOnSubtaskId
+                            ?.takeUnless { subtask.isUnblocked(siblingsById) }
+                            ?.let { siblingsById[it]?.title },
                         onClick = { onOpenSubtask(subtask.id) },
                         onToggleDone = { scope.launch { repository.toggleDone(subtask) } }
                     )
@@ -98,12 +104,21 @@ fun SubtasksSection(
     }
 }
 
+/**
+ * [waitingOnTitle], when non-null, means this subtask is soft-blocked on an unfinished sibling:
+ * it's greyed out with a lock indicator and excluded from the jar's draw pool (see
+ * [com.mattdixon.jobjar.data.JobRepository.drawJob]), but the checkbox stays fully live - it can
+ * still be checked off by hand at any time.
+ */
 @Composable
 private fun SubtaskRow(
     subtask: Job,
+    waitingOnTitle: String?,
     onClick: () -> Unit,
     onToggleDone: () -> Unit
 ) {
+    val blocked = waitingOnTitle != null
+    val contentColor = if (blocked) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
     Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
@@ -115,14 +130,30 @@ private fun SubtaskRow(
             IconButton(onClick = onToggleDone) {
                 Icon(
                     imageVector = if (subtask.isDone) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
-                    contentDescription = if (subtask.isDone) "Mark not done" else "Mark done"
+                    contentDescription = if (subtask.isDone) "Mark not done" else "Mark done",
+                    tint = contentColor
                 )
             }
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(subtask.title, style = MaterialTheme.typography.bodyLarge)
-                TimeBucketBadge(minutes = subtask.estimatedMinutes)
+                Text(subtask.title, style = MaterialTheme.typography.bodyLarge, color = contentColor)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    TimeBucketBadge(minutes = subtask.estimatedMinutes)
+                    if (waitingOnTitle != null) {
+                        Icon(
+                            Icons.Filled.Lock,
+                            contentDescription = null,
+                            modifier = Modifier.padding(start = 2.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            "Waiting on: $waitingOnTitle",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
-            Icon(Icons.Filled.ChevronRight, contentDescription = null)
+            Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = contentColor)
         }
     }
 }

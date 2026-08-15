@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.mattdixon.jobjar.data.Job
 import com.mattdixon.jobjar.data.JobRepository
+import com.mattdixon.jobjar.data.isPending
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
@@ -37,7 +38,7 @@ class StatsViewModel(repository: JobRepository) : ViewModel() {
 private data class Contribution(val category: String, val count: Int, val minutes: Int)
 
 private fun toUiState(allJobs: List<Job>): StatsUiState {
-    val activeCount = allJobs.count { it.parentId == null && !it.isDone }
+    val activeCount = allJobs.count { it.parentId == null && it.isPending() }
 
     val parentIdsWithSubtasks = allJobs.mapNotNull { it.parentId }.toSet()
     val repeatingParentIds = allJobs.filter { it.parentId == null && it.recurrenceDays != null }

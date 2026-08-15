@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -30,9 +31,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.mattdixon.jobjar.data.JobRepository
+import com.mattdixon.jobjar.data.isPending
 import com.mattdixon.jobjar.data.remainingMinutes
 import com.mattdixon.jobjar.ui.components.CategoryBadge
 import com.mattdixon.jobjar.ui.components.InfoBadge
@@ -71,6 +74,13 @@ fun JobDetailScreen(
         currentJob?.parentId?.let { repository.jobById(it) } ?: flowOf(null)
     }
     val parent by parentFlow.collectAsState(initial = null)
+
+    // Siblings under the same parent, only needed to resolve this job's own dependsOnSubtaskId
+    // (if it's a subtask) into a title for the "Waiting on" indicator below.
+    val siblingsFlow = remember(currentJob?.parentId) {
+        currentJob?.parentId?.let { repository.subtasksOf(it) } ?: flowOf(emptyList())
+    }
+    val siblings by siblingsFlow.collectAsState(initial = emptyList())
 
     Scaffold(
         topBar = {
@@ -148,6 +158,25 @@ fun JobDetailScreen(
                     }
                 }
 
+                val prerequisite = currentJob.dependsOnSubtaskId?.let { depId -> siblings.find { it.id == depId } }
+                if (prerequisite != null && !prerequisite.isDone) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.Lock,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            "Waiting on: ${prerequisite.title}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
                 Text("Priority: ${currentJob.priority.displayName}", style = MaterialTheme.typography.bodyMedium)
 
                 if (currentJob.notes.isNotBlank()) {
@@ -164,7 +193,7 @@ fun JobDetailScreen(
 
                 Button(
                     onClick = {
-                        if (!currentJob.isDone && incompleteSubtaskCount > 0) {
+                        if (currentJob.isPending() && incompleteSubtaskCount > 0) {
                             showForceCompleteDialog = true
                         } else {
                             scope.launch { repository.toggleDone(currentJob) }
@@ -172,7 +201,13 @@ fun JobDetailScreen(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(if (currentJob.isDone) "Mark as not done" else "Mark as done")
+                    Text(
+                        when {
+                            currentJob.isPending() -> "Mark as done"
+                            currentJob.recurrenceDays != null -> "Make available now"
+                            else -> "Mark as not done"
+                        }
+                    )
                 }
 
                 if (currentJob.parentId == null) {

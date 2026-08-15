@@ -34,16 +34,53 @@ data class Job(
     val parentId: Long? = null,
     val recurrenceDays: Int? = null,
     val nextDueAt: Long? = null,
-    val completionCount: Int = 0
+    val completionCount: Int = 0,
+    /** Only meaningful when this is itself a subtask: the sibling subtask (same [parentId]) that must be done first, if any. */
+    val dependsOnSubtaskId: Long? = null
 )
 
-/** Is this job something you could act on right now? For a repeating job that's a due-date check, not [isDone]. */
+/**
+ * Is this job something you could act on right now? For a repeating job that's a due-date
+ * check, not [isDone] (which a repeating job never persists as true - see [JobRepository]).
+ */
 fun Job.isPending(now: Long = System.currentTimeMillis()): Boolean =
     if (recurrenceDays != null) {
         nextDueAt == null || nextDueAt <= now
     } else {
         !isDone
     }
+
+/**
+ * A blocked subtask (prerequisite not yet done) is only excluded from the random draw pool -
+ * it's still fully completable by hand at any time, out of order if you want. [siblingsById]
+ * should map every subtask sharing this job's [parentId] by id.
+ */
+fun Job.isUnblocked(siblingsById: Map<Long, Job>): Boolean {
+    val prerequisiteId = dependsOnSubtaskId ?: return true
+    return siblingsById[prerequisiteId]?.isDone ?: true
+}
+
+/**
+ * Which of [siblings] (subtasks sharing the same parent) [excludingSelfId] could validly depend
+ * on, without creating a cycle. A candidate is excluded if it already (transitively) depends on
+ * the subtask being edited, since linking to it would close a loop.
+ */
+fun subtasksAvailableAsDependency(siblings: List<Job>, excludingSelfId: Long?): List<Job> {
+    val byId = siblings.associateBy { it.id }
+    fun eventuallyDependsOn(startId: Long, targetId: Long): Boolean {
+        val seen = mutableSetOf<Long>()
+        var current: Long? = startId
+        while (current != null && seen.add(current)) {
+            if (current == targetId) return true
+            current = byId[current]?.dependsOnSubtaskId
+        }
+        return false
+    }
+    return siblings.filter { candidate ->
+        candidate.id != excludingSelfId &&
+            (excludingSelfId == null || !eventuallyDependsOn(candidate.id, excludingSelfId))
+    }
+}
 
 /**
  * Minutes still "owed" against a parent's estimate: [estimatedMinutes] minus time already
