@@ -24,9 +24,7 @@ data class Job(
     val completedAt: Long? = null,
     val timesDrawn: Int = 0,
     val parentId: Long? = null
-) {
-    val timeBucket: TimeBucket get() = TimeBucket.fromMinutes(estimatedMinutes)
-}
+)
 
 /**
  * Minutes still "owed" against a parent's estimate: [estimatedMinutes] minus time already

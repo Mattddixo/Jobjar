@@ -63,6 +63,7 @@ fun AddEditJobScreen(
     }
 
     val title = when {
+        jobId != null && state.parentId != null -> "Edit subtask"
         jobId != null -> "Edit job"
         parentId != null -> "New subtask"
         else -> "New job"

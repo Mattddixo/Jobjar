@@ -5,10 +5,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -62,6 +63,7 @@ fun JobListScreen(
     val viewModel: JobListViewModel = viewModel(factory = JobListViewModel.Factory(repository))
     val state by viewModel.uiState.collectAsState()
     var itemPendingDelete by remember { mutableStateOf<JobListItem?>(null) }
+    var itemPendingForceComplete by remember { mutableStateOf<JobListItem?>(null) }
     var sortMenuExpanded by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -136,7 +138,7 @@ fun JobListScreen(
                 }
             }
 
-            Box(modifier = Modifier.size(8.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             if (state.items.isEmpty()) {
                 Column(modifier = Modifier.fillMaxSize().padding(32.dp)) {
@@ -154,7 +156,14 @@ fun JobListScreen(
                         JobRow(
                             item = item,
                             onClick = { onOpenJob(item.job.id) },
-                            onToggleDone = { viewModel.toggleDone(item.job) },
+                            onToggleDone = {
+                                val hasOpenSubtasks = item.subtaskTotal > 0 && item.subtaskDone < item.subtaskTotal
+                                if (!item.job.isDone && hasOpenSubtasks) {
+                                    itemPendingForceComplete = item
+                                } else {
+                                    viewModel.toggleDone(item.job)
+                                }
+                            },
                             onDeleteRequest = { itemPendingDelete = item }
                         )
                     }
@@ -184,6 +193,26 @@ fun JobListScreen(
             },
             dismissButton = {
                 TextButton(onClick = { itemPendingDelete = null }) { Text("Cancel") }
+            }
+        )
+    }
+
+    itemPendingForceComplete?.let { item ->
+        val incompleteCount = item.subtaskTotal - item.subtaskDone
+        AlertDialog(
+            onDismissRequest = { itemPendingForceComplete = null },
+            title = { Text("Mark as done?") },
+            text = {
+                Text("$incompleteCount subtask(s) are still open. They'll stay open, but this job will be marked done.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.toggleDone(item.job)
+                    itemPendingForceComplete = null
+                }) { Text("Mark done") }
+            },
+            dismissButton = {
+                TextButton(onClick = { itemPendingForceComplete = null }) { Text("Cancel") }
             }
         )
     }

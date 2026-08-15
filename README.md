@@ -8,11 +8,9 @@ list.
 ## Core idea
 
 1. **Add a job** with a title, optional notes, a time estimate, a category,
-   and a priority.
-2. Jobs are automatically grouped into **time buckets** (Quick ≤15 min,
-   Short ≤30 min, Medium ≤1 hr, Long ≤2 hr, Extended 2 hr+) based on the
-   estimate.
-3. On the **Jar** tab, tell the app how much time you actually have (a
+   and a priority. Duration is picked from quick presets (5 min to 3 hr) or
+   a **"4+ hrs"** option for jobs too big to size precisely up front.
+2. On the **Jar** tab, tell the app how much time you actually have (a
    slider or quick-pick chips, capped at 4 hours) and, optionally, a
    category. Tap **Draw a job** and it randomly picks one eligible job that
    *fits* your time from the jar. From there you can **Skip** (redraw,
@@ -20,11 +18,12 @@ list.
    details**. A separate **"4+ hrs"** chip flips the match from a ceiling to
    a floor — instead of "what fits," it explicitly draws from jobs needing
    4+ hours, which the slider alone can never reach.
-4. The **Jobs** tab is the full list — filter by category, toggle
+3. The **Jobs** tab is the full list — filter by category, toggle
    Active/Completed, sort by time/priority/newest/category, tap into a job
    to view or edit it, or swipe into its overflow menu to delete it.
-5. The **Stats** tab shows how many jobs are active vs. completed, total
-   time invested, and a breakdown by category.
+4. The **Stats** tab shows how many jobs are active vs. completed, total
+   time invested, and a breakdown by category with a relative-size bar per
+   category, so you can see where your time actually goes at a glance.
 
 ### Subtasks
 
@@ -95,7 +94,7 @@ app/src/main/kotlin/com/mattdixon/jobjar/
 ├── util/               Duration formatting
 └── ui/
     ├── theme/          Material 3 color/type/theme
-    ├── components/     Shared badges (time bucket / category)
+    ├── components/     Shared badges (duration / category) and the SubtasksSection
     ├── draw/            The Jar tab: time budget → random draw → act on it
     ├── joblist/         Full job list: filter, sort, complete, delete
     ├── addedit/          Add/edit form
@@ -122,21 +121,21 @@ data class Job(
 )
 ```
 
-`TimeBucket` is derived from `estimatedMinutes`, not stored — it's purely a
-display/filtering concept computed on the fly. Likewise, a parent's
-remaining minutes is never persisted; `Job.remainingMinutes(subtasks)`
+A parent's remaining minutes is never persisted; `Job.remainingMinutes(subtasks)`
 recomputes it from live subtask state every time it's needed, so there's
 nothing to keep in sync when a subtask is added, completed, reopened, or
-deleted.
+deleted. `JobRepository` enforces one write-time invariant on top of that:
+a parent's `estimatedMinutes` can never be less than what its subtasks add
+up to (it grows to match, never auto-shrinks) — see the Subtasks section
+above for why.
 
 ## Building
 
-Requires the Android SDK (compileSdk 34, minSdk 26) and JDK 17+. Open the
-`android/JobJar` folder in Android Studio (Koala or newer), let it sync, and
-run the `app` configuration — or from the command line:
+Requires the Android SDK (compileSdk 34, minSdk 26) and JDK 17+. Open this
+folder in Android Studio (Koala or newer), let it sync, and run the `app`
+configuration — or from the command line:
 
 ```bash
-cd android/JobJar
 ./gradlew assembleDebug
 ```
 

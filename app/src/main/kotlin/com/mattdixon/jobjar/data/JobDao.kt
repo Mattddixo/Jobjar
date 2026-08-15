@@ -18,12 +18,6 @@ interface JobDao {
     @Query("SELECT * FROM jobs WHERE parentId IS NULL ORDER BY createdAt DESC")
     fun getTopLevelJobs(): Flow<List<Job>>
 
-    @Query("SELECT * FROM jobs WHERE parentId IS NULL AND isDone = 0 ORDER BY createdAt DESC")
-    fun getActiveTopLevelJobs(): Flow<List<Job>>
-
-    @Query("SELECT * FROM jobs WHERE isDone = 1 ORDER BY completedAt DESC")
-    fun getCompletedJobs(): Flow<List<Job>>
-
     @Query("SELECT DISTINCT category FROM jobs WHERE category != '' ORDER BY category ASC")
     fun getCategories(): Flow<List<String>>
 

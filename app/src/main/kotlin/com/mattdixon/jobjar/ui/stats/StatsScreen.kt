@@ -5,11 +5,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -18,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mattdixon.jobjar.data.JobRepository
@@ -58,19 +62,34 @@ fun StatsScreen(repository: JobRepository) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             } else {
+                // Sorted descending by totalMinutes already, so the first entry is the max -
+                // used to scale each bar relative to your biggest time sink.
+                val maxMinutes = state.categoryStats.first().totalMinutes.coerceAtLeast(1)
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(state.categoryStats, key = { it.category }) { stat ->
                         Card(modifier = Modifier.fillMaxWidth()) {
-                            Row(
+                            Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(16.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Text(stat.category, style = MaterialTheme.typography.bodyLarge)
-                                Text(
-                                    "${stat.completedCount} done · ${formatMinutes(stat.totalMinutes)}",
-                                    style = MaterialTheme.typography.bodyMedium
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(stat.category, style = MaterialTheme.typography.bodyLarge)
+                                    Text(
+                                        "${stat.completedCount} done · ${formatMinutes(stat.totalMinutes)}",
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                }
+                                LinearProgressIndicator(
+                                    progress = { stat.totalMinutes.toFloat() / maxMinutes },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(6.dp)
+                                        .clip(RoundedCornerShape(3.dp))
                                 )
                             }
                         }

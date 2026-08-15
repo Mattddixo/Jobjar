@@ -5,15 +5,11 @@ import kotlinx.coroutines.flow.first
 
 class JobRepository(private val dao: JobDao) {
 
-    /** All rows, parents and subtasks. Used for stats and as the draw candidate pool. */
+    /** All rows, parents and subtasks. The single source of truth for stats and the draw candidate pool. */
     val allJobsFlat: Flow<List<Job>> = dao.getAllJobsFlow()
 
     /** Top-level jobs only - what the main Jobs list shows. */
     val topLevelJobs: Flow<List<Job>> = dao.getTopLevelJobs()
-    val activeTopLevelJobs: Flow<List<Job>> = dao.getActiveTopLevelJobs()
-
-    /** Completed jobs across parents and subtasks, so finishing a subtask counts toward stats. */
-    val completedJobs: Flow<List<Job>> = dao.getCompletedJobs()
 
     val categories: Flow<List<String>> = dao.getCategories()
 

@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -28,10 +29,14 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -52,6 +57,7 @@ fun DrawScreen(
 ) {
     val viewModel: DrawViewModel = viewModel(factory = DrawViewModel.Factory(repository))
     val state by viewModel.uiState.collectAsState()
+    var showForceCompleteDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = { TopAppBar(title = { Text("The Job Jar") }) }
@@ -121,6 +127,7 @@ fun DrawScreen(
 
             Button(
                 onClick = { viewModel.draw() },
+                enabled = !state.isDrawing,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp)
@@ -139,8 +146,17 @@ fun DrawScreen(
                     drawnJob != null -> DrawnJobCard(
                         job = drawnJob,
                         context = state.drawnContext,
+                        isBusy = state.isDrawing,
                         onOpen = { onOpenJob(drawnJob.id) },
-                        onDone = { viewModel.completeDrawnJob() },
+                        onDone = {
+                            val context = state.drawnContext
+                            val hasOpenSubtasks = context != null && context.subtaskDone < context.subtaskTotal
+                            if (hasOpenSubtasks) {
+                                showForceCompleteDialog = true
+                            } else {
+                                viewModel.completeDrawnJob()
+                            }
+                        },
                         onSkip = { viewModel.draw(excludeCurrent = true) }
                     )
                     state.noMatchFound -> Text(
@@ -160,12 +176,34 @@ fun DrawScreen(
             }
         }
     }
+
+    if (showForceCompleteDialog) {
+        val context = state.drawnContext
+        val incompleteCount = (context?.subtaskTotal ?: 0) - (context?.subtaskDone ?: 0)
+        AlertDialog(
+            onDismissRequest = { showForceCompleteDialog = false },
+            title = { Text("Mark as done?") },
+            text = {
+                Text("$incompleteCount subtask(s) are still open. They'll stay open, but this job will be marked done.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.completeDrawnJob()
+                    showForceCompleteDialog = false
+                }) { Text("Mark done") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showForceCompleteDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
 }
 
 @Composable
 private fun DrawnJobCard(
     job: Job,
     context: DrawnJobContext?,
+    isBusy: Boolean,
     onOpen: () -> Unit,
     onDone: () -> Unit,
     onSkip: () -> Unit
@@ -201,10 +239,10 @@ private fun DrawnJobCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                OutlinedButton(onClick = onSkip, modifier = Modifier.weight(1f)) {
+                OutlinedButton(onClick = onSkip, enabled = !isBusy, modifier = Modifier.weight(1f)) {
                     Text("Skip")
                 }
-                Button(onClick = onDone, modifier = Modifier.weight(1f)) {
+                Button(onClick = onDone, enabled = !isBusy, modifier = Modifier.weight(1f)) {
                     Text("Mark done")
                 }
             }
