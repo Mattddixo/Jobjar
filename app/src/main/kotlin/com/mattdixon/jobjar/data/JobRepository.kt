@@ -73,6 +73,9 @@ class JobRepository(private val dao: JobDao) {
         }
         if (job.isDone) {
             dao.markNotDone(job.id)
+            if (job.parentId != null) {
+                reopenParentIfDone(job.parentId)
+            }
         } else {
             dao.markDone(job.id, System.currentTimeMillis())
             if (job.parentId != null) {
@@ -116,6 +119,19 @@ class JobRepository(private val dao: JobDao) {
             cycleRepeatingJob(parent)
         } else {
             dao.markDone(parentId, System.currentTimeMillis())
+        }
+    }
+
+    /**
+     * The other half of [autoCompleteParentIfFinished]: reopening one subtask after its parent
+     * auto- or force-completed shouldn't leave the parent stuck done with a subtask now open
+     * again under it. A repeating parent never persists isDone = true in the first place (see
+     * [toggleDone]), so this is a no-op for it - only a plain parent can actually be reopened.
+     */
+    private suspend fun reopenParentIfDone(parentId: Long) {
+        val parent = dao.getJobById(parentId).first() ?: return
+        if (parent.isDone) {
+            dao.markNotDone(parentId)
         }
     }
 

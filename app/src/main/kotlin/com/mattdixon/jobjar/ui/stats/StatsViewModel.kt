@@ -38,7 +38,10 @@ class StatsViewModel(repository: JobRepository) : ViewModel() {
 private data class Contribution(val category: String, val count: Int, val minutes: Int)
 
 private fun toUiState(allJobs: List<Job>): StatsUiState {
-    val activeCount = allJobs.count { it.parentId == null && it.isPending() }
+    // Every job and subtask alike, same population the Jar meter's "available" count uses
+    // (DrawViewModel) - a standalone open subtask is just as much active work as a top-level
+    // job, so scoping this to top-level only would quietly disagree with what the Jar shows.
+    val activeCount = allJobs.count { it.isPending() }
 
     val parentIdsWithSubtasks = allJobs.mapNotNull { it.parentId }.toSet()
     val repeatingParentIds = allJobs.filter { it.parentId == null && it.recurrenceDays != null }
