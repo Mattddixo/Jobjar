@@ -91,16 +91,6 @@ fun AddEditJobScreen(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
-                // enableEdgeToEdge() (MainActivity) stops the OS from auto-resizing content for
-                // the keyboard, so without this, "scroll to the end" doesn't account for the
-                // keyboard covering the lower portion of the screen - the Subtasks section could
-                // stay hidden until you dismissed it. This is the only screen in the app with
-                // text input, so it's the only one that needs this; keep it scoped here rather
-                // than at the app root (Scaffold in JobJarApp.kt) - the ime inset animates on
-                // nearly every frame while the keyboard opens/closes, so applying imePadding()
-                // to the whole app shell (bottom nav included) re-measures far more than needed
-                // and is noticeably janky. Add the same modifier locally to any future screen
-                // that adds its own text input.
                 .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
