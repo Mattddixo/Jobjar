@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.AlertDialog
@@ -66,6 +68,13 @@ fun DrawScreen(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
+                // Without this, the time selector + category chips + draw button + drawn job
+                // card (title, badges, notes, subtask progress, three buttons) can add up to
+                // more height than the screen. A plain Column doesn't clip or warn about that -
+                // it just lays the overflow out past the bottom edge, so the Skip/Mark done/
+                // View details buttons could end up positioned off-screen: present, but neither
+                // visible nor tappable.
+                .verticalScroll(rememberScrollState())
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
