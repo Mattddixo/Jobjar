@@ -25,8 +25,10 @@ import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -88,62 +90,75 @@ fun DrawScreen(
                 // View details buttons could end up positioned off-screen: present, but neither
                 // visible nor tappable.
                 .verticalScroll(rememberScrollState())
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            JarMeter(available = state.availableCount, completed = state.completedCount)
+            JarSummaryCard(available = state.availableCount, completed = state.completedCount)
 
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("How much time do you have?", style = MaterialTheme.typography.titleMedium)
-                Text(
-                    if (state.longJobsOnly) "4+ hrs" else formatMinutes(state.availableMinutes),
-                    style = MaterialTheme.typography.headlineMedium
-                )
-                Slider(
-                    value = state.availableMinutes.toFloat(),
-                    onValueChange = { viewModel.setAvailableMinutes(it.toInt()) },
-                    valueRange = 5f..240f,
-                    enabled = !state.longJobsOnly
-                )
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(TIME_PRESETS) { minutes ->
-                        FilterChip(
-                            selected = !state.longJobsOnly && state.availableMinutes == minutes,
-                            onClick = { viewModel.setAvailableMinutes(minutes) },
-                            label = { Text(formatMinutes(minutes)) }
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Time available", style = MaterialTheme.typography.labelLarge)
+                        Text(
+                            if (state.longJobsOnly) "4+ hrs" else formatMinutes(state.availableMinutes),
+                            style = MaterialTheme.typography.titleLarge
                         )
                     }
-                    item {
-                        // Not a ceiling like the other chips - an explicit "pull from the big
-                        // projects" request, since the slider above can't reach past 4 hours.
-                        FilterChip(
-                            selected = state.longJobsOnly,
-                            onClick = { viewModel.setLongJobsOnly() },
-                            label = { Text("4+ hrs") }
-                        )
-                    }
-                }
-            }
-
-            if (state.categories.isNotEmpty()) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Category", style = MaterialTheme.typography.titleMedium)
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        item {
+                    Slider(
+                        value = state.availableMinutes.toFloat(),
+                        onValueChange = { viewModel.setAvailableMinutes(it.toInt()) },
+                        valueRange = 5f..240f,
+                        enabled = !state.longJobsOnly
+                    )
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(TIME_PRESETS) { minutes ->
                             FilterChip(
-                                selected = state.selectedCategory == null,
-                                onClick = { viewModel.setCategory(null) },
-                                label = { Text("Any") }
+                                selected = !state.longJobsOnly && state.availableMinutes == minutes,
+                                onClick = { viewModel.setAvailableMinutes(minutes) },
+                                label = { Text(formatMinutes(minutes)) }
                             )
                         }
-                        items(state.categories) { category ->
+                        item {
+                            // Not a ceiling like the other chips - an explicit "pull from the big
+                            // projects" request, since the slider above can't reach past 4 hours.
                             FilterChip(
-                                selected = state.selectedCategory == category,
-                                onClick = {
-                                    viewModel.setCategory(if (state.selectedCategory == category) null else category)
-                                },
-                                label = { Text(category) }
+                                selected = state.longJobsOnly,
+                                onClick = { viewModel.setLongJobsOnly() },
+                                label = { Text("4+ hrs") }
                             )
+                        }
+                    }
+
+                    if (state.categories.isNotEmpty()) {
+                        HorizontalDivider()
+                        Text("Category", style = MaterialTheme.typography.labelLarge)
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            item {
+                                FilterChip(
+                                    selected = state.selectedCategory == null,
+                                    onClick = { viewModel.setCategory(null) },
+                                    label = { Text("Any") }
+                                )
+                            }
+                            items(state.categories) { category ->
+                                FilterChip(
+                                    selected = state.selectedCategory == category,
+                                    onClick = {
+                                        viewModel.setCategory(if (state.selectedCategory == category) null else category)
+                                    },
+                                    label = { Text(category) }
+                                )
+                            }
                         }
                     }
                 }
@@ -154,7 +169,7 @@ fun DrawScreen(
                 enabled = !state.isDrawing,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp)
+                    .height(52.dp)
             ) {
                 Icon(Icons.Filled.Shuffle, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
@@ -228,83 +243,91 @@ fun DrawScreen(
  * [completed] are real counts from [DrawUiState] (every job and subtask, split by
  * [com.mattdixon.jobjar.data.Job.isPending]) - the fill level is available/(available+completed),
  * not a canned animation, so it visibly drains as jobs get done and refills as repeating ones
- * come back due or new ones get added.
+ * come back due or new ones get added. Wrapped in its own tonal card so it reads as the screen's
+ * one clear focal point rather than competing with the form below it.
  */
 @Composable
-private fun JarMeter(available: Int, completed: Int, modifier: Modifier = Modifier) {
+private fun JarSummaryCard(available: Int, completed: Int, modifier: Modifier = Modifier) {
     val total = available + completed
     val fraction = if (total == 0) 0f else available.toFloat() / total
     val fillColor = MaterialTheme.colorScheme.primary
     val outlineColor = MaterialTheme.colorScheme.outline
     val trackColor = MaterialTheme.colorScheme.surfaceVariant
 
-    Row(
+    Card(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(20.dp),
-        verticalAlignment = Alignment.CenterVertically
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
     ) {
-        Canvas(modifier = Modifier.size(width = 84.dp, height = 116.dp)) {
-            val neckWidth = size.width * 0.46f
-            val neckLeft = (size.width - neckWidth) / 2f
-            val bodyTop = size.height * 0.2f
-            val bodyCorner = size.width * 0.16f
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Canvas(modifier = Modifier.size(width = 68.dp, height = 92.dp)) {
+                val neckWidth = size.width * 0.46f
+                val neckLeft = (size.width - neckWidth) / 2f
+                val bodyTop = size.height * 0.2f
+                val bodyCorner = size.width * 0.16f
 
-            val bodyPath = Path().apply {
-                addRoundRect(
-                    RoundRect(
-                        left = 0f,
-                        top = bodyTop,
-                        right = size.width,
-                        bottom = size.height,
-                        cornerRadius = CornerRadius(bodyCorner, bodyCorner)
-                    )
-                )
-            }
-            val neckPath = Path().apply {
-                addRoundRect(
-                    RoundRect(
-                        left = neckLeft,
-                        top = 0f,
-                        right = neckLeft + neckWidth,
-                        bottom = bodyTop + bodyCorner,
-                        cornerRadius = CornerRadius(bodyCorner * 0.6f, bodyCorner * 0.6f)
-                    )
-                )
-            }
-
-            clipPath(bodyPath) { drawRect(color = trackColor) }
-            drawPath(neckPath, color = trackColor)
-
-            val bodyHeight = size.height - bodyTop
-            val fillHeight = bodyHeight * fraction
-            if (fillHeight > 0f) {
-                clipPath(bodyPath) {
-                    drawRect(
-                        color = fillColor,
-                        topLeft = Offset(0f, size.height - fillHeight),
-                        size = Size(size.width, fillHeight)
+                val bodyPath = Path().apply {
+                    addRoundRect(
+                        RoundRect(
+                            left = 0f,
+                            top = bodyTop,
+                            right = size.width,
+                            bottom = size.height,
+                            cornerRadius = CornerRadius(bodyCorner, bodyCorner)
+                        )
                     )
                 }
+                val neckPath = Path().apply {
+                    addRoundRect(
+                        RoundRect(
+                            left = neckLeft,
+                            top = 0f,
+                            right = neckLeft + neckWidth,
+                            bottom = bodyTop + bodyCorner,
+                            cornerRadius = CornerRadius(bodyCorner * 0.6f, bodyCorner * 0.6f)
+                        )
+                    )
+                }
+
+                clipPath(bodyPath) { drawRect(color = trackColor) }
+                drawPath(neckPath, color = trackColor)
+
+                val bodyHeight = size.height - bodyTop
+                val fillHeight = bodyHeight * fraction
+                if (fillHeight > 0f) {
+                    clipPath(bodyPath) {
+                        drawRect(
+                            color = fillColor,
+                            topLeft = Offset(0f, size.height - fillHeight),
+                            size = Size(size.width, fillHeight)
+                        )
+                    }
+                }
+
+                val strokeWidth = 2.5.dp.toPx()
+                drawPath(bodyPath, color = outlineColor, style = Stroke(width = strokeWidth))
+                drawPath(neckPath, color = outlineColor, style = Stroke(width = strokeWidth))
             }
 
-            val strokeWidth = 2.5.dp.toPx()
-            drawPath(bodyPath, color = outlineColor, style = Stroke(width = strokeWidth))
-            drawPath(neckPath, color = outlineColor, style = Stroke(width = strokeWidth))
-        }
-
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("$available available", style = MaterialTheme.typography.titleMedium)
-            Text(
-                "$completed completed",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            if (total > 0) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("$available available", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "Jar is ${(fraction * 100).roundToInt()}% full",
-                    style = MaterialTheme.typography.bodySmall,
+                    "$completed completed",
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                if (total > 0) {
+                    Text(
+                        "Jar is ${(fraction * 100).roundToInt()}% full",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
     }
@@ -321,8 +344,8 @@ private fun DrawnJobCard(
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Text(job.title, style = MaterialTheme.typography.headlineSmall)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
