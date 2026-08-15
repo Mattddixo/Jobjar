@@ -9,22 +9,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -36,13 +30,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.mattdixon.jobjar.data.Job
 import com.mattdixon.jobjar.data.JobRepository
 import com.mattdixon.jobjar.data.remainingMinutes
 import com.mattdixon.jobjar.ui.components.CategoryBadge
+import com.mattdixon.jobjar.ui.components.SubtasksSection
 import com.mattdixon.jobjar.ui.components.TimeBucketBadge
 import com.mattdixon.jobjar.util.formatMinutes
 import kotlinx.coroutines.flow.flowOf
@@ -58,8 +51,14 @@ fun JobDetailScreen(
     onOpenJob: (Long) -> Unit,
     onBack: () -> Unit
 ) {
-    val job by repository.jobById(jobId).collectAsState(initial = null)
-    val subtasks by repository.subtasksOf(jobId).collectAsState(initial = emptyList())
+    // remember()'d so recompositions (e.g. toggling a dialog) reuse the same Flow instance
+    // instead of Room starting a brand-new query/subscription on every recomposition.
+    val jobFlow = remember(repository, jobId) { repository.jobById(jobId) }
+    val job by jobFlow.collectAsState(initial = null)
+
+    val subtasksFlow = remember(repository, jobId) { repository.subtasksOf(jobId) }
+    val subtasks by subtasksFlow.collectAsState(initial = emptyList())
+
     val scope = rememberCoroutineScope()
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showForceCompleteDialog by remember { mutableStateOf(false) }
@@ -165,44 +164,13 @@ fun JobDetailScreen(
 
                 if (currentJob.parentId == null) {
                     HorizontalDivider()
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Subtasks", style = MaterialTheme.typography.titleMedium)
-                        if (subtasks.isNotEmpty()) {
-                            Text(
-                                "${subtasks.count { it.isDone }}/${subtasks.size} done",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-
-                    if (subtasks.isEmpty()) {
-                        Text(
-                            "Break this job into smaller pieces you can draw on their own.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    } else {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            subtasks.forEach { subtask ->
-                                SubtaskRow(
-                                    subtask = subtask,
-                                    onClick = { onOpenJob(subtask.id) },
-                                    onToggleDone = { scope.launch { repository.toggleDone(subtask) } }
-                                )
-                            }
-                        }
-                    }
-
-                    OutlinedButton(onClick = onAddSubtask, modifier = Modifier.fillMaxWidth()) {
-                        Icon(Icons.Filled.Add, contentDescription = null)
-                        Text("Add subtask")
-                    }
+                    SubtasksSection(
+                        repository = repository,
+                        parentId = currentJob.id,
+                        parentEstimatedMinutes = currentJob.estimatedMinutes,
+                        onOpenSubtask = onOpenJob,
+                        onAddSubtask = onAddSubtask
+                    )
                 }
             }
 
@@ -252,35 +220,6 @@ fun JobDetailScreen(
                     }
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun SubtaskRow(
-    subtask: Job,
-    onClick: () -> Unit,
-    onToggleDone: () -> Unit
-) {
-    Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            IconButton(onClick = onToggleDone) {
-                Icon(
-                    imageVector = if (subtask.isDone) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
-                    contentDescription = if (subtask.isDone) "Mark not done" else "Mark done"
-                )
-            }
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(subtask.title, style = MaterialTheme.typography.bodyLarge)
-                TimeBucketBadge(minutes = subtask.estimatedMinutes)
-            }
-            Icon(Icons.Filled.ChevronRight, contentDescription = null)
         }
     }
 }

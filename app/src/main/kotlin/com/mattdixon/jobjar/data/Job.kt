@@ -26,11 +26,14 @@ data class Job(
 }
 
 /**
- * Minutes still "owed" on a parent job: its own estimate minus time already accounted for by
- * completed subtasks. Not clamped to zero - an over-allocated parent (subtasks estimate more
- * time than the parent itself) can go negative, which simply makes it match any time budget,
- * since there's little effort left to decide about.
+ * Minutes still "owed" against a parent's estimate: [estimatedMinutes] minus time already
+ * accounted for by completed subtasks. Not clamped to zero - a parent whose subtasks were
+ * never allowed to exceed it (see [JobRepository]'s grow-on-write invariant) shouldn't hit
+ * this, but if it ever does, a negative remainder simply matches any time budget, since
+ * there's little effort left to decide about.
  */
-fun Job.remainingMinutes(subtasks: List<Job>): Int =
+fun remainingMinutesOf(estimatedMinutes: Int, subtasks: List<Job>): Int =
     estimatedMinutes - subtasks.filter { it.isDone }.sumOf { it.estimatedMinutes }
+
+fun Job.remainingMinutes(subtasks: List<Job>): Int = remainingMinutesOf(estimatedMinutes, subtasks)
 

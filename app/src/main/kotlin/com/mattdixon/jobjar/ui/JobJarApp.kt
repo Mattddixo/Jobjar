@@ -88,7 +88,9 @@ fun JobJarApp(repository: JobRepository) {
                 AddEditJobScreen(
                     repository = repository,
                     jobId = null,
-                    onDone = { navController.popBackStack() }
+                    onDone = { navController.popBackStack() },
+                    onOpenSubtask = { openId -> navController.navigate("job/$openId") },
+                    onAddSubtask = { newParentId -> navController.navigate("job/$newParentId/subtask/new") }
                 )
             }
             composable(
@@ -113,7 +115,9 @@ fun JobJarApp(repository: JobRepository) {
                 AddEditJobScreen(
                     repository = repository,
                     jobId = jobId,
-                    onDone = { navController.popBackStack() }
+                    onDone = { navController.popBackStack() },
+                    onOpenSubtask = { openId -> navController.navigate("job/$openId") },
+                    onAddSubtask = { parentId -> navController.navigate("job/$parentId/subtask/new") }
                 )
             }
             composable(

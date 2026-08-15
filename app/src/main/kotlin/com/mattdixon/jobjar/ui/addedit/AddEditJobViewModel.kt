@@ -14,12 +14,16 @@ import kotlinx.coroutines.launch
 
 data class AddEditFormState(
     val id: Long? = null,
+    /** This job's own parent, once known - null means "not a subtask" (or not yet loaded). */
+    val parentId: Long? = null,
     val title: String = "",
     val notes: String = "",
     val estimatedMinutes: Int = 15,
     val category: String = "",
     val priority: Priority = Priority.NORMAL,
-    val isSaved: Boolean = false
+    val isSaved: Boolean = false,
+    /** True once we're sure [parentId] reflects reality - false only while an existing job is still loading. */
+    val isLoaded: Boolean = false
 ) {
     val isValid: Boolean get() = title.isNotBlank() && estimatedMinutes > 0
 }
@@ -30,22 +34,28 @@ class AddEditJobViewModel(
     private val parentId: Long?
 ) : ViewModel() {
 
-    private val _formState = MutableStateFlow(AddEditFormState(id = jobId))
+    private val _formState = MutableStateFlow(
+        AddEditFormState(id = jobId, parentId = parentId, isLoaded = jobId == null)
+    )
     val formState: StateFlow<AddEditFormState> = _formState.asStateFlow()
 
     init {
         if (jobId != null) {
             viewModelScope.launch {
                 val job = repository.jobById(jobId).first()
-                if (job != null) {
-                    _formState.value = AddEditFormState(
+                _formState.value = if (job != null) {
+                    AddEditFormState(
                         id = job.id,
+                        parentId = job.parentId,
                         title = job.title,
                         notes = job.notes,
                         estimatedMinutes = job.estimatedMinutes,
                         category = job.category,
-                        priority = job.priority
+                        priority = job.priority,
+                        isLoaded = true
                     )
+                } else {
+                    _formState.value.copy(isLoaded = true)
                 }
             }
         } else if (parentId != null) {
@@ -66,36 +76,60 @@ class AddEditJobViewModel(
     fun setPriority(value: Priority) { _formState.value = _formState.value.copy(priority = value) }
 
     fun save() {
-        val state = _formState.value
-        if (!state.isValid) return
+        if (!_formState.value.isValid) return
         viewModelScope.launch {
-            if (state.id == null) {
-                repository.addJob(
-                    Job(
-                        title = state.title.trim(),
-                        notes = state.notes.trim(),
-                        estimatedMinutes = state.estimatedMinutes,
-                        category = state.category.trim(),
-                        priority = state.priority,
-                        parentId = parentId
-                    )
-                )
-            } else {
-                val existing = repository.jobById(state.id).first()
-                if (existing != null) {
-                    repository.updateJob(
-                        existing.copy(
-                            title = state.title.trim(),
-                            notes = state.notes.trim(),
-                            estimatedMinutes = state.estimatedMinutes,
-                            category = state.category.trim(),
-                            priority = state.priority
-                        )
-                    )
-                }
-            }
+            persist()
             _formState.value = _formState.value.copy(isSaved = true)
         }
+    }
+
+    /**
+     * Ensures this job already exists in the database - inserting it now, using whatever's
+     * currently in the form, if it's still an unsaved draft - then invokes [onReady] with its
+     * id. This is what lets "Add subtask" work before you've explicitly hit Save: the job
+     * behind the form quietly becomes real the moment you need to attach something to it.
+     */
+    fun ensurePersisted(onReady: (Long) -> Unit) {
+        val current = _formState.value
+        if (current.id != null) {
+            onReady(current.id)
+            return
+        }
+        if (!current.isValid) return
+        viewModelScope.launch {
+            onReady(persist())
+        }
+    }
+
+    private suspend fun persist(): Long {
+        val state = _formState.value
+        if (state.id == null) {
+            val newId = repository.addJob(
+                Job(
+                    title = state.title.trim(),
+                    notes = state.notes.trim(),
+                    estimatedMinutes = state.estimatedMinutes,
+                    category = state.category.trim(),
+                    priority = state.priority,
+                    parentId = parentId
+                )
+            )
+            _formState.value = _formState.value.copy(id = newId)
+            return newId
+        }
+        val existing = repository.jobById(state.id).first()
+        if (existing != null) {
+            repository.updateJob(
+                existing.copy(
+                    title = state.title.trim(),
+                    notes = state.notes.trim(),
+                    estimatedMinutes = state.estimatedMinutes,
+                    category = state.category.trim(),
+                    priority = state.priority
+                )
+            )
+        }
+        return state.id
     }
 
     class Factory(

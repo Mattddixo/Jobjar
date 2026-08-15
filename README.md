@@ -25,25 +25,39 @@ list.
 
 ### Subtasks
 
-Any top-level job can be broken into **subtasks** — one level deep, from any
-job's detail screen, at any time (not just at creation). Each subtask has
-its own title, notes, category, priority, and time estimate, and is a real,
-independently drawable/completable job in its own right.
+Any top-level job can be broken into **subtasks** — one level deep, from
+the job's detail screen *or* straight from its creation/edit screen, at any
+time. Each subtask has its own title, notes, category, priority, and time
+estimate, and is a real, independently drawable/completable job in its own
+right. The "Subtasks" list, progress summary, and add-subtask button are
+one shared composable (`ui/components/SubtasksSection.kt`), used identically
+everywhere subtasks show up rather than reimplemented per screen.
+
+Adding a subtask to a job you haven't saved yet (still on the "New job"
+form) quietly persists the draft first, using whatever's filled in so far,
+then attaches the subtask to it — `AddEditJobViewModel.ensurePersisted()`.
+The form transparently becomes an edit of the now-real job from that point
+on.
 
 The interesting part is the parent's clock: a parent job's own
-`estimatedMinutes` never changes, but its **remaining minutes** — what
-actually gets matched against your time budget when drawing — is computed
-as `estimatedMinutes − Σ(completed subtasks' minutes)`. So a fresh 4-hour
-project only shows up for a 4-hour draw; knock out a 90-minute subtask and
-that same parent now also matches a 2.5-hour draw, alongside the parent
-itself and each remaining subtask, all as separate candidates in the jar.
+`estimatedMinutes` isn't fixed at creation — it's a **floor**, not a
+ceiling. Its **remaining minutes** — what actually gets matched against
+your time budget when drawing — is `estimatedMinutes − Σ(completed
+subtasks' minutes)`, but `estimatedMinutes` itself auto-grows to match its
+subtasks' total the moment they exceed it (never auto-shrinks). That's what
+makes the job form's **"4+ hrs"** duration button work as intended: tapping
+it seeds a 240-minute placeholder for a job you can't size up front, and as
+you break it into subtasks whose real total turns out to be, say, 6 hours,
+the parent's estimate grows to match instead of quietly understating how
+much is left once a couple of subtasks are done. A fresh 4-hour project
+only shows up for a 4-hour draw; knock out a 90-minute subtask and that
+same parent now also matches a 2.5-hour draw, alongside the parent itself
+and each remaining subtask, all as separate candidates in the jar.
 
 A parent auto-completes once every subtask is done; you can also mark it
 done manually at any point (a confirmation dialog warns if subtasks are
 still open, since they're left as-is, not force-completed). Deleting a
-parent cascades to its subtasks — the reverse never happens, since a
-subtask's own deletion or completion has no special effect beyond updating
-its parent's remaining-minutes math.
+parent cascades to its subtasks.
 
 ## Architecture
 

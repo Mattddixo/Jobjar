@@ -20,9 +20,31 @@ class JobRepository(private val dao: JobDao) {
     fun jobById(id: Long): Flow<Job?> = dao.getJobById(id)
     fun subtasksOf(parentId: Long): Flow<List<Job>> = dao.getSubtasks(parentId)
 
-    suspend fun addJob(job: Job): Long = dao.insert(job)
+    suspend fun addJob(job: Job): Long {
+        val id = dao.insert(job)
+        if (job.parentId != null) growParentToFitSubtasks(job.parentId)
+        return id
+    }
 
-    suspend fun updateJob(job: Job) = dao.update(job)
+    suspend fun updateJob(job: Job) {
+        dao.update(job)
+        if (job.parentId != null) growParentToFitSubtasks(job.parentId)
+    }
+
+    /**
+     * A parent's estimate is a floor, not a ceiling: if its subtasks now add up to more than
+     * it does, the parent grows to match. This never shrinks the parent back down (deleting or
+     * shrinking a subtask doesn't erase the original estimate), and it's what makes a rough
+     * "4+ hours" starting estimate self-correct into an accurate total as the job gets broken
+     * into real subtasks, instead of quietly understating how much is left.
+     */
+    private suspend fun growParentToFitSubtasks(parentId: Long) {
+        val parent = dao.getJobById(parentId).first() ?: return
+        val subtaskTotal = dao.getSubtasksSnapshot(parentId).sumOf { it.estimatedMinutes }
+        if (subtaskTotal > parent.estimatedMinutes) {
+            dao.update(parent.copy(estimatedMinutes = subtaskTotal))
+        }
+    }
 
     /** Deleting a parent takes its subtasks with it - there's no meaningful orphan state for them. */
     suspend fun deleteJob(job: Job) {

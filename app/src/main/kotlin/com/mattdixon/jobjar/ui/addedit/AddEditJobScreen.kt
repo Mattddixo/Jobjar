@@ -10,13 +10,16 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
@@ -33,9 +36,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mattdixon.jobjar.data.JobRepository
 import com.mattdixon.jobjar.data.Priority
+import com.mattdixon.jobjar.ui.components.SubtasksSection
 import com.mattdixon.jobjar.util.formatMinutes
 
 private val QUICK_DURATIONS = listOf(5, 15, 30, 45, 60, 90, 120, 180)
+private const val LONG_JOB_MINUTES = 240
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,7 +48,9 @@ fun AddEditJobScreen(
     repository: JobRepository,
     jobId: Long?,
     onDone: () -> Unit,
-    parentId: Long? = null
+    parentId: Long? = null,
+    onOpenSubtask: (Long) -> Unit = {},
+    onAddSubtask: (Long) -> Unit = {}
 ) {
     val viewModel: AddEditJobViewModel = viewModel(
         factory = AddEditJobViewModel.Factory(repository, jobId, parentId)
@@ -114,6 +121,16 @@ fun AddEditJobScreen(
                             label = { Text(formatMinutes(minutes)) }
                         )
                     }
+                    item {
+                        // Long jobs don't have one "right" length, so this is a range, not an
+                        // exact value: selected whenever the estimate is 4hr or more, and tapping
+                        // it seeds 4hr as a starting point you can then fine-tune below.
+                        FilterChip(
+                            selected = state.estimatedMinutes >= LONG_JOB_MINUTES,
+                            onClick = { viewModel.setEstimatedMinutes(LONG_JOB_MINUTES) },
+                            label = { Text("4+ hrs") }
+                        )
+                    }
                 }
                 OutlinedTextField(
                     value = if (state.estimatedMinutes == 0) "" else state.estimatedMinutes.toString(),
@@ -158,6 +175,40 @@ fun AddEditJobScreen(
                             onClick = { viewModel.setPriority(priority) },
                             shape = SegmentedButtonDefaults.itemShape(index, Priority.entries.size)
                         ) { Text(priority.displayName) }
+                    }
+                }
+            }
+
+            // Only a job that isn't itself a subtask can have subtasks (one level deep).
+            // Gated on isLoaded so an existing subtask being edited never flashes this section
+            // before we know its real parentId.
+            if (state.isLoaded && state.parentId == null) {
+                HorizontalDivider()
+                val savedId = state.id
+                if (savedId != null) {
+                    SubtasksSection(
+                        repository = repository,
+                        parentId = savedId,
+                        parentEstimatedMinutes = state.estimatedMinutes,
+                        onOpenSubtask = onOpenSubtask,
+                        onAddSubtask = { onAddSubtask(savedId) }
+                    )
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Subtasks", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "Adding a subtask saves this job first, using what you've filled in so far.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        OutlinedButton(
+                            onClick = { viewModel.ensurePersisted { newId -> onAddSubtask(newId) } },
+                            enabled = state.isValid,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Filled.Add, contentDescription = null)
+                            Text("Add subtask")
+                        }
                     }
                 }
             }
