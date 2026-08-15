@@ -2,6 +2,7 @@ package com.mattdixon.jobjar.ui.addedit
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -25,12 +26,14 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -39,8 +42,10 @@ import com.mattdixon.jobjar.data.LONG_JOB_MINUTES
 import com.mattdixon.jobjar.data.Priority
 import com.mattdixon.jobjar.ui.components.SubtasksSection
 import com.mattdixon.jobjar.util.formatMinutes
+import com.mattdixon.jobjar.util.formatRecurrenceInterval
 
 private val QUICK_DURATIONS = listOf(5, 15, 30, 45, 60, 90, 120, 180)
+private val RECURRENCE_PRESETS = listOf(1, 7, 14, 30)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -180,11 +185,57 @@ fun AddEditJobScreen(
                 }
             }
 
-            // Only a job that isn't itself a subtask can have subtasks (one level deep).
-            // Gated on isLoaded so an existing subtask being edited never flashes this section
-            // before we know its real parentId.
+            // Only a job that isn't itself a subtask can repeat or have subtasks (one level
+            // deep). Gated on isLoaded so an existing subtask being edited never flashes either
+            // section before we know its real parentId.
             if (state.isLoaded && state.parentId == null) {
                 HorizontalDivider()
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Repeat", style = MaterialTheme.typography.labelLarge)
+                        Switch(
+                            checked = state.recurrenceDays != null,
+                            onCheckedChange = { viewModel.setRecurring(it) }
+                        )
+                    }
+                    val recurrenceDays = state.recurrenceDays
+                    if (recurrenceDays != null) {
+                        Text(formatRecurrenceInterval(recurrenceDays), style = MaterialTheme.typography.headlineSmall)
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(RECURRENCE_PRESETS) { days ->
+                                FilterChip(
+                                    selected = recurrenceDays == days,
+                                    onClick = { viewModel.setRecurrenceDays(days) },
+                                    label = { Text(formatRecurrenceInterval(days)) }
+                                )
+                            }
+                        }
+                        OutlinedTextField(
+                            value = if (recurrenceDays == 0) "" else recurrenceDays.toString(),
+                            onValueChange = { text ->
+                                val value = text.filter { it.isDigit() }.toIntOrNull() ?: 0
+                                viewModel.setRecurrenceDays(value)
+                            },
+                            label = { Text("Custom: every N days") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                    } else {
+                        Text(
+                            "Completing a repeating job reopens it automatically after the interval, instead of leaving it done for good.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                HorizontalDivider()
+
                 val savedId = state.id
                 if (savedId != null) {
                     SubtasksSection(

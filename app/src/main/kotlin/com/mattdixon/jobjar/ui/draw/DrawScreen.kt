@@ -46,8 +46,10 @@ import com.mattdixon.jobjar.data.Job
 import com.mattdixon.jobjar.data.JobRepository
 import com.mattdixon.jobjar.data.LONG_JOB_MINUTES
 import com.mattdixon.jobjar.ui.components.CategoryBadge
+import com.mattdixon.jobjar.ui.components.InfoBadge
 import com.mattdixon.jobjar.ui.components.TimeBucketBadge
 import com.mattdixon.jobjar.util.formatMinutes
+import com.mattdixon.jobjar.util.formatRecurrenceInterval
 
 private val TIME_PRESETS = listOf(15, 30, 45, 60, 90, 120)
 
@@ -226,6 +228,7 @@ private fun DrawnJobCard(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TimeBucketBadge(minutes = context?.remainingMinutes ?: job.estimatedMinutes)
                 if (job.category.isNotBlank()) CategoryBadge(category = job.category)
+                job.recurrenceDays?.let { InfoBadge(text = formatRecurrenceInterval(it)) }
             }
             if (context?.parentTitle != null) {
                 Text(

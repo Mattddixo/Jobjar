@@ -9,7 +9,15 @@ const val LONG_JOB_MINUTES = 240
 
 /**
  * A job can optionally be a subtask of another job via [parentId]. Subtasks are one level
- * deep only - a job that already has a parent cannot itself have subtasks.
+ * deep only - a job that already has a parent cannot itself have subtasks. Only a top-level
+ * job (one that isn't itself a subtask) can repeat.
+ *
+ * A repeating job (non-null [recurrenceDays]) never persists [isDone] = true - completing it
+ * instead advances [nextDueAt] and bumps [completionCount] (see [JobRepository]), so the same
+ * row just cycles rather than piling up a new "done" row per occurrence. [nextDueAt] is the
+ * schedule: null means due right now (true for a fresh repeating job that's never been
+ * completed yet, or a due one); once completed it's set to that moment plus [recurrenceDays]
+ * days, i.e. the schedule is relative to when you actually did it, not a fixed calendar date.
  */
 @Entity(tableName = "jobs", indices = [Index("parentId")])
 data class Job(
@@ -23,8 +31,19 @@ data class Job(
     val createdAt: Long = System.currentTimeMillis(),
     val completedAt: Long? = null,
     val timesDrawn: Int = 0,
-    val parentId: Long? = null
+    val parentId: Long? = null,
+    val recurrenceDays: Int? = null,
+    val nextDueAt: Long? = null,
+    val completionCount: Int = 0
 )
+
+/** Is this job something you could act on right now? For a repeating job that's a due-date check, not [isDone]. */
+fun Job.isPending(now: Long = System.currentTimeMillis()): Boolean =
+    if (recurrenceDays != null) {
+        nextDueAt == null || nextDueAt <= now
+    } else {
+        !isDone
+    }
 
 /**
  * Minutes still "owed" against a parent's estimate: [estimatedMinutes] minus time already

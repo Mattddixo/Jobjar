@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -112,6 +113,20 @@ fun JobListScreen(
                     onClick = { viewModel.setShowCompleted(true) },
                     shape = SegmentedButtonDefaults.itemShape(1, 2)
                 ) { Text("Completed") }
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = state.showRepeatingOnly,
+                    onClick = { viewModel.setShowRepeatingOnly(!state.showRepeatingOnly) },
+                    leadingIcon = { Icon(Icons.Filled.Repeat, contentDescription = null) },
+                    label = { Text("Repeating") }
+                )
             }
 
             if (state.categories.isNotEmpty()) {
@@ -257,6 +272,14 @@ private fun JobRow(
                     TimeBucketBadge(minutes = item.displayMinutes)
                     if (job.category.isNotBlank()) CategoryBadge(category = job.category)
                     if (item.subtaskTotal > 0) InfoBadge(text = "${item.subtaskDone}/${item.subtaskTotal} done")
+                    if (item.recurrenceLabel != null) InfoBadge(text = item.recurrenceLabel)
+                }
+                if (item.dueStatus != null) {
+                    Text(
+                        item.dueStatus,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
             Box {

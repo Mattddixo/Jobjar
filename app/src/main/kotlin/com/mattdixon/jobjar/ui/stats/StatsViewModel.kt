@@ -33,35 +33,62 @@ class StatsViewModel(repository: JobRepository) : ViewModel() {
     }
 }
 
+/** One unit of credited work: either a single one-off completion, or a repeating job's tally. */
+private data class Contribution(val category: String, val count: Int, val minutes: Int)
+
 private fun toUiState(allJobs: List<Job>): StatsUiState {
     val activeCount = allJobs.count { it.parentId == null && !it.isDone }
 
-    // A parent that's been broken into subtasks is a container, not a unit of work in its own
-    // right - its subtasks already account for that time. Counting the parent too (which
-    // happens automatically once every subtask is done, since it then auto-completes) would
-    // double up every minute they cover. So: count completed jobs that represent real,
-    // granular effort - plain top-level jobs with no subtasks, and subtasks themselves (always
-    // leaves) - and skip any parent that has subtasks, whether or not those are all done yet.
     val parentIdsWithSubtasks = allJobs.mapNotNull { it.parentId }.toSet()
-    val completedForStats = allJobs.filter {
-        it.isDone && (it.parentId != null || it.id !in parentIdsWithSubtasks)
+    val repeatingParentIds = allJobs.filter { it.parentId == null && it.recurrenceDays != null }
+        .map { it.id }
+        .toSet()
+
+    // A parent with subtasks is a container, not a unit of work itself - its subtasks already
+    // account for that time (see growParentToFitSubtasks), so counting the parent too would
+    // double up every minute they cover. So: count completed jobs that represent real,
+    // granular effort - plain top-level jobs with no subtasks, and subtasks of a *non-repeating*
+    // parent. Subtasks of a *repeating* parent are excluded here even when currently done,
+    // because cycleRepeatingJob() resets them back to not-done on every cycle - crediting them
+    // individually would make stats swing backward each time that reset happens. Their work is
+    // credited once per cycle via the parent's own completionCount instead.
+    val oneOffCompleted = allJobs.filter { job ->
+        job.isDone && (
+            (job.parentId == null && job.id !in parentIdsWithSubtasks) ||
+                (job.parentId != null && job.parentId !in repeatingParentIds)
+            )
     }
 
-    val categoryStats = completedForStats
-        .groupBy { it.category.ifBlank { "Uncategorized" } }
-        .map { (category, jobs) ->
+    // A repeating job never stays isDone = true (see Job.kt / JobRepository.cycleRepeatingJob),
+    // so its completions would otherwise be invisible to stats entirely. completionCount is the
+    // only record of how many times it's actually been done.
+    val repeatingCompletions = allJobs.filter { it.recurrenceDays != null && it.completionCount > 0 }
+
+    val contributions = oneOffCompleted.map {
+        Contribution(it.category.ifBlank { "Uncategorized" }, count = 1, minutes = it.estimatedMinutes)
+    } + repeatingCompletions.map {
+        Contribution(
+            it.category.ifBlank { "Uncategorized" },
+            count = it.completionCount,
+            minutes = it.completionCount * it.estimatedMinutes
+        )
+    }
+
+    val categoryStats = contributions
+        .groupBy { it.category }
+        .map { (category, items) ->
             CategoryStat(
                 category = category,
-                completedCount = jobs.size,
-                totalMinutes = jobs.sumOf { it.estimatedMinutes }
+                completedCount = items.sumOf { it.count },
+                totalMinutes = items.sumOf { it.minutes }
             )
         }
         .sortedByDescending { it.totalMinutes }
 
     return StatsUiState(
         activeCount = activeCount,
-        completedCount = completedForStats.size,
-        totalMinutesCompleted = completedForStats.sumOf { it.estimatedMinutes },
+        completedCount = contributions.sumOf { it.count },
+        totalMinutesCompleted = contributions.sumOf { it.minutes },
         categoryStats = categoryStats
     )
 }

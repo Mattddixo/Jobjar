@@ -35,9 +35,12 @@ import androidx.compose.ui.unit.dp
 import com.mattdixon.jobjar.data.JobRepository
 import com.mattdixon.jobjar.data.remainingMinutes
 import com.mattdixon.jobjar.ui.components.CategoryBadge
+import com.mattdixon.jobjar.ui.components.InfoBadge
 import com.mattdixon.jobjar.ui.components.SubtasksSection
 import com.mattdixon.jobjar.ui.components.TimeBucketBadge
+import com.mattdixon.jobjar.util.formatDueStatus
 import com.mattdixon.jobjar.util.formatMinutes
+import com.mattdixon.jobjar.util.formatRecurrenceInterval
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
@@ -119,11 +122,21 @@ fun JobDetailScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TimeBucketBadge(minutes = displayMinutes)
                     if (currentJob.category.isNotBlank()) CategoryBadge(category = currentJob.category)
+                    currentJob.recurrenceDays?.let { InfoBadge(text = formatRecurrenceInterval(it)) }
                 }
 
                 if (subtasks.isNotEmpty()) {
                     Text(
                         "${formatMinutes(displayMinutes)} left of ${formatMinutes(currentJob.estimatedMinutes)} total",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                if (currentJob.recurrenceDays != null) {
+                    Text(
+                        formatDueStatus(currentJob.nextDueAt) +
+                            if (currentJob.completionCount > 0) " · completed ${currentJob.completionCount} time(s)" else "",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

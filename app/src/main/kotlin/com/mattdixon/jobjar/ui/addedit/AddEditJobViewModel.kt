@@ -21,11 +21,14 @@ data class AddEditFormState(
     val estimatedMinutes: Int = 15,
     val category: String = "",
     val priority: Priority = Priority.NORMAL,
+    /** Null = one-off job. Non-null = repeats every this many days once completed. */
+    val recurrenceDays: Int? = null,
     val isSaved: Boolean = false,
     /** True once we're sure [parentId] reflects reality - false only while an existing job is still loading. */
     val isLoaded: Boolean = false
 ) {
-    val isValid: Boolean get() = title.isNotBlank() && estimatedMinutes > 0
+    val isValid: Boolean
+        get() = title.isNotBlank() && estimatedMinutes > 0 && (recurrenceDays == null || recurrenceDays > 0)
 }
 
 class AddEditJobViewModel(
@@ -52,6 +55,7 @@ class AddEditJobViewModel(
                         estimatedMinutes = job.estimatedMinutes,
                         category = job.category,
                         priority = job.priority,
+                        recurrenceDays = job.recurrenceDays,
                         isLoaded = true
                     )
                 } else {
@@ -74,6 +78,15 @@ class AddEditJobViewModel(
     fun setEstimatedMinutes(value: Int) { _formState.value = _formState.value.copy(estimatedMinutes = value) }
     fun setCategory(value: String) { _formState.value = _formState.value.copy(category = value) }
     fun setPriority(value: Priority) { _formState.value = _formState.value.copy(priority = value) }
+
+    /** Toggles repeating on/off. Turning it on defaults to weekly unless an interval was already set. */
+    fun setRecurring(enabled: Boolean) {
+        _formState.value = _formState.value.copy(
+            recurrenceDays = if (enabled) _formState.value.recurrenceDays ?: 7 else null
+        )
+    }
+
+    fun setRecurrenceDays(days: Int) { _formState.value = _formState.value.copy(recurrenceDays = days) }
 
     fun save() {
         if (!_formState.value.isValid) return
@@ -111,7 +124,8 @@ class AddEditJobViewModel(
                     estimatedMinutes = state.estimatedMinutes,
                     category = state.category.trim(),
                     priority = state.priority,
-                    parentId = parentId
+                    parentId = parentId,
+                    recurrenceDays = state.recurrenceDays
                 )
             )
             _formState.value = _formState.value.copy(id = newId)
@@ -125,7 +139,11 @@ class AddEditJobViewModel(
                     notes = state.notes.trim(),
                     estimatedMinutes = state.estimatedMinutes,
                     category = state.category.trim(),
-                    priority = state.priority
+                    priority = state.priority,
+                    recurrenceDays = state.recurrenceDays,
+                    // Turning repeat off clears the stale schedule; turning it on (or leaving
+                    // it on) keeps whatever nextDueAt already existed.
+                    nextDueAt = if (state.recurrenceDays == null) null else existing.nextDueAt
                 )
             )
         }

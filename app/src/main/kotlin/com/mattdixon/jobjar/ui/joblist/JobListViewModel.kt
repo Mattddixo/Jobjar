@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.mattdixon.jobjar.data.Job
 import com.mattdixon.jobjar.data.JobRepository
 import com.mattdixon.jobjar.data.remainingMinutes
+import com.mattdixon.jobjar.util.formatDueStatus
+import com.mattdixon.jobjar.util.formatRecurrenceInterval
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -26,7 +28,11 @@ data class JobListItem(
     val job: Job,
     val displayMinutes: Int,
     val subtaskDone: Int,
-    val subtaskTotal: Int
+    val subtaskTotal: Int,
+    /** "Weekly" etc, or null if this job doesn't repeat. */
+    val recurrenceLabel: String?,
+    /** "Due now" / "Next: in 3 days", or null if this job doesn't repeat. */
+    val dueStatus: String?
 )
 
 data class JobListUiState(
@@ -34,12 +40,14 @@ data class JobListUiState(
     val categories: List<String> = emptyList(),
     val showCompleted: Boolean = false,
     val selectedCategory: String? = null,
+    val showRepeatingOnly: Boolean = false,
     val sortOrder: SortOrder = SortOrder.NEWEST
 )
 
 private data class ListFilters(
     val showCompleted: Boolean,
     val category: String?,
+    val repeatingOnly: Boolean,
     val sort: SortOrder
 )
 
@@ -47,10 +55,16 @@ class JobListViewModel(private val repository: JobRepository) : ViewModel() {
 
     private val showCompleted = MutableStateFlow(false)
     private val selectedCategory = MutableStateFlow<String?>(null)
+    private val showRepeatingOnly = MutableStateFlow(false)
     private val sortOrder = MutableStateFlow(SortOrder.NEWEST)
 
-    private val filters = combine(showCompleted, selectedCategory, sortOrder) { showDone, category, sort ->
-        ListFilters(showDone, category, sort)
+    private val filters = combine(
+        showCompleted,
+        selectedCategory,
+        showRepeatingOnly,
+        sortOrder
+    ) { showDone, category, repeatingOnly, sort ->
+        ListFilters(showDone, category, repeatingOnly, sort)
     }
 
     val uiState: StateFlow<JobListUiState> = combine(
@@ -67,13 +81,16 @@ class JobListViewModel(private val repository: JobRepository) : ViewModel() {
                 job = job,
                 displayMinutes = if (subtasks.isEmpty()) job.estimatedMinutes else job.remainingMinutes(subtasks),
                 subtaskDone = subtasks.count { it.isDone },
-                subtaskTotal = subtasks.size
+                subtaskTotal = subtasks.size,
+                recurrenceLabel = job.recurrenceDays?.let { formatRecurrenceInterval(it) },
+                dueStatus = job.recurrenceDays?.let { formatDueStatus(job.nextDueAt) }
             )
         }
 
         val filtered = items
             .filter { it.job.isDone == currentFilters.showCompleted }
             .filter { currentFilters.category == null || it.job.category == currentFilters.category }
+            .filter { !currentFilters.repeatingOnly || it.job.recurrenceDays != null }
 
         val sorted = when (currentFilters.sort) {
             SortOrder.TIME_ASC -> filtered.sortedBy { it.displayMinutes }
@@ -88,12 +105,14 @@ class JobListViewModel(private val repository: JobRepository) : ViewModel() {
             categories = categories,
             showCompleted = currentFilters.showCompleted,
             selectedCategory = currentFilters.category,
+            showRepeatingOnly = currentFilters.repeatingOnly,
             sortOrder = currentFilters.sort
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), JobListUiState())
 
     fun setShowCompleted(value: Boolean) { showCompleted.value = value }
     fun setCategory(value: String?) { selectedCategory.value = value }
+    fun setShowRepeatingOnly(value: Boolean) { showRepeatingOnly.value = value }
     fun setSortOrder(value: SortOrder) { sortOrder.value = value }
 
     fun toggleDone(job: Job) {

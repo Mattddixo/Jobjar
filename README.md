@@ -18,9 +18,9 @@ list.
    details**. A separate **"4+ hrs"** chip flips the match from a ceiling to
    a floor — instead of "what fits," it explicitly draws from jobs needing
    4+ hours, which the slider alone can never reach.
-3. The **Jobs** tab is the full list — filter by category, toggle
-   Active/Completed, sort by time/priority/newest/category, tap into a job
-   to view or edit it, or swipe into its overflow menu to delete it.
+3. The **Jobs** tab is the full list — filter by category or by **Repeating**,
+   toggle Active/Completed, sort by time/priority/newest/category, tap into
+   a job to view or edit it, or swipe into its overflow menu to delete it.
 4. The **Stats** tab shows how many jobs are active vs. completed, total
    time invested, and a breakdown by category with a relative-size bar per
    category, so you can see where your time actually goes at a glance.
@@ -61,6 +61,39 @@ done manually at any point (a confirmation dialog warns if subtasks are
 still open, since they're left as-is, not force-completed). Deleting a
 parent cascades to its subtasks.
 
+### Repeating jobs
+
+Any top-level job (not a subtask) can repeat, set from the same job form
+via a **Repeat** switch and an interval — Daily/Weekly/Biweekly/Monthly
+presets, or a custom "every N days." Completing one doesn't leave it done
+for good: it silently reopens once the interval passes, so it comes back
+into the jar with no reminder, notification, or confirmation needed (there's
+no notification system in this app at all - "silent" is just what a repeating
+job does by construction).
+
+The schedule is **relative to when you actually complete it**, not a fixed
+calendar date - completing a weekly job late just shifts the next one later
+too, rather than tracking a strict "always Monday" pattern or trying to
+catch you up on missed occurrences. Concretely: a repeating `Job` never
+persists `isDone = true`. Completing it (`JobRepository.cycleRepeatingJob`)
+instead bumps `completionCount`, stamps `completedAt`, and sets `nextDueAt`
+to that moment plus the interval. `Job.isPending()` - not `isDone` - is
+what the Jar's draw pool actually checks, so a repeating job that isn't due
+yet is correctly excluded from being drawn even though it's technically
+"not done." It still always shows in the Jobs tab's Active list, though
+(with a "Next: in N days" line), since you should be able to find and
+review a repeating job regardless of where it is in its cycle - the
+**Repeating** filter chip is there specifically for that.
+
+If a repeating job has subtasks, its own cycle carries them: completing it
+(directly, or automatically once every subtask is done) resets its subtasks
+back to not-done for the fresh cycle too, rather than leaving them
+permanently checked off. That in turn means a repeating parent's subtask
+completions can't be individually tallied in Stats the way a one-off
+parent's can - their `isDone` state doesn't survive the reset - so Stats
+credits a repeating job's totals from `completionCount` instead, once per
+cycle, whether or not it has subtasks.
+
 ## Architecture
 
 Standard modern-Android stack, no unnecessary abstraction:
@@ -91,7 +124,7 @@ Standard modern-Android stack, no unnecessary abstraction:
 ```
 app/src/main/kotlin/com/mattdixon/jobjar/
 ├── data/              Job entity, DAO, Room database, Converters, JobRepository
-├── util/               Duration formatting
+├── util/               Duration + recurrence formatting
 └── ui/
     ├── theme/          Material 3 color/type/theme
     ├── components/     Shared badges (duration / category) and the SubtasksSection
@@ -117,7 +150,10 @@ data class Job(
     val createdAt: Long = System.currentTimeMillis(),
     val completedAt: Long? = null,
     val timesDrawn: Int = 0,                     // how often it's come up in the jar
-    val parentId: Long? = null                   // null = top-level job; set = subtask, one level deep
+    val parentId: Long? = null,                  // null = top-level job; set = subtask, one level deep
+    val recurrenceDays: Int? = null,             // null = one-off; set = repeats every N days
+    val nextDueAt: Long? = null,                 // repeating only: null/past = due now
+    val completionCount: Int = 0                 // repeating only: how many cycles completed
 )
 ```
 

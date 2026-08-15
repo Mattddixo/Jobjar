@@ -8,7 +8,7 @@ import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [Job::class], version = 2, exportSchema = true)
+@Database(entities = [Job::class], version = 3, exportSchema = true)
 @TypeConverters(Converters::class)
 abstract class JobDatabase : RoomDatabase() {
 
@@ -25,13 +25,21 @@ abstract class JobDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE jobs ADD COLUMN recurrenceDays INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE jobs ADD COLUMN nextDueAt INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE jobs ADD COLUMN completionCount INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         fun getInstance(context: Context): JobDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
                     context.applicationContext,
                     JobDatabase::class.java,
                     "jobjar.db"
-                ).addMigrations(MIGRATION_1_2).build().also { INSTANCE = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { INSTANCE = it }
             }
     }
 }
