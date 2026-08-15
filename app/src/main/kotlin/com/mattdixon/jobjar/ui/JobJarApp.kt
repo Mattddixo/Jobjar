@@ -1,5 +1,6 @@
 package com.mattdixon.jobjar.ui
 
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
@@ -41,7 +42,14 @@ private val topLevelDestinations = listOf(TopLevelDestination.Draw, TopLevelDest
 fun JobJarApp(repository: JobRepository) {
     val navController = rememberNavController()
 
+    // enableEdgeToEdge() (MainActivity) means the OS no longer auto-resizes/pans content for
+    // the keyboard - without this, a screen's scrollable content doesn't know the keyboard is
+    // covering its lower portion, so you can "scroll to the end" and still have content hidden
+    // behind the keyboard. imePadding() here, at the app root, shrinks the whole Scaffold
+    // (bottom nav included, so it stays visible above the keyboard) as the keyboard rises,
+    // which every screen's own scrollable content inherits automatically.
     Scaffold(
+        modifier = Modifier.imePadding(),
         bottomBar = {
             val backStackEntry by navController.currentBackStackEntryAsState()
             val currentDestination = backStackEntry?.destination
