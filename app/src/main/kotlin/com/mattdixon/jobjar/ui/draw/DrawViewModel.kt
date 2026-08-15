@@ -22,6 +22,8 @@ data class DrawnJobContext(
 
 data class DrawUiState(
     val availableMinutes: Int = 30,
+    /** When true, ignore [availableMinutes] and draw only from jobs needing 4+ hours - an explicit "give me a big one" instead of "what fits". */
+    val longJobsOnly: Boolean = false,
     val selectedCategory: String? = null,
     val categories: List<String> = emptyList(),
     val drawnJob: Job? = null,
@@ -45,7 +47,11 @@ class DrawViewModel(private val repository: JobRepository) : ViewModel() {
     }
 
     fun setAvailableMinutes(minutes: Int) {
-        _uiState.value = _uiState.value.copy(availableMinutes = minutes)
+        _uiState.value = _uiState.value.copy(availableMinutes = minutes, longJobsOnly = false)
+    }
+
+    fun setLongJobsOnly() {
+        _uiState.value = _uiState.value.copy(longJobsOnly = true)
     }
 
     fun setCategory(category: String?) {
@@ -62,7 +68,12 @@ class DrawViewModel(private val repository: JobRepository) : ViewModel() {
         }
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isDrawing = true, noMatchFound = false)
-            val job = repository.drawJob(current.availableMinutes, current.selectedCategory, excludeIds)
+            val job = repository.drawJob(
+                maxMinutes = current.availableMinutes,
+                category = current.selectedCategory,
+                excludeIds = excludeIds,
+                longOnly = current.longJobsOnly
+            )
             val context = job?.let { buildContext(it) }
             _uiState.value = _uiState.value.copy(
                 drawnJob = job,

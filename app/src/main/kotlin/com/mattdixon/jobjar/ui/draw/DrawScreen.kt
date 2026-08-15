@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mattdixon.jobjar.data.Job
 import com.mattdixon.jobjar.data.JobRepository
+import com.mattdixon.jobjar.data.LONG_JOB_MINUTES
 import com.mattdixon.jobjar.ui.components.CategoryBadge
 import com.mattdixon.jobjar.ui.components.TimeBucketBadge
 import com.mattdixon.jobjar.util.formatMinutes
@@ -64,18 +65,31 @@ fun DrawScreen(
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("How much time do you have?", style = MaterialTheme.typography.titleMedium)
-                Text(formatMinutes(state.availableMinutes), style = MaterialTheme.typography.headlineMedium)
+                Text(
+                    if (state.longJobsOnly) "4+ hrs" else formatMinutes(state.availableMinutes),
+                    style = MaterialTheme.typography.headlineMedium
+                )
                 Slider(
                     value = state.availableMinutes.toFloat(),
                     onValueChange = { viewModel.setAvailableMinutes(it.toInt()) },
-                    valueRange = 5f..240f
+                    valueRange = 5f..240f,
+                    enabled = !state.longJobsOnly
                 )
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(TIME_PRESETS) { minutes ->
                         FilterChip(
-                            selected = state.availableMinutes == minutes,
+                            selected = !state.longJobsOnly && state.availableMinutes == minutes,
                             onClick = { viewModel.setAvailableMinutes(minutes) },
                             label = { Text(formatMinutes(minutes)) }
+                        )
+                    }
+                    item {
+                        // Not a ceiling like the other chips - an explicit "pull from the big
+                        // projects" request, since the slider above can't reach past 4 hours.
+                        FilterChip(
+                            selected = state.longJobsOnly,
+                            onClick = { viewModel.setLongJobsOnly() },
+                            label = { Text("4+ hrs") }
                         )
                     }
                 }
@@ -130,7 +144,11 @@ fun DrawScreen(
                         onSkip = { viewModel.draw(excludeCurrent = true) }
                     )
                     state.noMatchFound -> Text(
-                        "No jobs fit that time and category. Try a longer time or add more jobs.",
+                        if (state.longJobsOnly) {
+                            "Nothing needs ${formatMinutes(LONG_JOB_MINUTES)}+ yet. Try a shorter time, or add a bigger job."
+                        } else {
+                            "No jobs fit that time and category. Try a longer time or add more jobs."
+                        },
                         style = MaterialTheme.typography.bodyLarge
                     )
                     else -> Text(

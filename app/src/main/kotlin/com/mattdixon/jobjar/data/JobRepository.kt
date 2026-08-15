@@ -73,13 +73,18 @@ class JobRepository(private val dao: JobDao) {
     }
 
     /**
-     * Draws one random, not-done job that fits [maxMinutes] and (optionally) [category].
+     * Draws one random, not-done job matching (optionally) [category]. By default this matches
+     * jobs that *fit* [maxMinutes] (a ceiling - "what can I do with the time I have"). Pass
+     * [longOnly] = true to flip that to a floor instead - only jobs needing [LONG_JOB_MINUTES]
+     * or more are eligible, ignoring [maxMinutes] entirely, for when you deliberately want to
+     * pull a big project rather than something that merely fits.
+     *
      * A top-level job with subtasks is matched by its *remaining* minutes (its own estimate
      * minus what completed subtasks already accounted for), so it becomes eligible for shorter
-     * draws as its subtasks get knocked out. Subtasks are matched by their own estimate, same
-     * as any plain job.
+     * draws (or drops out of the long-task pool) as its subtasks get knocked out. Subtasks are
+     * matched by their own estimate, same as any plain job.
      */
-    suspend fun drawJob(maxMinutes: Int, category: String?, excludeIds: List<Long>): Job? {
+    suspend fun drawJob(maxMinutes: Int, category: String?, excludeIds: List<Long>, longOnly: Boolean = false): Job? {
         val all = allJobsFlat.first()
         val subtasksByParent = all.filter { it.parentId != null }.groupBy { it.parentId }
 
@@ -87,7 +92,9 @@ class JobRepository(private val dao: JobDao) {
             !job.isDone &&
                 job.id !in excludeIds &&
                 (category == null || job.category == category) &&
-                minutesNeeded(job, subtasksByParent) <= maxMinutes
+                minutesNeeded(job, subtasksByParent).let { needed ->
+                    if (longOnly) needed >= LONG_JOB_MINUTES else needed <= maxMinutes
+                }
         }
 
         val picked = candidates.randomOrNull()

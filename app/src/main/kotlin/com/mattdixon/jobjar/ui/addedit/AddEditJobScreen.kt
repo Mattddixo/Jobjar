@@ -35,12 +35,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mattdixon.jobjar.data.JobRepository
+import com.mattdixon.jobjar.data.LONG_JOB_MINUTES
 import com.mattdixon.jobjar.data.Priority
 import com.mattdixon.jobjar.ui.components.SubtasksSection
 import com.mattdixon.jobjar.util.formatMinutes
 
 private val QUICK_DURATIONS = listOf(5, 15, 30, 45, 60, 90, 120, 180)
-private const val LONG_JOB_MINUTES = 240
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

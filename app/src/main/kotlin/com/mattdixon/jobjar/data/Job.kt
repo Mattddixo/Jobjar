@@ -4,6 +4,9 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
+/** The threshold, in minutes, at which a job is treated as "long" - the "4+ hrs" option on both the job form and the draw screen. */
+const val LONG_JOB_MINUTES = 240
+
 /**
  * A job can optionally be a subtask of another job via [parentId]. Subtasks are one level
  * deep only - a job that already has a parent cannot itself have subtasks.

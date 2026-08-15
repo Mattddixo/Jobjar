@@ -13,10 +13,13 @@ list.
    Short ≤30 min, Medium ≤1 hr, Long ≤2 hr, Extended 2 hr+) based on the
    estimate.
 3. On the **Jar** tab, tell the app how much time you actually have (a
-   slider or quick-pick chips) and, optionally, a category. Tap **Draw a
-   job** and it randomly picks one eligible job from the jar. From there you
-   can **Skip** (redraw, excluding jobs already shown this session), **Mark
-   done**, or **View details**.
+   slider or quick-pick chips, capped at 4 hours) and, optionally, a
+   category. Tap **Draw a job** and it randomly picks one eligible job that
+   *fits* your time from the jar. From there you can **Skip** (redraw,
+   excluding jobs already shown this session), **Mark done**, or **View
+   details**. A separate **"4+ hrs"** chip flips the match from a ceiling to
+   a floor — instead of "what fits," it explicitly draws from jobs needing
+   4+ hours, which the slider alone can never reach.
 4. The **Jobs** tab is the full list — filter by category, toggle
    Active/Completed, sort by time/priority/newest/category, tap into a job
    to view or edit it, or swipe into its overflow menu to delete it.
