@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- jar body -->
+    <path
+        android:fillColor="#ECEFF1"
+        android:pathData="M30,42 L78,42 L78,90 L30,90 Z" />
+    <!-- jar lid -->
+    <path
+        android:fillColor="#37474F"
+        android:pathData="M38,28 L70,28 L70,42 L38,42 Z" />
+    <!-- job slips inside the jar -->
+    <path
+        android:fillColor="#FFA000"
+        android:pathData="M36,50 L58,50 L58,58 L36,58 Z" />
+    <path
+        android:fillColor="#26A69A"
+        android:pathData="M42,62 L70,62 L70,70 L42,70 Z" />
+    <path
+        android:fillColor="#FFA000"
+        android:pathData="M36,74 L62,74 L62,82 L36,82 Z" />
+</vector>

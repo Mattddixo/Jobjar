@@ -1,0 +1,113 @@
+package com.mattdixon.jobjar.ui.joblist
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import com.mattdixon.jobjar.data.Job
+import com.mattdixon.jobjar.data.JobRepository
+import com.mattdixon.jobjar.data.remainingMinutes
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+
+enum class SortOrder(val label: String) {
+    TIME_ASC("Shortest first"),
+    TIME_DESC("Longest first"),
+    PRIORITY("Priority"),
+    NEWEST("Newest"),
+    CATEGORY("Category")
+}
+
+/** A top-level job plus how many of its subtasks (if any) are done, for the list row's badge. */
+data class JobListItem(
+    val job: Job,
+    val displayMinutes: Int,
+    val subtaskDone: Int,
+    val subtaskTotal: Int
+)
+
+data class JobListUiState(
+    val items: List<JobListItem> = emptyList(),
+    val categories: List<String> = emptyList(),
+    val showCompleted: Boolean = false,
+    val selectedCategory: String? = null,
+    val sortOrder: SortOrder = SortOrder.NEWEST
+)
+
+private data class ListFilters(
+    val showCompleted: Boolean,
+    val category: String?,
+    val sort: SortOrder
+)
+
+class JobListViewModel(private val repository: JobRepository) : ViewModel() {
+
+    private val showCompleted = MutableStateFlow(false)
+    private val selectedCategory = MutableStateFlow<String?>(null)
+    private val sortOrder = MutableStateFlow(SortOrder.NEWEST)
+
+    private val filters = combine(showCompleted, selectedCategory, sortOrder) { showDone, category, sort ->
+        ListFilters(showDone, category, sort)
+    }
+
+    val uiState: StateFlow<JobListUiState> = combine(
+        filters,
+        repository.topLevelJobs,
+        repository.allJobsFlat,
+        repository.categories
+    ) { currentFilters, topLevel, allFlat, categories ->
+        val subtasksByParent = allFlat.filter { it.parentId != null }.groupBy { it.parentId }
+
+        val items = topLevel.map { job ->
+            val subtasks = subtasksByParent[job.id].orEmpty()
+            JobListItem(
+                job = job,
+                displayMinutes = if (subtasks.isEmpty()) job.estimatedMinutes else job.remainingMinutes(subtasks),
+                subtaskDone = subtasks.count { it.isDone },
+                subtaskTotal = subtasks.size
+            )
+        }
+
+        val filtered = items
+            .filter { it.job.isDone == currentFilters.showCompleted }
+            .filter { currentFilters.category == null || it.job.category == currentFilters.category }
+
+        val sorted = when (currentFilters.sort) {
+            SortOrder.TIME_ASC -> filtered.sortedBy { it.displayMinutes }
+            SortOrder.TIME_DESC -> filtered.sortedByDescending { it.displayMinutes }
+            SortOrder.PRIORITY -> filtered.sortedByDescending { it.job.priority.ordinal }
+            SortOrder.NEWEST -> filtered.sortedByDescending { it.job.createdAt }
+            SortOrder.CATEGORY -> filtered.sortedBy { it.job.category }
+        }
+
+        JobListUiState(
+            items = sorted,
+            categories = categories,
+            showCompleted = currentFilters.showCompleted,
+            selectedCategory = currentFilters.category,
+            sortOrder = currentFilters.sort
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), JobListUiState())
+
+    fun setShowCompleted(value: Boolean) { showCompleted.value = value }
+    fun setCategory(value: String?) { selectedCategory.value = value }
+    fun setSortOrder(value: SortOrder) { sortOrder.value = value }
+
+    fun toggleDone(job: Job) {
+        viewModelScope.launch { repository.toggleDone(job) }
+    }
+
+    fun deleteJob(job: Job) {
+        viewModelScope.launch { repository.deleteJob(job) }
+    }
+
+    class Factory(private val repository: JobRepository) : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+            return JobListViewModel(repository) as T
+        }
+    }
+}

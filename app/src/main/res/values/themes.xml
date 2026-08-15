@@ -1,0 +1,4 @@
+<resources>
+    <!-- Base platform theme; actual Material 3 theming is applied at runtime by JobJarTheme (Compose). -->
+    <style name="Theme.JobJar" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>
