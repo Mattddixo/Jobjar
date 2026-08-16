@@ -1,9 +1,15 @@
 # Job Jar
 
-An Android app for sorting tasks ("jobs") by how long they take, and picking
-one at random when you know how much time you have — a digital version of a
-jar full of chores you draw from, instead of always working off the top of a
+An app for sorting tasks ("jobs") by how long they take, and picking one at
+random when you know how much time you have — a digital version of a jar
+full of chores you draw from, instead of always working off the top of a
 list.
+
+Two native builds live in this repo: **Android** (Kotlin + Jetpack Compose +
+Room, described below, in `app/`) and **iOS** (SwiftUI + SwiftData, in
+`ios/` — see [`ios/README.md`](ios/README.md)). Same feature set and the
+same underlying logic on both, each built the idiomatic way for its
+platform rather than transliterated line-by-line.
 
 ## Core idea
 
