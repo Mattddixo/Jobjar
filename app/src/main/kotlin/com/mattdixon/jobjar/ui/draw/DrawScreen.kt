@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Shuffle
@@ -52,7 +53,10 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mattdixon.jobjar.data.Job
 import com.mattdixon.jobjar.data.JobRepository
@@ -65,6 +69,10 @@ import com.mattdixon.jobjar.util.formatRecurrenceInterval
 import kotlin.math.roundToInt
 
 private val TIME_PRESETS = listOf(15, 30, 45, 60, 90, 120)
+
+/** Shared rounding for every surface on this screen (the jar panel, the drawn-job card) so
+ * they read as one design language instead of a stack of mismatched cards. */
+private val PanelShape = RoundedCornerShape(24.dp)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -83,97 +91,33 @@ fun DrawScreen(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
-                // Without this, the time selector + category chips + draw button + drawn job
-                // card (title, badges, notes, subtask progress, three buttons) can add up to
-                // more height than the screen. A plain Column doesn't clip or warn about that -
-                // it just lays the overflow out past the bottom edge, so the Skip/Mark done/
-                // View details buttons could end up positioned off-screen: present, but neither
-                // visible nor tappable.
+                // Without this, the jar panel + draw button + drawn job card (title, badges,
+                // notes, subtask progress, three buttons) can add up to more height than the
+                // screen. A plain Column doesn't clip or warn about that - it just lays the
+                // overflow out past the bottom edge, so the Skip/Mark done/View details buttons
+                // could end up positioned off-screen: present, but neither visible nor tappable.
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            JarSummaryCard(available = state.availableCount, completed = state.completedCount)
-
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Time available", style = MaterialTheme.typography.labelLarge)
-                        Text(
-                            if (state.longJobsOnly) "4+ hrs" else formatMinutes(state.availableMinutes),
-                            style = MaterialTheme.typography.titleLarge
-                        )
-                    }
-                    Slider(
-                        value = state.availableMinutes.toFloat(),
-                        onValueChange = { viewModel.setAvailableMinutes(it.toInt()) },
-                        valueRange = 5f..240f,
-                        enabled = !state.longJobsOnly
-                    )
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        items(TIME_PRESETS) { minutes ->
-                            FilterChip(
-                                selected = !state.longJobsOnly && state.availableMinutes == minutes,
-                                onClick = { viewModel.setAvailableMinutes(minutes) },
-                                label = { Text(formatMinutes(minutes)) }
-                            )
-                        }
-                        item {
-                            // Not a ceiling like the other chips - an explicit "pull from the big
-                            // projects" request, since the slider above can't reach past 4 hours.
-                            FilterChip(
-                                selected = state.longJobsOnly,
-                                onClick = { viewModel.setLongJobsOnly() },
-                                label = { Text("4+ hrs") }
-                            )
-                        }
-                    }
-
-                    if (state.categories.isNotEmpty()) {
-                        HorizontalDivider()
-                        Text("Category", style = MaterialTheme.typography.labelLarge)
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            item {
-                                FilterChip(
-                                    selected = state.selectedCategory == null,
-                                    onClick = { viewModel.setCategory(null) },
-                                    label = { Text("Any") }
-                                )
-                            }
-                            items(state.categories) { category ->
-                                FilterChip(
-                                    selected = state.selectedCategory == category,
-                                    onClick = {
-                                        viewModel.setCategory(if (state.selectedCategory == category) null else category)
-                                    },
-                                    label = { Text(category) }
-                                )
-                            }
-                        }
-                    }
-                }
-            }
+            JarControlPanel(
+                state = state,
+                onAvailableMinutesChange = viewModel::setAvailableMinutes,
+                onLongJobsOnly = viewModel::setLongJobsOnly,
+                onCategorySelect = viewModel::setCategory
+            )
 
             Button(
                 onClick = { viewModel.draw() },
                 enabled = !state.isDrawing,
+                shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(52.dp)
+                    .height(54.dp)
             ) {
-                Icon(Icons.Filled.Shuffle, contentDescription = null)
+                Icon(Icons.Filled.Shuffle, contentDescription = null, modifier = Modifier.size(20.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Draw a job")
+                Text("Draw a job", style = MaterialTheme.typography.titleMedium)
             }
 
             AnimatedContent(
@@ -198,19 +142,14 @@ fun DrawScreen(
                         },
                         onSkip = { viewModel.draw(excludeCurrent = true) }
                     )
-                    state.noMatchFound -> Text(
+                    state.noMatchFound -> EmptyStateText(
                         if (state.longJobsOnly) {
                             "Nothing needs ${formatMinutes(LONG_JOB_MINUTES)}+ yet. Try a shorter time, or add a bigger job."
                         } else {
                             "No jobs fit that time and category. Try a longer time or add more jobs."
-                        },
-                        style = MaterialTheme.typography.bodyLarge
+                        }
                     )
-                    else -> Text(
-                        "Set your time and tap \"Draw a job\" to pick something from the jar.",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    else -> EmptyStateText("Set your time and tap \"Draw a job\" to pick something from the jar.")
                 }
             }
         }
@@ -239,98 +178,208 @@ fun DrawScreen(
 }
 
 /**
- * A jar-shaped fill meter: how much of the jar still has jobs left in it. [available] and
- * [completed] are real counts from [DrawUiState] (every job and subtask, split by
- * [com.mattdixon.jobjar.data.Job.isPending]) - the fill level is available/(available+completed),
- * not a canned animation, so it visibly drains as jobs get done and refills as repeating ones
- * come back due or new ones get added. Wrapped in its own tonal card so it reads as the screen's
- * one clear focal point rather than competing with the form below it.
+ * One unified surface for everything that shapes what gets drawn: the jar-shaped fill meter
+ * (real available/completed counts, not a canned animation - see [JarGlyph]), the time budget,
+ * and the category filter. Previously these were two separate stacked cards with near-identical
+ * tonal backgrounds, which read as repetitive chrome rather than one coherent control surface;
+ * merging them into a single panel with thin internal dividers is what actually makes the
+ * screen feel sleek instead of just tightly padded.
  */
 @Composable
-private fun JarSummaryCard(available: Int, completed: Int, modifier: Modifier = Modifier) {
-    val total = available + completed
-    val fraction = if (total == 0) 0f else available.toFloat() / total
-    val fillColor = MaterialTheme.colorScheme.primary
-    val outlineColor = MaterialTheme.colorScheme.outline
-    val trackColor = MaterialTheme.colorScheme.surfaceVariant
+private fun JarControlPanel(
+    state: DrawUiState,
+    onAvailableMinutesChange: (Int) -> Unit,
+    onLongJobsOnly: () -> Unit,
+    onCategorySelect: (String?) -> Unit
+) {
+    val total = state.availableCount + state.completedCount
+    val fraction = if (total == 0) 0f else state.availableCount.toFloat() / total
+    val dividerColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
 
     Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+        shape = PanelShape,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Canvas(modifier = Modifier.size(width = 68.dp, height = 92.dp)) {
-                val neckWidth = size.width * 0.46f
-                val neckLeft = (size.width - neckWidth) / 2f
-                val bodyTop = size.height * 0.2f
-                val bodyCorner = size.width * 0.16f
-
-                val bodyPath = Path().apply {
-                    addRoundRect(
-                        RoundRect(
-                            left = 0f,
-                            top = bodyTop,
-                            right = size.width,
-                            bottom = size.height,
-                            cornerRadius = CornerRadius(bodyCorner, bodyCorner)
-                        )
-                    )
-                }
-                val neckPath = Path().apply {
-                    addRoundRect(
-                        RoundRect(
-                            left = neckLeft,
-                            top = 0f,
-                            right = neckLeft + neckWidth,
-                            bottom = bodyTop + bodyCorner,
-                            cornerRadius = CornerRadius(bodyCorner * 0.6f, bodyCorner * 0.6f)
-                        )
-                    )
-                }
-
-                clipPath(bodyPath) { drawRect(color = trackColor) }
-                drawPath(neckPath, color = trackColor)
-
-                val bodyHeight = size.height - bodyTop
-                val fillHeight = bodyHeight * fraction
-                if (fillHeight > 0f) {
-                    clipPath(bodyPath) {
-                        drawRect(
-                            color = fillColor,
-                            topLeft = Offset(0f, size.height - fillHeight),
-                            size = Size(size.width, fillHeight)
-                        )
-                    }
-                }
-
-                val strokeWidth = 2.5.dp.toPx()
-                drawPath(bodyPath, color = outlineColor, style = Stroke(width = strokeWidth))
-                drawPath(neckPath, color = outlineColor, style = Stroke(width = strokeWidth))
-            }
-
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("$available available", style = MaterialTheme.typography.titleMedium)
-                Text(
-                    "$completed completed",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                if (total > 0) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                JarGlyph(fraction = fraction, modifier = Modifier.size(width = 52.dp, height = 70.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
-                        "Jar is ${(fraction * 100).roundToInt()}% full",
+                        "${state.availableCount} available",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        if (total > 0) {
+                            "${state.completedCount} completed · jar ${(fraction * 100).roundToInt()}% full"
+                        } else {
+                            "Add a job to fill the jar"
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
+
+            HorizontalDivider(color = dividerColor)
+
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    SectionLabel("TIME AVAILABLE")
+                    Text(
+                        if (state.longJobsOnly) "4+ hrs" else formatMinutes(state.availableMinutes),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                Slider(
+                    value = state.availableMinutes.toFloat(),
+                    onValueChange = { onAvailableMinutesChange(it.toInt()) },
+                    valueRange = 5f..240f,
+                    enabled = !state.longJobsOnly
+                )
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(TIME_PRESETS) { minutes ->
+                        FilterChip(
+                            selected = !state.longJobsOnly && state.availableMinutes == minutes,
+                            onClick = { onAvailableMinutesChange(minutes) },
+                            label = { Text(formatMinutes(minutes)) }
+                        )
+                    }
+                    item {
+                        // Not a ceiling like the other chips - an explicit "pull from the big
+                        // projects" request, since the slider above can't reach past 4 hours.
+                        FilterChip(
+                            selected = state.longJobsOnly,
+                            onClick = onLongJobsOnly,
+                            label = { Text("4+ hrs") }
+                        )
+                    }
+                }
+            }
+
+            if (state.categories.isNotEmpty()) {
+                HorizontalDivider(color = dividerColor)
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SectionLabel("CATEGORY")
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        item {
+                            FilterChip(
+                                selected = state.selectedCategory == null,
+                                onClick = { onCategorySelect(null) },
+                                label = { Text("Any") }
+                            )
+                        }
+                        items(state.categories) { category ->
+                            FilterChip(
+                                selected = state.selectedCategory == category,
+                                onClick = {
+                                    onCategorySelect(if (state.selectedCategory == category) null else category)
+                                },
+                                label = { Text(category) }
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
+}
+
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        letterSpacing = 0.8.sp
+    )
+}
+
+/**
+ * The jar-shaped fill meter glyph itself, factored out of [JarControlPanel] so its drawing code
+ * (the actual Canvas/Path work) isn't tangled up with layout. [fraction] is
+ * available/(available+completed) - a real proportion, not a canned animation, so it visibly
+ * drains as jobs get done and refills as repeating ones come back due or new ones get added.
+ */
+@Composable
+private fun JarGlyph(fraction: Float, modifier: Modifier = Modifier) {
+    val fillColor = MaterialTheme.colorScheme.primary
+    val outlineColor = MaterialTheme.colorScheme.outline
+    val trackColor = MaterialTheme.colorScheme.surfaceVariant
+
+    Canvas(modifier = modifier) {
+        val neckWidth = size.width * 0.46f
+        val neckLeft = (size.width - neckWidth) / 2f
+        val bodyTop = size.height * 0.2f
+        val bodyCorner = size.width * 0.18f
+
+        val bodyPath = Path().apply {
+            addRoundRect(
+                RoundRect(
+                    left = 0f,
+                    top = bodyTop,
+                    right = size.width,
+                    bottom = size.height,
+                    cornerRadius = CornerRadius(bodyCorner, bodyCorner)
+                )
+            )
+        }
+        val neckPath = Path().apply {
+            addRoundRect(
+                RoundRect(
+                    left = neckLeft,
+                    top = 0f,
+                    right = neckLeft + neckWidth,
+                    bottom = bodyTop + bodyCorner,
+                    cornerRadius = CornerRadius(bodyCorner * 0.6f, bodyCorner * 0.6f)
+                )
+            )
+        }
+
+        clipPath(bodyPath) { drawRect(color = trackColor) }
+        drawPath(neckPath, color = trackColor)
+
+        val bodyHeight = size.height - bodyTop
+        val fillHeight = bodyHeight * fraction
+        if (fillHeight > 0f) {
+            clipPath(bodyPath) {
+                drawRect(
+                    color = fillColor,
+                    topLeft = Offset(0f, size.height - fillHeight),
+                    size = Size(size.width, fillHeight)
+                )
+            }
+        }
+
+        val strokeWidth = 2.dp.toPx()
+        drawPath(bodyPath, color = outlineColor, style = Stroke(width = strokeWidth))
+        drawPath(neckPath, color = outlineColor, style = Stroke(width = strokeWidth))
+    }
+}
+
+@Composable
+private fun EmptyStateText(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 28.dp)
+    )
 }
 
 @Composable
@@ -342,13 +391,17 @@ private fun DrawnJobCard(
     onDone: () -> Unit,
     onSkip: () -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(shape = PanelShape, modifier = Modifier.fillMaxWidth()) {
         Column(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text(job.title, style = MaterialTheme.typography.headlineSmall)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                job.title,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 TimeBucketBadge(minutes = context?.remainingMinutes ?: job.estimatedMinutes)
                 if (job.category.isNotBlank()) CategoryBadge(category = job.category)
                 job.recurrenceDays?.let { InfoBadge(text = formatRecurrenceInterval(it)) }
@@ -374,14 +427,34 @@ private fun DrawnJobCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                OutlinedButton(onClick = onSkip, enabled = !isBusy, modifier = Modifier.weight(1f)) {
+                OutlinedButton(
+                    onClick = onSkip,
+                    enabled = !isBusy,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(46.dp)
+                ) {
                     Text("Skip")
                 }
-                Button(onClick = onDone, enabled = !isBusy, modifier = Modifier.weight(1f)) {
+                Button(
+                    onClick = onDone,
+                    enabled = !isBusy,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(46.dp)
+                ) {
                     Text("Mark done")
                 }
             }
-            OutlinedButton(onClick = onOpen, modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(
+                onClick = onOpen,
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(46.dp)
+            ) {
                 Text("View details")
             }
         }
