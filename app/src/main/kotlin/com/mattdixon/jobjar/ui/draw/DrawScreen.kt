@@ -55,6 +55,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -66,13 +67,18 @@ import com.mattdixon.jobjar.ui.components.InfoBadge
 import com.mattdixon.jobjar.ui.components.TimeBucketBadge
 import com.mattdixon.jobjar.util.formatMinutes
 import com.mattdixon.jobjar.util.formatRecurrenceInterval
-import kotlin.math.roundToInt
 
 private val TIME_PRESETS = listOf(15, 30, 45, 60, 90, 120)
 
-/** Shared rounding for every surface on this screen (the jar panel, the drawn-job card) so
- * they read as one design language instead of a stack of mismatched cards. */
-private val PanelShape = RoundedCornerShape(24.dp)
+/** Shared rounding for every surface on this screen so they read as one design language. */
+private val PanelShape = RoundedCornerShape(20.dp)
+
+/**
+ * Jobs pending at or above this count show the jar as visually full - a soft cap for the fill
+ * glyph, not a limit on how many jobs you can actually have. Chosen to look "getting full" at a
+ * realistic personal backlog size rather than needing dozens of jobs to register visually.
+ */
+private const val JAR_FILL_CAP = 15
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -91,16 +97,17 @@ fun DrawScreen(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
-                // Without this, the jar panel + draw button + drawn job card (title, badges,
-                // notes, subtask progress, three buttons) can add up to more height than the
-                // screen. A plain Column doesn't clip or warn about that - it just lays the
-                // overflow out past the bottom edge, so the Skip/Mark done/View details buttons
-                // could end up positioned off-screen: present, but neither visible nor tappable.
+                // Every section below is sized to fit a normal phone screen without scrolling
+                // by default (that's the actual design goal), but this stays as a safety net -
+                // a large system font size or an unusually short screen shouldn't be able to
+                // strand the Skip/Mark done/View details buttons somewhere unreachable.
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            JarControlPanel(
+            JarHero(pendingCount = state.pendingCount)
+
+            PickerPanel(
                 state = state,
                 onAvailableMinutesChange = viewModel::setAvailableMinutes,
                 onLongJobsOnly = viewModel::setLongJobsOnly,
@@ -113,11 +120,11 @@ fun DrawScreen(
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(54.dp)
+                    .height(48.dp)
             ) {
-                Icon(Icons.Filled.Shuffle, contentDescription = null, modifier = Modifier.size(20.dp))
+                Icon(Icons.Filled.Shuffle, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Draw a job", style = MaterialTheme.typography.titleMedium)
+                Text("Draw a job", style = MaterialTheme.typography.titleSmall)
             }
 
             AnimatedContent(
@@ -178,140 +185,33 @@ fun DrawScreen(
 }
 
 /**
- * One unified surface for everything that shapes what gets drawn: the jar-shaped fill meter
- * (real available/completed counts, not a canned animation - see [JarGlyph]), the time budget,
- * and the category filter. Previously these were two separate stacked cards with near-identical
- * tonal backgrounds, which read as repetitive chrome rather than one coherent control surface;
- * merging them into a single panel with thin internal dividers is what actually makes the
- * screen feel sleek instead of just tightly padded.
+ * The screen's one decorative moment: a jar glyph plus how many jobs are actually in it right
+ * now. Deliberately just a count, not a dashboard - a completed-vs-pending ratio was here before
+ * and it decayed toward "always looks full" as lifetime completions piled up, which stopped
+ * meaning anything after a while. Anyone who wants completion history has the Stats tab for
+ * that; this is just "how full does my jar look today."
  */
 @Composable
-private fun JarControlPanel(
-    state: DrawUiState,
-    onAvailableMinutesChange: (Int) -> Unit,
-    onLongJobsOnly: () -> Unit,
-    onCategorySelect: (String?) -> Unit
-) {
-    val total = state.availableCount + state.completedCount
-    val fraction = if (total == 0) 0f else state.availableCount.toFloat() / total
-    val dividerColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-
-    Card(
-        shape = PanelShape,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-        modifier = Modifier.fillMaxWidth()
+private fun JarHero(pendingCount: Int, modifier: Modifier = Modifier) {
+    val fraction = (pendingCount.toFloat() / JAR_FILL_CAP).coerceIn(0f, 1f)
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(
-            modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                JarGlyph(fraction = fraction, modifier = Modifier.size(width = 52.dp, height = 70.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        "${state.availableCount} available",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        if (total > 0) {
-                            "${state.completedCount} completed · jar ${(fraction * 100).roundToInt()}% full"
-                        } else {
-                            "Add a job to fill the jar"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            HorizontalDivider(color = dividerColor)
-
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    SectionLabel("TIME AVAILABLE")
-                    Text(
-                        if (state.longJobsOnly) "4+ hrs" else formatMinutes(state.availableMinutes),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-                Slider(
-                    value = state.availableMinutes.toFloat(),
-                    onValueChange = { onAvailableMinutesChange(it.toInt()) },
-                    valueRange = 5f..240f,
-                    enabled = !state.longJobsOnly
-                )
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(TIME_PRESETS) { minutes ->
-                        FilterChip(
-                            selected = !state.longJobsOnly && state.availableMinutes == minutes,
-                            onClick = { onAvailableMinutesChange(minutes) },
-                            label = { Text(formatMinutes(minutes)) }
-                        )
-                    }
-                    item {
-                        // Not a ceiling like the other chips - an explicit "pull from the big
-                        // projects" request, since the slider above can't reach past 4 hours.
-                        FilterChip(
-                            selected = state.longJobsOnly,
-                            onClick = onLongJobsOnly,
-                            label = { Text("4+ hrs") }
-                        )
-                    }
-                }
-            }
-
-            if (state.categories.isNotEmpty()) {
-                HorizontalDivider(color = dividerColor)
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SectionLabel("CATEGORY")
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        item {
-                            FilterChip(
-                                selected = state.selectedCategory == null,
-                                onClick = { onCategorySelect(null) },
-                                label = { Text("Any") }
-                            )
-                        }
-                        items(state.categories) { category ->
-                            FilterChip(
-                                selected = state.selectedCategory == category,
-                                onClick = {
-                                    onCategorySelect(if (state.selectedCategory == category) null else category)
-                                },
-                                label = { Text(category) }
-                            )
-                        }
-                    }
-                }
-            }
-        }
+        JarGlyph(fraction = fraction, modifier = Modifier.size(width = 52.dp, height = 70.dp))
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(
+            "$pendingCount in the jar",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.SemiBold
+        )
     }
 }
 
-@Composable
-private fun SectionLabel(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        letterSpacing = 0.8.sp
-    )
-}
-
 /**
- * The jar-shaped fill meter glyph itself, factored out of [JarControlPanel] so its drawing code
- * (the actual Canvas/Path work) isn't tangled up with layout. [fraction] is
- * available/(available+completed) - a real proportion, not a canned animation, so it visibly
- * drains as jobs get done and refills as repeating ones come back due or new ones get added.
+ * The jar-shaped fill glyph itself - purely the picture, no data logic of its own. [fraction]
+ * (0f-1f) is however the caller wants to represent "how full," decided by [JarHero].
  */
 @Composable
 private fun JarGlyph(fraction: Float, modifier: Modifier = Modifier) {
@@ -369,6 +269,98 @@ private fun JarGlyph(fraction: Float, modifier: Modifier = Modifier) {
     }
 }
 
+/** The actually-functional part of the screen: time budget and category filter. */
+@Composable
+private fun PickerPanel(
+    state: DrawUiState,
+    onAvailableMinutesChange: (Int) -> Unit,
+    onLongJobsOnly: () -> Unit,
+    onCategorySelect: (String?) -> Unit
+) {
+    val dividerColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+
+    Card(
+        shape = PanelShape,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                SectionLabel("TIME AVAILABLE")
+                Text(
+                    if (state.longJobsOnly) "4+ hrs" else formatMinutes(state.availableMinutes),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            Slider(
+                value = state.availableMinutes.toFloat(),
+                onValueChange = { onAvailableMinutesChange(it.toInt()) },
+                valueRange = 5f..240f,
+                enabled = !state.longJobsOnly
+            )
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(TIME_PRESETS) { minutes ->
+                    FilterChip(
+                        selected = !state.longJobsOnly && state.availableMinutes == minutes,
+                        onClick = { onAvailableMinutesChange(minutes) },
+                        label = { Text(formatMinutes(minutes)) }
+                    )
+                }
+                item {
+                    // Not a ceiling like the other chips - an explicit "pull from the big
+                    // projects" request, since the slider above can't reach past 4 hours.
+                    FilterChip(
+                        selected = state.longJobsOnly,
+                        onClick = onLongJobsOnly,
+                        label = { Text("4+ hrs") }
+                    )
+                }
+            }
+
+            if (state.categories.isNotEmpty()) {
+                HorizontalDivider(color = dividerColor, modifier = Modifier.padding(vertical = 2.dp))
+                SectionLabel("CATEGORY")
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    item {
+                        FilterChip(
+                            selected = state.selectedCategory == null,
+                            onClick = { onCategorySelect(null) },
+                            label = { Text("Any") }
+                        )
+                    }
+                    items(state.categories) { category ->
+                        FilterChip(
+                            selected = state.selectedCategory == category,
+                            onClick = {
+                                onCategorySelect(if (state.selectedCategory == category) null else category)
+                            },
+                            label = { Text(category) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        letterSpacing = 0.8.sp
+    )
+}
+
 @Composable
 private fun EmptyStateText(text: String) {
     Text(
@@ -378,7 +370,7 @@ private fun EmptyStateText(text: String) {
         textAlign = TextAlign.Center,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 28.dp)
+            .padding(vertical = 16.dp)
     )
 }
 
@@ -393,13 +385,15 @@ private fun DrawnJobCard(
 ) {
     Card(shape = PanelShape, modifier = Modifier.fillMaxWidth()) {
         Column(
-            modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
                 job.title,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.SemiBold
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
             )
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 TimeBucketBadge(minutes = context?.remainingMinutes ?: job.estimatedMinutes)
@@ -410,18 +404,27 @@ private fun DrawnJobCard(
                 Text(
                     "Part of: ${context.parentTitle}",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
             if (context != null && context.subtaskTotal > 0) {
                 Text(
-                    "${context.subtaskDone}/${context.subtaskTotal} subtasks done · ${formatMinutes(context.remainingMinutes ?: job.estimatedMinutes)} left of ${formatMinutes(job.estimatedMinutes)} total",
+                    "${context.subtaskDone}/${context.subtaskTotal} subtasks done · ${formatMinutes(context.remainingMinutes ?: job.estimatedMinutes)} left",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
             if (job.notes.isNotBlank()) {
-                Text(job.notes, style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    job.notes,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -430,32 +433,32 @@ private fun DrawnJobCard(
                 OutlinedButton(
                     onClick = onSkip,
                     enabled = !isBusy,
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
                         .weight(1f)
-                        .height(46.dp)
+                        .height(40.dp)
                 ) {
-                    Text("Skip")
+                    Text("Skip", style = MaterialTheme.typography.labelLarge)
                 }
                 Button(
                     onClick = onDone,
                     enabled = !isBusy,
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
                         .weight(1f)
-                        .height(46.dp)
+                        .height(40.dp)
                 ) {
-                    Text("Mark done")
+                    Text("Mark done", style = MaterialTheme.typography.labelLarge)
                 }
             }
             OutlinedButton(
                 onClick = onOpen,
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(12.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(46.dp)
+                    .height(40.dp)
             ) {
-                Text("View details")
+                Text("View details", style = MaterialTheme.typography.labelLarge)
             }
         }
     }

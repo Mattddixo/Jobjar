@@ -33,9 +33,14 @@ data class DrawUiState(
     val excludedIds: List<Long> = emptyList(),
     val isDrawing: Boolean = false,
     val noMatchFound: Boolean = false,
-    /** Every job in the jar (parents and subtasks alike), split by [Job.isPending] - drives the jar meter. */
-    val availableCount: Int = 0,
-    val completedCount: Int = 0
+    /**
+     * How many jobs (parents and subtasks alike) are currently pending - i.e. actually in the
+     * jar right now, per [Job.isPending]. This drives the jar glyph's fill level. Deliberately
+     * just a count, not a ratio against completed work: that decays toward "always looks full"
+     * as your lifetime completed total grows, which stops meaning anything after a while. If you
+     * want completion history, that's what the Stats tab is for.
+     */
+    val pendingCount: Int = 0
 )
 
 class DrawViewModel(private val repository: JobRepository) : ViewModel() {
@@ -50,8 +55,7 @@ class DrawViewModel(private val repository: JobRepository) : ViewModel() {
             }.collect { (categories, allJobs) ->
                 _uiState.value = _uiState.value.copy(
                     categories = categories,
-                    availableCount = allJobs.count { it.isPending() },
-                    completedCount = allJobs.count { !it.isPending() }
+                    pendingCount = allJobs.count { it.isPending() }
                 )
             }
         }
