@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -85,6 +86,11 @@ private val PanelShape = RoundedCornerShape(20.dp)
  */
 private const val JAR_FILL_CAP = 15
 
+/** Max height of the drawn-jobs list before it scrolls internally - bounded so it can live
+ * inside the screen's own outer scroll without an infinite-height measurement error, and so it
+ * naturally shrinks to fit when there are only 1-2 cards instead of always reserving max space. */
+private val BatchListMaxHeight = 340.dp
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DrawScreen(
@@ -93,7 +99,7 @@ fun DrawScreen(
 ) {
     val viewModel: DrawViewModel = viewModel(factory = DrawViewModel.Factory(repository))
     val state by viewModel.uiState.collectAsState()
-    var showForceCompleteDialog by remember { mutableStateOf(false) }
+    var forceCompleteJobId by remember { mutableStateOf<Long?>(null) }
 
     Scaffold(
         topBar = { TopAppBar(title = { Text("The Job Jar") }) }
@@ -105,7 +111,8 @@ fun DrawScreen(
                 // Every section below is sized to fit a normal phone screen without scrolling
                 // by default (that's the actual design goal), but this stays as a safety net -
                 // a large system font size or an unusually short screen shouldn't be able to
-                // strand the Skip/Mark done/View details buttons somewhere unreachable.
+                // strand controls somewhere unreachable. The drawn-jobs list below has its own
+                // bounded, independently-scrolling area regardless.
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -116,7 +123,8 @@ fun DrawScreen(
                 state = state,
                 onAvailableMinutesChange = viewModel::setAvailableMinutes,
                 onLongJobsOnly = viewModel::setLongJobsOnly,
-                onCategorySelect = viewModel::setCategory
+                onCategorySelect = viewModel::setCategory,
+                onBatchSizeChange = viewModel::setBatchSize
             )
 
             Button(
@@ -133,23 +141,26 @@ fun DrawScreen(
             }
 
             AnimatedContent(
-                targetState = state.drawnJob,
+                targetState = state.drawnJobs,
                 transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(120)) },
-                label = "drawn-job"
-            ) { drawnJob ->
+                label = "drawn-jobs"
+            ) { drawnJobs ->
                 when {
-                    drawnJob != null -> DrawnJobCard(
-                        job = drawnJob,
-                        context = state.drawnContext,
+                    drawnJobs.isNotEmpty() -> DrawnJobsBatch(
+                        entries = drawnJobs,
+                        showBudgetSummary = !state.longJobsOnly && state.batchSize != DrawBatchSize.ONE,
+                        availableMinutes = state.availableMinutes,
+                        remainingMinutes = state.remainingMinutesAfterDraw,
                         isBusy = state.isDrawing,
-                        onOpen = { onOpenJob(drawnJob.id) },
-                        onDone = {
-                            val context = state.drawnContext
-                            val hasOpenSubtasks = context != null && context.subtaskDone < context.subtaskTotal
+                        onOpen = { jobId -> onOpenJob(jobId) },
+                        onDone = { jobId ->
+                            val entry = drawnJobs.find { it.job.id == jobId }
+                            val hasOpenSubtasks = entry?.context != null &&
+                                entry.context.subtaskDone < entry.context.subtaskTotal
                             if (hasOpenSubtasks) {
-                                showForceCompleteDialog = true
+                                forceCompleteJobId = jobId
                             } else {
-                                viewModel.completeDrawnJob()
+                                viewModel.completeJob(jobId)
                             }
                         },
                         onSkip = { viewModel.draw(excludeCurrent = true) }
@@ -167,23 +178,23 @@ fun DrawScreen(
         }
     }
 
-    if (showForceCompleteDialog) {
-        val context = state.drawnContext
-        val incompleteCount = (context?.subtaskTotal ?: 0) - (context?.subtaskDone ?: 0)
+    forceCompleteJobId?.let { jobId ->
+        val entry = state.drawnJobs.find { it.job.id == jobId }
+        val incompleteCount = (entry?.context?.subtaskTotal ?: 0) - (entry?.context?.subtaskDone ?: 0)
         AlertDialog(
-            onDismissRequest = { showForceCompleteDialog = false },
+            onDismissRequest = { forceCompleteJobId = null },
             title = { Text("Mark as done?") },
             text = {
                 Text("$incompleteCount subtask(s) are still open. They'll stay open, but this job will be marked done.")
             },
             confirmButton = {
                 TextButton(onClick = {
-                    viewModel.completeDrawnJob()
-                    showForceCompleteDialog = false
+                    viewModel.completeJob(jobId)
+                    forceCompleteJobId = null
                 }) { Text("Mark done") }
             },
             dismissButton = {
-                TextButton(onClick = { showForceCompleteDialog = false }) { Text("Cancel") }
+                TextButton(onClick = { forceCompleteJobId = null }) { Text("Cancel") }
             }
         )
     }
@@ -275,9 +286,9 @@ private fun JarGlyph(fraction: Float, modifier: Modifier = Modifier) {
 }
 
 /**
- * The actually-functional part of the screen: time budget and category filter. Both narrow down
- * to a single dropdown chip - showing the current value doubles as the control that changes it -
- * instead of a whole row of preset chips each, which is what made this panel tall to begin with.
+ * The actually-functional part of the screen: time budget, how many jobs to try to draw, and
+ * category filter. Each narrows down to a single dropdown chip - showing the current value
+ * doubles as the control that changes it - instead of a whole row of preset chips each.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -285,10 +296,12 @@ private fun PickerPanel(
     state: DrawUiState,
     onAvailableMinutesChange: (Int) -> Unit,
     onLongJobsOnly: () -> Unit,
-    onCategorySelect: (String?) -> Unit
+    onCategorySelect: (String?) -> Unit,
+    onBatchSizeChange: (DrawBatchSize) -> Unit
 ) {
     val dividerColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
     var timeMenuExpanded by remember { mutableStateOf(false) }
+    var batchMenuExpanded by remember { mutableStateOf(false) }
     var categoryMenuExpanded by remember { mutableStateOf(false) }
 
     Card(
@@ -352,6 +365,40 @@ private fun PickerPanel(
                     )
                 }
             )
+
+            // "4+ hrs" always draws exactly one job (there's no remaining budget to keep
+            // filling after an open-ended pick), so this control only makes sense - and only
+            // shows - for a normal time-budget draw.
+            if (!state.longJobsOnly) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    SectionLabel("HOW MANY")
+                    Box {
+                        FilterChip(
+                            selected = state.batchSize != DrawBatchSize.ONE,
+                            onClick = { batchMenuExpanded = true },
+                            label = { Text(state.batchSize.label) },
+                            trailingIcon = {
+                                Icon(Icons.Filled.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp))
+                            }
+                        )
+                        DropdownMenu(expanded = batchMenuExpanded, onDismissRequest = { batchMenuExpanded = false }) {
+                            DrawBatchSize.entries.forEach { size ->
+                                DropdownMenuItem(
+                                    text = { Text(size.label) },
+                                    onClick = {
+                                        onBatchSizeChange(size)
+                                        batchMenuExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
 
             if (state.categories.isNotEmpty()) {
                 HorizontalDivider(color = dividerColor, modifier = Modifier.padding(vertical = 2.dp))
@@ -419,23 +466,78 @@ private fun EmptyStateText(text: String) {
 }
 
 /**
- * The whole card is tappable to open the job's detail page (notes, subtasks, everything) - the
- * dedicated "View details" button that used to sit here was redundant with that and just ate
- * space. Skip/Mark done stay as explicit buttons since those are the two actions you'd actually
- * take *without* leaving this screen; opening details is a "step away from the jar" action, so
- * it gets the plain-tap affordance instead of competing for button space. Notes are deliberately
- * left off this card (available on the detail page) so a long description can't push the card -
- * and with it, the buttons - past what fits on screen.
+ * The current draw's results: an optional "how much budget is left" summary (only worth
+ * showing when more than one job was actually requested - for the default single-job draw it'd
+ * just be noise), a bounded, independently-scrollable list of job cards, and one shared Skip
+ * button that redraws the whole batch. [BatchListMaxHeight] keeps the list from growing without
+ * limit inside the screen's own outer scroll - it shrinks to fit when there are only 1-2 cards
+ * and scrolls internally once there are more than that.
  */
 @Composable
-private fun DrawnJobCard(
-    job: Job,
-    context: DrawnJobContext?,
+private fun DrawnJobsBatch(
+    entries: List<DrawnJobEntry>,
+    showBudgetSummary: Boolean,
+    availableMinutes: Int,
+    remainingMinutes: Int,
     isBusy: Boolean,
-    onOpen: () -> Unit,
-    onDone: () -> Unit,
+    onOpen: (Long) -> Unit,
+    onDone: (Long) -> Unit,
     onSkip: () -> Unit
 ) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (showBudgetSummary) {
+            Text(
+                "${entries.size} job(s) · ${formatMinutes(remainingMinutes)} left of ${formatMinutes(availableMinutes)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = BatchListMaxHeight)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            entries.forEach { entry ->
+                BatchJobCard(
+                    entry = entry,
+                    isBusy = isBusy,
+                    onOpen = { onOpen(entry.job.id) },
+                    onDone = { onDone(entry.job.id) }
+                )
+            }
+        }
+        OutlinedButton(
+            onClick = onSkip,
+            enabled = !isBusy,
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(40.dp)
+        ) {
+            Text("Skip", style = MaterialTheme.typography.labelLarge)
+        }
+    }
+}
+
+/**
+ * The whole card is tappable to open the job's detail page (notes, subtasks, everything) - a
+ * dedicated "View details" button would just be redundant with that. Mark done is the only
+ * button now that Skip lives once per batch instead of once per card. Notes are deliberately
+ * left off (available on the detail page) so a long description can't grow a card unpredictably
+ * inside the batch's bounded list.
+ */
+@Composable
+private fun BatchJobCard(
+    entry: DrawnJobEntry,
+    isBusy: Boolean,
+    onOpen: () -> Unit,
+    onDone: () -> Unit
+) {
+    val job = entry.job
+    val context = entry.context
+
     Card(onClick = onOpen, shape = PanelShape, modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(14.dp),
@@ -471,30 +573,15 @@ private fun DrawnJobCard(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth()
+            Button(
+                onClick = onDone,
+                enabled = !isBusy,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(40.dp)
             ) {
-                OutlinedButton(
-                    onClick = onSkip,
-                    enabled = !isBusy,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(40.dp)
-                ) {
-                    Text("Skip", style = MaterialTheme.typography.labelLarge)
-                }
-                Button(
-                    onClick = onDone,
-                    enabled = !isBusy,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(40.dp)
-                ) {
-                    Text("Mark done", style = MaterialTheme.typography.labelLarge)
-                }
+                Text("Mark done", style = MaterialTheme.typography.labelLarge)
             }
         }
     }

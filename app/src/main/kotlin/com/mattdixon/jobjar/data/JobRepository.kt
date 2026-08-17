@@ -152,8 +152,12 @@ class JobRepository(private val dao: JobDao) {
      * minus what completed subtasks already accounted for), so it becomes eligible for shorter
      * draws (or drops out of the long-task pool) as its subtasks get knocked out. Subtasks are
      * matched by their own estimate, same as any plain job.
+     *
+     * Returns the pick paired with how many minutes it counts against a time budget
+     * ([DrawPick.minutesUsed]) - the caller (multi-job batch draws) needs that to decrement a
+     * running budget between picks without duplicating the parent-vs-subtask minutes logic.
      */
-    suspend fun drawJob(maxMinutes: Int, category: String?, excludeIds: List<Long>, longOnly: Boolean = false): Job? {
+    suspend fun drawJob(maxMinutes: Int, category: String?, excludeIds: List<Long>, longOnly: Boolean = false): DrawPick? {
         val all = allJobsFlat.first()
         val subtasksByParent = all.filter { it.parentId != null }.groupBy { it.parentId }
         val subtasksById = subtasksByParent.values.flatten().associateBy { it.id }
@@ -168,9 +172,9 @@ class JobRepository(private val dao: JobDao) {
                 }
         }
 
-        val picked = candidates.randomOrNull()
-        picked?.let { dao.incrementDrawCount(it.id) }
-        return picked
+        val picked = candidates.randomOrNull() ?: return null
+        dao.incrementDrawCount(picked.id)
+        return DrawPick(picked, minutesNeeded(picked, subtasksByParent))
     }
 
     private fun minutesNeeded(job: Job, subtasksByParent: Map<Long?, List<Job>>): Int =
@@ -180,3 +184,5 @@ class JobRepository(private val dao: JobDao) {
             job.estimatedMinutes
         }
 }
+
+data class DrawPick(val job: Job, val minutesUsed: Int)
