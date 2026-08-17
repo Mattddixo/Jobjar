@@ -103,14 +103,25 @@ private val BatchListMaxHeight = 340.dp
 @Composable
 fun DrawScreen(
     repository: JobRepository,
-    onOpenJob: (Long) -> Unit
+    onOpenJob: (Long) -> Unit,
+    darkTheme: Boolean,
+    onToggleTheme: () -> Unit
 ) {
     val viewModel: DrawViewModel = viewModel(factory = DrawViewModel.Factory(repository))
     val state by viewModel.uiState.collectAsState()
     var forceCompleteJobId by remember { mutableStateOf<Long?>(null) }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("The Job Jar") }) }
+        topBar = {
+            TopAppBar(
+                title = { Text("The Job Jar") },
+                actions = {
+                    TextButton(onClick = onToggleTheme) {
+                        Text(if (darkTheme) "Light" else "Dark")
+                    }
+                }
+            )
+        }
     ) { padding ->
         Column(
             modifier = Modifier

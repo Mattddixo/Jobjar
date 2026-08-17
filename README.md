@@ -32,9 +32,10 @@ platform rather than transliterated line-by-line.
    from jobs needing 4+ hours, always as a single job since there's no
    remaining budget left to keep filling after an open-ended pick.
 
-   Drawn jobs get their own color treatment (the app's one reserved accent,
-   a soft honey tertiary) so results visually stand out from the teal
-   controls above them — tap a card to open its detail page, tap **Mark done** to
+   Drawn jobs get their own subtle tonal treatment (a warm-toned taupe
+   grey, the app's one reserved accent) so results are distinct from the
+   neutral controls above them without introducing actual color — tap a
+   card to open its detail page, tap **Mark done** to
    complete it, swipe a card left to skip just that one (it's replaced if
    anything else still fits the time it freed up), or tap **Skip all**
    below the list to redraw the whole batch fresh.
@@ -139,19 +140,25 @@ cycle, whether or not it has subtasks.
 Standard modern-Android stack, no unnecessary abstraction:
 
 - **Kotlin + Jetpack Compose** for the entire UI (single-Activity, Material
-  3). Theming is a hand-built warm palette (`ui/theme/Color.kt` /
-  `Theme.kt`) rather than Android 12+'s dynamic/Material You color, which
-  pulls its palette from the phone's wallpaper and would silently override
-  anything defined here - `dynamicColor` defaults to `false` for exactly
-  that reason. One confident hero color rather than several competing
-  ones: teal (primary) for every main action and control, a deliberately
-  low-saturation sand (secondary) for badges/tags that stays support
-  rather than a second lead, and a soft honey (tertiary) reserved solely
-  for a drawn job's card on the Jar tab - a gentle warm tint, not a
-  saturated block, so that one moment reads as a highlight rather than a
-  different-colored box. Every screen pulls from `MaterialTheme.colorScheme`
-  roles rather than hardcoded colors, so retuning the palette in one place
-  reaches the whole app.
+  3). Theming is deliberately monochrome (`ui/theme/Color.kt` / `Theme.kt`)
+  rather than Android 12+'s dynamic/Material You color, which pulls its
+  palette from the phone's wallpaper and would silently override anything
+  defined here - `dynamicColor` defaults to `false` for exactly that
+  reason. Two earlier attempts at a colorful palette both read as too
+  busy for what's meant to be a clean, production-feeling app, so color
+  is mostly absent by design: ink (near-black/near-white, primary) for
+  every main action and control, a cool-neutral slate (secondary) for
+  badges/tags, and a warm-toned taupe (tertiary) reserved solely for a
+  drawn job's card on the Jar tab - the one deliberate exception, a subtle
+  grey-on-grey tonal shift rather than an actual color, so that one
+  moment is distinct without competing for attention. Light and dark
+  themes are both fully designed (not just a dark-mode auto-invert), and
+  the top-right toggle on each tab (labelled with whichever mode tapping
+  it would switch *to*) lets you override the system setting directly;
+  that choice is persisted (`data/ThemePreferences.kt`, one SharedPreferences
+  boolean) so it survives relaunching the app. Every screen pulls from
+  `MaterialTheme.colorScheme` roles rather than hardcoded colors, so
+  retuning the palette in one place reaches the whole app.
 - **Room** for local persistence (one `jobs` table). All reads are exposed
   as `Flow`, so UI state recomposes automatically as data changes.
 - **MVVM**: one `ViewModel` per screen (`DrawViewModel`, `JobListViewModel`,

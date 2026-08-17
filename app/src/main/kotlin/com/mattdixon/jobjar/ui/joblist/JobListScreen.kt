@@ -76,7 +76,9 @@ private val ScreenHPadding = 16.dp
 fun JobListScreen(
     repository: JobRepository,
     onAddJob: () -> Unit,
-    onOpenJob: (Long) -> Unit
+    onOpenJob: (Long) -> Unit,
+    darkTheme: Boolean,
+    onToggleTheme: () -> Unit
 ) {
     val viewModel: JobListViewModel = viewModel(factory = JobListViewModel.Factory(repository))
     val state by viewModel.uiState.collectAsState()
@@ -119,6 +121,9 @@ fun JobListScreen(
                                     )
                                 }
                             }
+                        }
+                        TextButton(onClick = onToggleTheme) {
+                            Text(if (darkTheme) "Light" else "Dark")
                         }
                     }
                 )

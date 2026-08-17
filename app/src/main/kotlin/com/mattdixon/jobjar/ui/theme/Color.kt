@@ -2,78 +2,76 @@ package com.mattdixon.jobjar.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// A single confident hero color plus two genuinely muted supporting ones, instead of three
-// competing saturated hues fighting for attention. That was the problem with the first pass at
-// this: amber controls, minty badges, and a hot-pink drawn-job card all at once reads as loud
-// and uncoordinated, not "fun." Production apps that feel fun (and not chaotic) generally commit
-// to one brand color and use everything else as quiet support - that's the model here.
-//
-//   - Teal (primary)   - the one brand color: every main action, filter, and control.
-//   - Sand (secondary) - a low-saturation warm neutral for badges/tags - support, not a second
-//     lead. Nearly a neutral on purpose.
-//   - Honey (tertiary) - reserved solely for a drawn job's card on the Jar tab, and kept soft
-//     (a gentle cream-gold tint, not a saturated block) so it reads as a warm highlight rather
-//     than "a different colored box."
-// Neutrals are clean and barely warm - not the tan/parchment of the first attempt, not cold grey.
+// A genuinely monochrome palette - black, white, and grey - rather than any hue-based accent.
+// Two attempts at a colorful palette both read as "too much" for what's meant to be a clean,
+// production-feeling app, so this drops color entirely instead of trying to tone it down again.
+// The one exception is deliberately tiny: a drawn job's card uses a slightly warm-toned grey
+// instead of the cool-neutral grey everywhere else - a gentle tonal shift, not a color, so it's
+// distinct without competing for attention.
 
-// Teal - primary
-val TealPrimaryLight = Color(0xFF0B7A6B)
-val TealOnPrimaryLight = Color(0xFFFFFFFF)
-val TealContainerLight = Color(0xFFB7F0E1)
-val TealOnContainerLight = Color(0xFF00201A)
+// Ink - primary. Pure near-black/near-white, carrying the "this is the main action" weight that
+// would normally come from a brand color.
+val InkPrimaryLight = Color(0xFF1A1A1A)
+val InkOnPrimaryLight = Color(0xFFFFFFFF)
+val InkContainerLight = Color(0xFFE4E4E4)
+val InkOnContainerLight = Color(0xFF1A1A1A)
 
-val TealPrimaryDark = Color(0xFF52DBC4)
-val TealOnPrimaryDark = Color(0xFF00382F)
-val TealContainerDark = Color(0xFF005143)
-val TealOnContainerDark = Color(0xFFB7F0E1)
+val InkPrimaryDark = Color(0xFFEDEDED)
+val InkOnPrimaryDark = Color(0xFF1A1A1A)
+val InkContainerDark = Color(0xFF333333)
+val InkOnContainerDark = Color(0xFFEDEDED)
 
-// Sand - secondary, deliberately low-saturation so it never competes with teal
-val SandSecondaryLight = Color(0xFF6F5F4F)
-val SandOnSecondaryLight = Color(0xFFFFFFFF)
-val SandContainerLight = Color(0xFFEFE0CE)
-val SandOnContainerLight = Color(0xFF271A09)
+// Slate - secondary, a cool-neutral mid grey for badges/tags.
+val SlateSecondaryLight = Color(0xFF5B5B5B)
+val SlateOnSecondaryLight = Color(0xFFFFFFFF)
+val SlateContainerLight = Color(0xFFE9E9E9)
+val SlateOnContainerLight = Color(0xFF262626)
 
-val SandSecondaryDark = Color(0xFFD9C4AC)
-val SandOnSecondaryDark = Color(0xFF3D2E1B)
-val SandContainerDark = Color(0xFF554530)
-val SandOnContainerDark = Color(0xFFEFE0CE)
+val SlateSecondaryDark = Color(0xFFC6C6C6)
+val SlateOnSecondaryDark = Color(0xFF2E2E2E)
+val SlateContainerDark = Color(0xFF3A3A3A)
+val SlateOnContainerDark = Color(0xFFE9E9E9)
 
-// Honey - tertiary, reserved for the drawn-job spotlight only, kept soft rather than saturated
-val HoneyTertiaryLight = Color(0xFF8A5D19)
-val HoneyOnTertiaryLight = Color(0xFFFFFFFF)
-val HoneyContainerLight = Color(0xFFFFE7C2)
-val HoneyOnContainerLight = Color(0xFF2C1800)
+// Taupe - tertiary, reserved solely for a drawn job's card. The only place in the app where the
+// grey shifts warm instead of staying perfectly neutral - subtle side-by-side, but still a
+// distinct greytone rather than either "the same grey as everything else" or an actual color.
+val TaupeTertiaryLight = Color(0xFF6B6055)
+val TaupeOnTertiaryLight = Color(0xFFFFFFFF)
+val TaupeContainerLight = Color(0xFFEDE7E1)
+val TaupeOnContainerLight = Color(0xFF2A231D)
 
-val HoneyTertiaryDark = Color(0xFFFFB955)
-val HoneyOnTertiaryDark = Color(0xFF482A00)
-val HoneyContainerDark = Color(0xFF6A3F00)
-val HoneyOnContainerDark = Color(0xFFFFE7C2)
+val TaupeTertiaryDark = Color(0xFFD8CCC0)
+val TaupeOnTertiaryDark = Color(0xFF352D25)
+val TaupeContainerDark = Color(0xFF3D362F)
+val TaupeOnContainerDark = Color(0xFFEDE7E1)
 
-// Warm neutrals - background/surface family
-val WarmBackgroundLight = Color(0xFFFBFAF6)
-val WarmOnBackgroundLight = Color(0xFF1B1C18)
-val WarmSurfaceVariantLight = Color(0xFFE2E2D7)
-val WarmOnSurfaceVariantLight = Color(0xFF45473C)
-val WarmSurfaceContainerLowLight = Color(0xFFF5F4EF)
-val WarmSurfaceContainerLight = Color(0xFFEFEEE8)
-val WarmSurfaceContainerHighLight = Color(0xFFE9E8E1)
-val WarmSurfaceContainerHighestLight = Color(0xFFE3E3DB)
-val WarmOutlineLight = Color(0xFF767669)
-val WarmOutlineVariantLight = Color(0xFFC6C6B7)
+// Neutrals - background/surface family. Clean, true-ish greys (a hair warmer than pure cold
+// grey, not the tan/parchment of an earlier attempt).
+val NeutralBackgroundLight = Color(0xFFFAFAF9)
+val NeutralOnBackgroundLight = Color(0xFF1C1C1B)
+val NeutralSurfaceVariantLight = Color(0xFFE3E2E0)
+val NeutralOnSurfaceVariantLight = Color(0xFF484745)
+val NeutralSurfaceContainerLowLight = Color(0xFFF4F4F3)
+val NeutralSurfaceContainerLight = Color(0xFFEEEEEC)
+val NeutralSurfaceContainerHighLight = Color(0xFFE8E8E6)
+val NeutralSurfaceContainerHighestLight = Color(0xFFE2E2E0)
+val NeutralOutlineLight = Color(0xFF787774)
+val NeutralOutlineVariantLight = Color(0xFFC7C6C3)
 
-val WarmBackgroundDark = Color(0xFF13140F)
-val WarmOnBackgroundDark = Color(0xFFE3E3DA)
-val WarmSurfaceVariantDark = Color(0xFF45473C)
-val WarmOnSurfaceVariantDark = Color(0xFFC6C6B7)
-val WarmSurfaceContainerLowestDark = Color(0xFF0D0F0A)
-val WarmSurfaceContainerLowDark = Color(0xFF1B1C17)
-val WarmSurfaceContainerDark = Color(0xFF1F211B)
-val WarmSurfaceContainerHighDark = Color(0xFF292B24)
-val WarmSurfaceContainerHighestDark = Color(0xFF34362E)
-val WarmOutlineDark = Color(0xFF90917F)
-val WarmOutlineVariantDark = Color(0xFF45473C)
+val NeutralBackgroundDark = Color(0xFF141413)
+val NeutralOnBackgroundDark = Color(0xFFE5E4E2)
+val NeutralSurfaceVariantDark = Color(0xFF48473F)
+val NeutralOnSurfaceVariantDark = Color(0xFFC7C6C3)
+val NeutralSurfaceContainerLowestDark = Color(0xFF0E0E0D)
+val NeutralSurfaceContainerLowDark = Color(0xFF1C1C1B)
+val NeutralSurfaceContainerDark = Color(0xFF202020)
+val NeutralSurfaceContainerHighDark = Color(0xFF2A2A29)
+val NeutralSurfaceContainerHighestDark = Color(0xFF353533)
+val NeutralOutlineDark = Color(0xFF929190)
+val NeutralOutlineVariantDark = Color(0xFF48473F)
 
-// Error - kept close to Material's default red family (no reason to reinvent this one)
+// Error - kept close to Material's default red family (the one deliberate spot of real color,
+// reserved for destructive actions like delete - a functional signal, not decoration).
 val ErrorLight = Color(0xFFBA1A1A)
 val OnErrorLight = Color(0xFFFFFFFF)
 val ErrorContainerLight = Color(0xFFFFDAD6)

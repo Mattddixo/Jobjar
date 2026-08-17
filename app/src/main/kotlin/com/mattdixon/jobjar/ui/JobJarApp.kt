@@ -38,7 +38,11 @@ private sealed class TopLevelDestination(val route: String, val label: String, v
 private val topLevelDestinations = listOf(TopLevelDestination.Draw, TopLevelDestination.Jobs, TopLevelDestination.Stats)
 
 @Composable
-fun JobJarApp(repository: JobRepository) {
+fun JobJarApp(
+    repository: JobRepository,
+    darkTheme: Boolean,
+    onToggleTheme: () -> Unit
+) {
     val navController = rememberNavController()
 
     Scaffold(
@@ -71,18 +75,22 @@ fun JobJarApp(repository: JobRepository) {
             composable(TopLevelDestination.Draw.route) {
                 DrawScreen(
                     repository = repository,
-                    onOpenJob = { jobId -> navController.navigate("job/$jobId") }
+                    onOpenJob = { jobId -> navController.navigate("job/$jobId") },
+                    darkTheme = darkTheme,
+                    onToggleTheme = onToggleTheme
                 )
             }
             composable(TopLevelDestination.Jobs.route) {
                 JobListScreen(
                     repository = repository,
                     onAddJob = { navController.navigate("job/new") },
-                    onOpenJob = { jobId -> navController.navigate("job/$jobId") }
+                    onOpenJob = { jobId -> navController.navigate("job/$jobId") },
+                    darkTheme = darkTheme,
+                    onToggleTheme = onToggleTheme
                 )
             }
             composable(TopLevelDestination.Stats.route) {
-                StatsScreen(repository = repository)
+                StatsScreen(repository = repository, darkTheme = darkTheme, onToggleTheme = onToggleTheme)
             }
             composable("job/new") {
                 AddEditJobScreen(
