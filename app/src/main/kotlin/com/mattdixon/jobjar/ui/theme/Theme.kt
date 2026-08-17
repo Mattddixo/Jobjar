@@ -10,22 +10,79 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 
-private val DarkColorScheme = darkColorScheme(
-    primary = Teal80,
-    secondary = TealGrey80,
-    tertiary = Amber80
+private val LightColorScheme = lightColorScheme(
+    primary = AmberPrimaryLight,
+    onPrimary = AmberOnPrimaryLight,
+    primaryContainer = AmberContainerLight,
+    onPrimaryContainer = AmberOnContainerLight,
+    secondary = JadeSecondaryLight,
+    onSecondary = JadeOnSecondaryLight,
+    secondaryContainer = JadeContainerLight,
+    onSecondaryContainer = JadeOnContainerLight,
+    tertiary = CoralTertiaryLight,
+    onTertiary = CoralOnTertiaryLight,
+    tertiaryContainer = CoralContainerLight,
+    onTertiaryContainer = CoralOnContainerLight,
+    background = WarmBackgroundLight,
+    onBackground = WarmOnBackgroundLight,
+    surface = WarmBackgroundLight,
+    onSurface = WarmOnBackgroundLight,
+    surfaceVariant = WarmSurfaceVariantLight,
+    onSurfaceVariant = WarmOnSurfaceVariantLight,
+    surfaceContainerLowest = WarmBackgroundLight,
+    surfaceContainerLow = WarmSurfaceContainerLowLight,
+    surfaceContainer = WarmSurfaceContainerLight,
+    surfaceContainerHigh = WarmSurfaceContainerHighLight,
+    surfaceContainerHighest = WarmSurfaceVariantLight,
+    outline = WarmOutlineLight,
+    outlineVariant = WarmOutlineVariantLight,
+    error = ErrorLight,
+    onError = OnErrorLight,
+    errorContainer = ErrorContainerLight,
+    onErrorContainer = OnErrorContainerLight
 )
 
-private val LightColorScheme = lightColorScheme(
-    primary = Teal40,
-    secondary = TealGrey40,
-    tertiary = Amber40
+private val DarkColorScheme = darkColorScheme(
+    primary = AmberPrimaryDark,
+    onPrimary = AmberOnPrimaryDark,
+    primaryContainer = AmberContainerDark,
+    onPrimaryContainer = AmberOnContainerDark,
+    secondary = JadeSecondaryDark,
+    onSecondary = JadeOnSecondaryDark,
+    secondaryContainer = JadeContainerDark,
+    onSecondaryContainer = JadeOnContainerDark,
+    tertiary = CoralTertiaryDark,
+    onTertiary = CoralOnTertiaryDark,
+    tertiaryContainer = CoralContainerDark,
+    onTertiaryContainer = CoralOnContainerDark,
+    background = WarmBackgroundDark,
+    onBackground = WarmOnBackgroundDark,
+    surface = WarmBackgroundDark,
+    onSurface = WarmOnBackgroundDark,
+    surfaceVariant = WarmSurfaceVariantDark,
+    onSurfaceVariant = WarmOnSurfaceVariantDark,
+    surfaceContainerLowest = WarmBackgroundDark,
+    surfaceContainerLow = WarmSurfaceContainerLowDark,
+    surfaceContainer = WarmSurfaceContainerDark,
+    surfaceContainerHigh = WarmSurfaceContainerHighDark,
+    surfaceContainerHighest = WarmSurfaceVariantDark,
+    outline = WarmOutlineDark,
+    outlineVariant = WarmOutlineVariantDark,
+    error = ErrorDark,
+    onError = OnErrorDark,
+    errorContainer = ErrorContainerDark,
+    onErrorContainer = OnErrorContainerDark
 )
 
 @Composable
 fun JobJarTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
+    // Off by default now: Android 12+'s dynamic color pulls the whole palette from the phone's
+    // wallpaper, silently discarding every color chosen above - that's what made the app look
+    // grey regardless of what this file defined. This app has a real designed palette, so it
+    // should actually be used; dynamicColor is left as a parameter (not deleted) in case that
+    // tradeoff is ever wanted back for a specific build.
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {

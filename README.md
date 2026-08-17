@@ -16,16 +16,28 @@ platform rather than transliterated line-by-line.
 1. **Add a job** with a title, optional notes, a time estimate, a category,
    and a priority. Duration is picked from quick presets (5 min to 3 hr) or
    a **"4+ hrs"** option for jobs too big to size precisely up front.
-2. On the **Jar** tab, a jar-shaped meter shows at a glance how full the jar
-   still is — how many jobs (and subtasks) are available versus completed,
-   filled to that real proportion, not a canned animation. Tell the app how
-   much time you actually have (a slider or quick-pick chips, capped at 4
-   hours) and, optionally, a category. Tap **Draw a job** and it randomly
-   picks one eligible job that *fits* your time from the jar. From there you
-   can **Skip** (redraw, excluding jobs already shown this session), **Mark
-   done**, or **View details**. A separate **"4+ hrs"** chip flips the match
+2. On the **Jar** tab, a jar-shaped glyph shows how many jobs (and
+   subtasks) are actually pending right now — a plain count, not a
+   completed-vs-pending ratio (that decays toward "always looks full" as
+   your lifetime completions pile up, which stops meaning anything after a
+   while; the Stats tab is where completion history actually belongs). Set
+   how much time you have with the slider, or jump straight to a preset via
+   the **Time** dropdown; optionally narrow by **Category** the same way.
+   A third dropdown, **How many**, lets you draw more than one job at once
+   (1/2/3/4/All) — the draw greedily fills your time budget: pick a job,
+   subtract what it needs, pick another that fits what's left, and so on
+   until it hits your chosen count or nothing eligible fits anymore. A
+   separate **"4+ hrs"** option (inside the Time dropdown) flips the match
    from a ceiling to a floor — instead of "what fits," it explicitly draws
-   from jobs needing 4+ hours, which the slider alone can never reach.
+   from jobs needing 4+ hours, always as a single job since there's no
+   remaining budget left to keep filling after an open-ended pick.
+
+   Drawn jobs get their own color treatment (the app's one reserved accent,
+   tertiary/coral) so results visually stand out from the amber controls
+   above them — tap a card to open its detail page, tap **Mark done** to
+   complete it, swipe a card left to skip just that one (it's replaced if
+   anything else still fits the time it freed up), or tap **Skip all**
+   below the list to redraw the whole batch fresh.
 3. The **Jobs** tab is the full list — filter by category or by **Repeating**,
    toggle Active/Completed, sort by time/priority/newest/category, tap into
    a job to view or edit it, or swipe into its overflow menu to delete it.
@@ -127,7 +139,17 @@ cycle, whether or not it has subtasks.
 Standard modern-Android stack, no unnecessary abstraction:
 
 - **Kotlin + Jetpack Compose** for the entire UI (single-Activity, Material
-  3, dynamic color on Android 12+).
+  3). Theming is a hand-built warm palette (`ui/theme/Color.kt` /
+  `Theme.kt`) rather than Android 12+'s dynamic/Material You color, which
+  pulls its palette from the phone's wallpaper and would silently override
+  anything defined here - `dynamicColor` defaults to `false` for exactly
+  that reason. Three color families, each with one job: amber/marigold
+  (primary) for the main controls, jade/teal (secondary) for badges and
+  tags, and raspberry/coral (tertiary) reserved solely for a drawn job's
+  card on the Jar tab, so that one moment reads as a spotlight rather than
+  just another panel. Every screen pulls from `MaterialTheme.colorScheme`
+  roles rather than hardcoded colors, so retuning the palette in one place
+  reaches the whole app.
 - **Room** for local persistence (one `jobs` table). All reads are exposed
   as `Flow`, so UI state recomposes automatically as data changes.
 - **MVVM**: one `ViewModel` per screen (`DrawViewModel`, `JobListViewModel`,
