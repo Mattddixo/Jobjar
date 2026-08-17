@@ -157,7 +157,18 @@ Standard modern-Android stack, no unnecessary abstraction:
   that choice is persisted (`data/ThemePreferences.kt`, one SharedPreferences
   boolean) so it survives relaunching the app. Every screen pulls from
   `MaterialTheme.colorScheme` roles rather than hardcoded colors, so
-  retuning the palette in one place reaches the whole app.
+  retuning the palette in one place reaches the whole app. Typography
+  (`ui/theme/Type.kt`) gives every used Material3 role a deliberate value
+  instead of leaning on stock defaults for whatever wasn't touched, and
+  spacing/shape (`ui/theme/Spacing.kt`, `ui/theme/Shapes.kt`) are small
+  scale objects every screen references instead of one-off dp literals -
+  retuning the overall density or corner language means editing one file,
+  not hunting through seven. All user-facing text lives in
+  `res/values/strings.xml` rather than inline Kotlin string literals, the
+  normal Android convention for a single source of truth and an actual
+  localization path (enum-attached labels like `DrawBatchSize.label` are
+  a known, deliberate exception - localizing those needs a composable
+  accessor, not just moving the string, and was left out of this pass).
 - **Room** for local persistence (one `jobs` table). All reads are exposed
   as `Flow`, so UI state recomposes automatically as data changes.
 - **MVVM**: one `ViewModel` per screen (`DrawViewModel`, `JobListViewModel`,

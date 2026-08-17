@@ -6,20 +6,21 @@
     android:viewportHeight="108">
     <!-- jar body -->
     <path
-        android:fillColor="#ECEFF1"
+        android:fillColor="#F3EFE8"
         android:pathData="M30,42 L78,42 L78,90 L30,90 Z" />
     <!-- jar lid -->
     <path
-        android:fillColor="#37474F"
+        android:fillColor="#8A8175"
         android:pathData="M38,28 L70,28 L70,42 L38,42 Z" />
-    <!-- job slips inside the jar -->
+    <!-- job slips inside the jar - the app's one accent tone (taupe), same idea as a drawn
+         job's card color in the app itself, not a separate hue. -->
     <path
-        android:fillColor="#FFA000"
+        android:fillColor="#B7ACA0"
         android:pathData="M36,50 L58,50 L58,58 L36,58 Z" />
     <path
-        android:fillColor="#26A69A"
+        android:fillColor="#6E6459"
         android:pathData="M42,62 L70,62 L70,70 L42,70 Z" />
     <path
-        android:fillColor="#FFA000"
+        android:fillColor="#B7ACA0"
         android:pathData="M36,74 L62,74 L62,82 L36,82 Z" />
 </vector>

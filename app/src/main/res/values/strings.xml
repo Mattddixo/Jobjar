@@ -1,3 +1,104 @@
 <resources>
     <string name="app_name">Job Jar</string>
+
+    <!-- Shared across multiple screens - kept as single keys instead of duplicated per screen -->
+    <string name="action_cancel">Cancel</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_mark_done">Mark done</string>
+    <string name="dialog_mark_as_done_title">Mark as done?</string>
+    <string name="dialog_force_complete_body">%1$d subtask(s) are still open. They\'ll stay open, but this job will be marked done.</string>
+    <string name="label_part_of">Part of: %1$s</string>
+    <string name="label_waiting_on">Waiting on: %1$s</string>
+    <string name="label_remaining_of_total">%1$s left of %2$s total</string>
+    <string name="long_job_chip_label">4+ hrs</string>
+    <string name="theme_toggle_light">Light</string>
+    <string name="theme_toggle_dark">Dark</string>
+    <string name="cd_add_subtask">Add subtask</string>
+    <string name="cd_mark_done">Mark done</string>
+    <string name="cd_mark_not_done">Mark not done</string>
+    <string name="cd_back">Back</string>
+    <string name="cd_edit">Edit</string>
+
+    <!-- Draw (Jar) screen -->
+    <string name="draw_screen_title">The Job Jar</string>
+    <string name="draw_button">Draw a job</string>
+    <string name="draw_jar_count">%1$d in the jar</string>
+    <string name="draw_section_time_available">TIME AVAILABLE</string>
+    <string name="draw_section_how_many">HOW MANY</string>
+    <string name="draw_section_category">CATEGORY</string>
+    <string name="draw_category_any">Any</string>
+    <string name="draw_no_match_long">Nothing needs %1$s+ yet. Try a shorter time, or add a bigger job.</string>
+    <string name="draw_no_match_short">No jobs fit that time and category. Try a longer time or add more jobs.</string>
+    <string name="draw_empty_prompt">Set your time and tap \"Draw a job\" to pick something from the jar.</string>
+    <string name="draw_budget_summary">%1$d job(s) · %2$s left of %3$s</string>
+    <string name="draw_skip_all">Skip all</string>
+    <string name="draw_subtasks_progress">%1$d/%2$d subtasks done · %3$s left</string>
+
+    <!-- Jobs list screen -->
+    <string name="jobs_screen_title">Jobs</string>
+    <string name="cd_search_jobs">Search jobs</string>
+    <string name="cd_sort">Sort</string>
+    <string name="cd_add_job">Add job</string>
+    <string name="filter_active">Active</string>
+    <string name="filter_completed">Completed</string>
+    <string name="filter_repeating">Repeating</string>
+    <string name="filter_category_default">Category</string>
+    <string name="filter_clear">Clear</string>
+    <string name="cd_more_options">More options</string>
+    <string name="menu_open">Open</string>
+    <string name="dialog_delete_job_title">Delete job?</string>
+    <string name="dialog_delete_job_with_subtasks">\"%1$s\" and its %2$d subtask(s) will be removed permanently.</string>
+    <string name="dialog_delete_job_plain">\"%1$s\" will be removed permanently.</string>
+    <string name="cd_close_search">Close search</string>
+    <string name="cd_clear_search">Clear search</string>
+    <string name="empty_no_search_match">No jobs match \"%1$s\".</string>
+    <string name="empty_no_filter_match">No jobs match these filters.</string>
+    <string name="empty_no_completed">No completed jobs yet.</string>
+    <string name="empty_no_jobs">No jobs yet. Tap + to add one.</string>
+
+    <!-- Add/Edit job screen -->
+    <string name="addedit_title_edit_subtask">Edit subtask</string>
+    <string name="addedit_title_edit_job">Edit job</string>
+    <string name="addedit_title_new_subtask">New subtask</string>
+    <string name="addedit_title_new_job">New job</string>
+    <string name="cd_save">Save</string>
+    <string name="field_title_label">Title</string>
+    <string name="field_notes_label">Notes (optional)</string>
+    <string name="title_char_count">%1$d/%2$d</string>
+    <string name="duration_question">How long will it take?</string>
+    <string name="field_custom_minutes">Custom minutes</string>
+    <string name="category_label">Category</string>
+    <string name="category_hint">e.g. Chores, Work, Errands</string>
+    <string name="priority_label">Priority</string>
+    <string name="depends_on_label">Depends on</string>
+    <string name="depends_on_hint">Optional: this subtask stays out of the jar\'s random draw until the one it depends on is done. You can still check it off by hand any time.</string>
+    <string name="depends_on_none">None</string>
+    <string name="repeat_label">Repeat</string>
+    <string name="field_custom_recurrence">Custom: every N days</string>
+    <string name="repeat_explainer">Completing a repeating job reopens it automatically after the interval, instead of leaving it done for good.</string>
+    <string name="subtasks_title">Subtasks</string>
+    <string name="subtasks_save_first_hint">Adding a subtask saves this job first, using what you\'ve filled in so far.</string>
+
+    <!-- Job detail screen -->
+    <string name="jobdetail_title">Job details</string>
+    <string name="job_not_found">Job not found.</string>
+    <string name="completed_n_times"> · completed %1$d time(s)</string>
+    <string name="priority_display">Priority: %1$s</string>
+    <string name="drawn_n_times">Drawn from the jar %1$d time(s)</string>
+    <string name="action_mark_as_done">Mark as done</string>
+    <string name="action_make_available_now">Make available now</string>
+    <string name="action_mark_as_not_done">Mark as not done</string>
+
+    <!-- Subtasks section (shared component) -->
+    <string name="subtasks_done_count">%1$d/%2$d done</string>
+    <string name="subtasks_empty_hint">Break this job into smaller pieces you can draw on their own.</string>
+
+    <!-- Stats screen -->
+    <string name="stats_screen_title">Stats</string>
+    <string name="stat_active_jobs">Active jobs</string>
+    <string name="stat_completed">Completed</string>
+    <string name="stat_time_invested">Time invested</string>
+    <string name="stats_by_category">By category</string>
+    <string name="stats_empty_hint">Complete a few jobs to see your stats here.</string>
+    <string name="stats_category_summary">%1$d done · %2$s</string>
 </resources>

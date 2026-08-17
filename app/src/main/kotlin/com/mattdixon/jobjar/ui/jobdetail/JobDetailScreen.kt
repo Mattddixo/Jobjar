@@ -33,7 +33,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import com.mattdixon.jobjar.R
 import com.mattdixon.jobjar.data.JobRepository
 import com.mattdixon.jobjar.data.isPending
 import com.mattdixon.jobjar.data.remainingMinutes
@@ -41,6 +42,7 @@ import com.mattdixon.jobjar.ui.components.CategoryBadge
 import com.mattdixon.jobjar.ui.components.InfoBadge
 import com.mattdixon.jobjar.ui.components.SubtasksSection
 import com.mattdixon.jobjar.ui.components.TimeBucketBadge
+import com.mattdixon.jobjar.ui.theme.Spacing
 import com.mattdixon.jobjar.util.formatDueStatus
 import com.mattdixon.jobjar.util.formatMinutes
 import com.mattdixon.jobjar.util.formatRecurrenceInterval
@@ -85,18 +87,18 @@ fun JobDetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Job details") },
+                title = { Text(stringResource(R.string.jobdetail_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.Filled.ArrowBack, contentDescription = stringResource(R.string.cd_back))
                     }
                 },
                 actions = {
                     IconButton(onClick = onEdit) {
-                        Icon(Icons.Filled.Edit, contentDescription = "Edit")
+                        Icon(Icons.Filled.Edit, contentDescription = stringResource(R.string.cd_edit))
                     }
                     IconButton(onClick = { showDeleteDialog = true }) {
-                        Icon(Icons.Filled.Delete, contentDescription = "Delete")
+                        Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.action_delete))
                     }
                 }
             )
@@ -107,9 +109,9 @@ fun JobDetailScreen(
                 modifier = Modifier
                     .padding(padding)
                     .fillMaxSize()
-                    .padding(24.dp)
+                    .padding(Spacing.xxxl)
             ) {
-                Text("Job not found.")
+                Text(stringResource(R.string.job_not_found))
             }
         } else {
             val incompleteSubtaskCount = subtasks.count { !it.isDone }
@@ -124,12 +126,12 @@ fun JobDetailScreen(
                     .padding(padding)
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                    .padding(Spacing.xxxl),
+                verticalArrangement = Arrangement.spacedBy(Spacing.xl)
             ) {
                 Text(currentJob.title, style = MaterialTheme.typography.headlineMedium)
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.md)) {
                     TimeBucketBadge(minutes = displayMinutes)
                     if (currentJob.category.isNotBlank()) CategoryBadge(category = currentJob.category)
                     currentJob.recurrenceDays?.let { InfoBadge(text = formatRecurrenceInterval(it)) }
@@ -137,7 +139,7 @@ fun JobDetailScreen(
 
                 if (subtasks.isNotEmpty()) {
                     Text(
-                        "${formatMinutes(displayMinutes)} left of ${formatMinutes(currentJob.estimatedMinutes)} total",
+                        stringResource(R.string.label_remaining_of_total, formatMinutes(displayMinutes), formatMinutes(currentJob.estimatedMinutes)),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -146,7 +148,11 @@ fun JobDetailScreen(
                 if (currentJob.recurrenceDays != null) {
                     Text(
                         formatDueStatus(currentJob.nextDueAt) +
-                            if (currentJob.completionCount > 0) " · completed ${currentJob.completionCount} time(s)" else "",
+                            if (currentJob.completionCount > 0) {
+                                stringResource(R.string.completed_n_times, currentJob.completionCount)
+                            } else {
+                                ""
+                            },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -154,7 +160,7 @@ fun JobDetailScreen(
 
                 parent?.let { parentJob ->
                     TextButton(onClick = { onOpenJob(parentJob.id) }) {
-                        Text("Part of: ${parentJob.title}")
+                        Text(stringResource(R.string.label_part_of, parentJob.title))
                     }
                 }
 
@@ -162,7 +168,7 @@ fun JobDetailScreen(
                 if (prerequisite != null && !prerequisite.isDone) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
                     ) {
                         Icon(
                             Icons.Filled.Lock,
@@ -170,14 +176,17 @@ fun JobDetailScreen(
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            "Waiting on: ${prerequisite.title}",
+                            stringResource(R.string.label_waiting_on, prerequisite.title),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
 
-                Text("Priority: ${currentJob.priority.displayName}", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    stringResource(R.string.priority_display, currentJob.priority.displayName),
+                    style = MaterialTheme.typography.bodyMedium
+                )
 
                 if (currentJob.notes.isNotBlank()) {
                     Text(currentJob.notes, style = MaterialTheme.typography.bodyLarge)
@@ -185,7 +194,7 @@ fun JobDetailScreen(
 
                 if (currentJob.timesDrawn > 0) {
                     Text(
-                        "Drawn from the jar ${currentJob.timesDrawn} time(s)",
+                        stringResource(R.string.drawn_n_times, currentJob.timesDrawn),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -202,11 +211,13 @@ fun JobDetailScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        when {
-                            currentJob.isPending() -> "Mark as done"
-                            currentJob.recurrenceDays != null -> "Make available now"
-                            else -> "Mark as not done"
-                        }
+                        stringResource(
+                            when {
+                                currentJob.isPending() -> R.string.action_mark_as_done
+                                currentJob.recurrenceDays != null -> R.string.action_make_available_now
+                                else -> R.string.action_mark_as_not_done
+                            }
+                        )
                     )
                 }
 
@@ -225,13 +236,13 @@ fun JobDetailScreen(
             if (showDeleteDialog) {
                 AlertDialog(
                     onDismissRequest = { showDeleteDialog = false },
-                    title = { Text("Delete job?") },
+                    title = { Text(stringResource(R.string.dialog_delete_job_title)) },
                     text = {
                         Text(
                             if (subtasks.isNotEmpty()) {
-                                "\"${currentJob.title}\" and its ${subtasks.size} subtask(s) will be removed permanently."
+                                stringResource(R.string.dialog_delete_job_with_subtasks, currentJob.title, subtasks.size)
                             } else {
-                                "\"${currentJob.title}\" will be removed permanently."
+                                stringResource(R.string.dialog_delete_job_plain, currentJob.title)
                             }
                         )
                     },
@@ -242,10 +253,10 @@ fun JobDetailScreen(
                                 showDeleteDialog = false
                                 onBack()
                             }
-                        }) { Text("Delete") }
+                        }) { Text(stringResource(R.string.action_delete)) }
                     },
                     dismissButton = {
-                        TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") }
+                        TextButton(onClick = { showDeleteDialog = false }) { Text(stringResource(R.string.action_cancel)) }
                     }
                 )
             }
@@ -253,18 +264,16 @@ fun JobDetailScreen(
             if (showForceCompleteDialog) {
                 AlertDialog(
                     onDismissRequest = { showForceCompleteDialog = false },
-                    title = { Text("Mark as done?") },
-                    text = {
-                        Text("$incompleteSubtaskCount subtask(s) are still open. They'll stay open, but this job will be marked done.")
-                    },
+                    title = { Text(stringResource(R.string.dialog_mark_as_done_title)) },
+                    text = { Text(stringResource(R.string.dialog_force_complete_body, incompleteSubtaskCount)) },
                     confirmButton = {
                         TextButton(onClick = {
                             scope.launch { repository.toggleDone(currentJob) }
                             showForceCompleteDialog = false
-                        }) { Text("Mark done") }
+                        }) { Text(stringResource(R.string.action_mark_done)) }
                     },
                     dismissButton = {
-                        TextButton(onClick = { showForceCompleteDialog = false }) { Text("Cancel") }
+                        TextButton(onClick = { showForceCompleteDialog = false }) { Text(stringResource(R.string.action_cancel)) }
                     }
                 )
             }

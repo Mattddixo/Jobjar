@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -59,6 +58,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -66,19 +66,18 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.mattdixon.jobjar.data.Job
+import com.mattdixon.jobjar.R
 import com.mattdixon.jobjar.data.JobRepository
 import com.mattdixon.jobjar.data.LONG_JOB_MINUTES
 import com.mattdixon.jobjar.ui.components.CategoryBadge
 import com.mattdixon.jobjar.ui.components.InfoBadge
 import com.mattdixon.jobjar.ui.components.TimeBucketBadge
+import com.mattdixon.jobjar.ui.theme.AppShapes
+import com.mattdixon.jobjar.ui.theme.Spacing
 import com.mattdixon.jobjar.util.formatMinutes
 import com.mattdixon.jobjar.util.formatRecurrenceInterval
 
 private val TIME_PRESETS = listOf(15, 30, 45, 60, 90, 120)
-
-/** Shared rounding for every surface on this screen so they read as one design language. */
-private val PanelShape = RoundedCornerShape(20.dp)
 
 /**
  * Jobs pending at or above this count show the jar as visually full - a soft cap for the fill
@@ -102,10 +101,10 @@ fun DrawScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("The Job Jar") },
+                title = { Text(stringResource(R.string.draw_screen_title)) },
                 actions = {
                     TextButton(onClick = onToggleTheme) {
-                        Text(if (darkTheme) "Light" else "Dark")
+                        Text(stringResource(if (darkTheme) R.string.theme_toggle_light else R.string.theme_toggle_dark))
                     }
                 }
             )
@@ -124,8 +123,8 @@ fun DrawScreen(
                 // weight()ed child inside it isn't just visually cramped, it's not a supported
                 // combination in the first place.
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(horizontal = Spacing.xl, vertical = Spacing.lg),
+            verticalArrangement = Arrangement.spacedBy(Spacing.lg)
         ) {
             JarHero(pendingCount = state.pendingCount)
 
@@ -140,14 +139,14 @@ fun DrawScreen(
             Button(
                 onClick = { viewModel.draw() },
                 enabled = !state.isDrawing,
-                shape = RoundedCornerShape(16.dp),
+                shape = AppShapes.action,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp)
             ) {
                 Icon(Icons.Filled.Shuffle, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Draw a job", style = MaterialTheme.typography.titleSmall)
+                Spacer(modifier = Modifier.width(Spacing.md))
+                Text(stringResource(R.string.draw_button), style = MaterialTheme.typography.titleSmall)
             }
 
             // Keyed on "is there anything drawn" rather than the drawn-jobs list itself, so a
@@ -182,12 +181,12 @@ fun DrawScreen(
                     )
                     state.noMatchFound -> EmptyStateText(
                         if (state.longJobsOnly) {
-                            "Nothing needs ${formatMinutes(LONG_JOB_MINUTES)}+ yet. Try a shorter time, or add a bigger job."
+                            stringResource(R.string.draw_no_match_long, formatMinutes(LONG_JOB_MINUTES))
                         } else {
-                            "No jobs fit that time and category. Try a longer time or add more jobs."
+                            stringResource(R.string.draw_no_match_short)
                         }
                     )
-                    else -> EmptyStateText("Set your time and tap \"Draw a job\" to pick something from the jar.")
+                    else -> EmptyStateText(stringResource(R.string.draw_empty_prompt))
                 }
             }
         }
@@ -198,18 +197,16 @@ fun DrawScreen(
         val incompleteCount = (entry?.context?.subtaskTotal ?: 0) - (entry?.context?.subtaskDone ?: 0)
         AlertDialog(
             onDismissRequest = { forceCompleteJobId = null },
-            title = { Text("Mark as done?") },
-            text = {
-                Text("$incompleteCount subtask(s) are still open. They'll stay open, but this job will be marked done.")
-            },
+            title = { Text(stringResource(R.string.dialog_mark_as_done_title)) },
+            text = { Text(stringResource(R.string.dialog_force_complete_body, incompleteCount)) },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.completeJob(jobId)
                     forceCompleteJobId = null
-                }) { Text("Mark done") }
+                }) { Text(stringResource(R.string.action_mark_done)) }
             },
             dismissButton = {
-                TextButton(onClick = { forceCompleteJobId = null }) { Text("Cancel") }
+                TextButton(onClick = { forceCompleteJobId = null }) { Text(stringResource(R.string.action_cancel)) }
             }
         )
     }
@@ -231,9 +228,9 @@ private fun JarHero(pendingCount: Int, modifier: Modifier = Modifier) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         JarGlyph(fraction = fraction, modifier = Modifier.size(width = 52.dp, height = 70.dp))
-        Spacer(modifier = Modifier.width(12.dp))
+        Spacer(modifier = Modifier.width(Spacing.lg))
         Text(
-            "$pendingCount in the jar",
+            stringResource(R.string.draw_jar_count, pendingCount),
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.SemiBold
         )
@@ -318,28 +315,29 @@ private fun PickerPanel(
     var timeMenuExpanded by remember { mutableStateOf(false) }
     var batchMenuExpanded by remember { mutableStateOf(false) }
     var categoryMenuExpanded by remember { mutableStateOf(false) }
+    val longJobLabel = stringResource(R.string.long_job_chip_label)
 
     Card(
-        shape = PanelShape,
+        shape = AppShapes.panel,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.padding(Spacing.xl),
+            verticalArrangement = Arrangement.spacedBy(Spacing.md)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                SectionLabel("TIME AVAILABLE")
+                SectionLabel(stringResource(R.string.draw_section_time_available))
                 Box {
                     FilterChip(
                         selected = true,
                         onClick = { timeMenuExpanded = true },
                         label = {
-                            Text(if (state.longJobsOnly) "4+ hrs" else formatMinutes(state.availableMinutes))
+                            Text(if (state.longJobsOnly) longJobLabel else formatMinutes(state.availableMinutes))
                         },
                         trailingIcon = {
                             Icon(Icons.Filled.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -359,7 +357,7 @@ private fun PickerPanel(
                         // from "fits this time" to "needs 4+ hours" and ignores the slider
                         // entirely, but it's still just one more value this control can be set to.
                         DropdownMenuItem(
-                            text = { Text("4+ hrs") },
+                            text = { Text(longJobLabel) },
                             onClick = {
                                 onLongJobsOnly()
                                 timeMenuExpanded = false
@@ -398,7 +396,7 @@ private fun PickerPanel(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    SectionLabel("HOW MANY")
+                    SectionLabel(stringResource(R.string.draw_section_how_many))
                     Box {
                         FilterChip(
                             selected = state.batchSize != DrawBatchSize.ONE,
@@ -424,25 +422,25 @@ private fun PickerPanel(
             }
 
             if (state.categories.isNotEmpty()) {
-                HorizontalDivider(color = dividerColor, modifier = Modifier.padding(vertical = 2.dp))
+                HorizontalDivider(color = dividerColor, modifier = Modifier.padding(vertical = Spacing.xxs))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    SectionLabel("CATEGORY")
+                    SectionLabel(stringResource(R.string.draw_section_category))
                     Box {
                         FilterChip(
                             selected = state.selectedCategory != null,
                             onClick = { categoryMenuExpanded = true },
-                            label = { Text(state.selectedCategory ?: "Any") },
+                            label = { Text(state.selectedCategory ?: stringResource(R.string.draw_category_any)) },
                             trailingIcon = {
                                 Icon(Icons.Filled.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp))
                             }
                         )
                         DropdownMenu(expanded = categoryMenuExpanded, onDismissRequest = { categoryMenuExpanded = false }) {
                             DropdownMenuItem(
-                                text = { Text("Any") },
+                                text = { Text(stringResource(R.string.draw_category_any)) },
                                 onClick = {
                                     onCategorySelect(null)
                                     categoryMenuExpanded = false
@@ -484,7 +482,7 @@ private fun EmptyStateText(text: String) {
         textAlign = TextAlign.Center,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 16.dp)
+            .padding(vertical = Spacing.xl)
     )
 }
 
@@ -508,10 +506,15 @@ private fun DrawnJobsBatch(
     onDone: (Long) -> Unit,
     onSkipAll: () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
         if (showBudgetSummary) {
             Text(
-                "${entries.size} job(s) · ${formatMinutes(remainingMinutes)} left of ${formatMinutes(availableMinutes)}",
+                stringResource(
+                    R.string.draw_budget_summary,
+                    entries.size,
+                    formatMinutes(remainingMinutes),
+                    formatMinutes(availableMinutes)
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -529,19 +532,15 @@ private fun DrawnJobsBatch(
         OutlinedButton(
             onClick = onSkipAll,
             enabled = !isBusy,
-            shape = RoundedCornerShape(10.dp),
+            shape = AppShapes.control,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(36.dp)
         ) {
-            Text("Skip all", style = MaterialTheme.typography.labelMedium)
+            Text(stringResource(R.string.draw_skip_all), style = MaterialTheme.typography.labelMedium)
         }
     }
 }
-
-/** Tighter rounding than [PanelShape] - drawn-job cards are meant to read as compact result
- * chips you skim through quickly, not another full-size panel like the picker above them. */
-private val BatchCardShape = RoundedCornerShape(14.dp)
 
 /**
  * A drawn job gets the app's one reserved accent (tertiary) - every other surface on this
@@ -563,7 +562,7 @@ private fun BatchJobCard(
 
     Card(
         onClick = onOpen,
-        shape = BatchCardShape,
+        shape = AppShapes.card,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.tertiaryContainer,
             contentColor = MaterialTheme.colorScheme.onTertiaryContainer
@@ -571,8 +570,8 @@ private fun BatchJobCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(5.dp)
+            modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.md),
+            verticalArrangement = Arrangement.spacedBy(Spacing.xs)
         ) {
             Text(
                 job.title,
@@ -581,14 +580,14 @@ private fun BatchJobCard(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
                 TimeBucketBadge(minutes = context?.remainingMinutes ?: job.estimatedMinutes, compact = true)
                 if (job.category.isNotBlank()) CategoryBadge(category = job.category, compact = true)
                 job.recurrenceDays?.let { InfoBadge(text = formatRecurrenceInterval(it), compact = true) }
             }
             if (context?.parentTitle != null) {
                 Text(
-                    "Part of: ${context.parentTitle}",
+                    stringResource(R.string.label_part_of, context.parentTitle),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onTertiaryContainer,
                     maxLines = 1,
@@ -597,7 +596,12 @@ private fun BatchJobCard(
             }
             if (context != null && context.subtaskTotal > 0) {
                 Text(
-                    "${context.subtaskDone}/${context.subtaskTotal} subtasks done · ${formatMinutes(context.remainingMinutes ?: job.estimatedMinutes)} left",
+                    stringResource(
+                        R.string.draw_subtasks_progress,
+                        context.subtaskDone,
+                        context.subtaskTotal,
+                        formatMinutes(context.remainingMinutes ?: job.estimatedMinutes)
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onTertiaryContainer,
                     maxLines = 1,
@@ -607,7 +611,7 @@ private fun BatchJobCard(
             Button(
                 onClick = onDone,
                 enabled = !isBusy,
-                shape = RoundedCornerShape(10.dp),
+                shape = AppShapes.control,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.tertiary,
                     contentColor = MaterialTheme.colorScheme.onTertiary
@@ -616,9 +620,8 @@ private fun BatchJobCard(
                     .fillMaxWidth()
                     .height(34.dp)
             ) {
-                Text("Mark done", style = MaterialTheme.typography.labelMedium)
+                Text(stringResource(R.string.action_mark_done), style = MaterialTheme.typography.labelMedium)
             }
         }
     }
 }
-

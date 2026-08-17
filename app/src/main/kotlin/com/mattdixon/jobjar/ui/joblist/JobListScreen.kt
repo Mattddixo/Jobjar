@@ -59,17 +59,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.mattdixon.jobjar.R
 import com.mattdixon.jobjar.data.JobRepository
 import com.mattdixon.jobjar.data.isPending
 import com.mattdixon.jobjar.ui.components.CategoryBadge
 import com.mattdixon.jobjar.ui.components.InfoBadge
 import com.mattdixon.jobjar.ui.components.TimeBucketBadge
+import com.mattdixon.jobjar.ui.theme.Spacing
 
 /** Consistent horizontal inset for every row on this screen. */
-private val ScreenHPadding = 16.dp
+private val ScreenHPadding = Spacing.xl
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -101,14 +104,14 @@ fun JobListScreen(
                 )
             } else {
                 TopAppBar(
-                    title = { Text("Jobs") },
+                    title = { Text(stringResource(R.string.jobs_screen_title)) },
                     actions = {
                         IconButton(onClick = { searchActive = true }) {
-                            Icon(Icons.Filled.Search, contentDescription = "Search jobs")
+                            Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.cd_search_jobs))
                         }
                         Box {
                             IconButton(onClick = { sortMenuExpanded = true }) {
-                                Icon(Icons.Filled.Sort, contentDescription = "Sort")
+                                Icon(Icons.Filled.Sort, contentDescription = stringResource(R.string.cd_sort))
                             }
                             DropdownMenu(expanded = sortMenuExpanded, onDismissRequest = { sortMenuExpanded = false }) {
                                 SortOrder.entries.forEach { order ->
@@ -123,7 +126,7 @@ fun JobListScreen(
                             }
                         }
                         TextButton(onClick = onToggleTheme) {
-                            Text(if (darkTheme) "Light" else "Dark")
+                            Text(stringResource(if (darkTheme) R.string.theme_toggle_light else R.string.theme_toggle_dark))
                         }
                     }
                 )
@@ -131,7 +134,7 @@ fun JobListScreen(
         },
         floatingActionButton = {
             FloatingActionButton(onClick = onAddJob) {
-                Icon(Icons.Filled.Add, contentDescription = "Add job")
+                Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.cd_add_job))
             }
         }
     ) { padding ->
@@ -143,20 +146,20 @@ fun JobListScreen(
             SingleChoiceSegmentedButtonRow(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = ScreenHPadding, vertical = 12.dp)
+                    .padding(horizontal = ScreenHPadding, vertical = Spacing.lg)
             ) {
                 SegmentedButton(
                     selected = !state.showCompleted,
                     onClick = { viewModel.setShowCompleted(false) },
                     enabled = !state.showRepeatingOnly,
                     shape = SegmentedButtonDefaults.itemShape(0, 2)
-                ) { Text("Active") }
+                ) { Text(stringResource(R.string.filter_active)) }
                 SegmentedButton(
                     selected = state.showCompleted,
                     onClick = { viewModel.setShowCompleted(true) },
                     enabled = !state.showRepeatingOnly,
                     shape = SegmentedButtonDefaults.itemShape(1, 2)
-                ) { Text("Completed") }
+                ) { Text(stringResource(R.string.filter_completed)) }
             }
 
             // Every filter - current and future - lives in this one horizontally-scrollable
@@ -167,14 +170,14 @@ fun JobListScreen(
             LazyRow(
                 modifier = Modifier.fillMaxWidth(),
                 contentPadding = PaddingValues(horizontal = ScreenHPadding),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(Spacing.md)
             ) {
                 item {
                     FilterChip(
                         selected = state.showRepeatingOnly,
                         onClick = { viewModel.setShowRepeatingOnly(!state.showRepeatingOnly) },
                         leadingIcon = { Icon(Icons.Filled.Repeat, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                        label = { Text("Repeating") }
+                        label = { Text(stringResource(R.string.filter_repeating)) }
                     )
                 }
                 if (state.categories.isNotEmpty()) {
@@ -209,7 +212,7 @@ fun JobListScreen(
                     item {
                         AssistChip(
                             onClick = { viewModel.clearFilters() },
-                            label = { Text("Clear") },
+                            label = { Text(stringResource(R.string.filter_clear)) },
                             leadingIcon = {
                                 Icon(Icons.Filled.Close, contentDescription = null, modifier = Modifier.size(16.dp))
                             },
@@ -226,7 +229,7 @@ fun JobListScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 32.dp, vertical = 16.dp)
+                        .padding(horizontal = Spacing.xxxl + Spacing.xs, vertical = Spacing.xl)
                 ) {
                     Text(
                         text = emptyStateText(state),
@@ -235,8 +238,8 @@ fun JobListScreen(
                 }
             } else {
                 LazyColumn(
-                    contentPadding = PaddingValues(horizontal = ScreenHPadding, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    contentPadding = PaddingValues(horizontal = ScreenHPadding, vertical = Spacing.lg),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.md)
                 ) {
                     items(state.items, key = { it.job.id }) { item ->
                         JobRow(
@@ -261,13 +264,13 @@ fun JobListScreen(
     itemPendingDelete?.let { item ->
         AlertDialog(
             onDismissRequest = { itemPendingDelete = null },
-            title = { Text("Delete job?") },
+            title = { Text(stringResource(R.string.dialog_delete_job_title)) },
             text = {
                 Text(
                     if (item.subtaskTotal > 0) {
-                        "\"${item.job.title}\" and its ${item.subtaskTotal} subtask(s) will be removed permanently."
+                        stringResource(R.string.dialog_delete_job_with_subtasks, item.job.title, item.subtaskTotal)
                     } else {
-                        "\"${item.job.title}\" will be removed permanently."
+                        stringResource(R.string.dialog_delete_job_plain, item.job.title)
                     }
                 )
             },
@@ -275,10 +278,10 @@ fun JobListScreen(
                 TextButton(onClick = {
                     viewModel.deleteJob(item.job)
                     itemPendingDelete = null
-                }) { Text("Delete") }
+                }) { Text(stringResource(R.string.action_delete)) }
             },
             dismissButton = {
-                TextButton(onClick = { itemPendingDelete = null }) { Text("Cancel") }
+                TextButton(onClick = { itemPendingDelete = null }) { Text(stringResource(R.string.action_cancel)) }
             }
         )
     }
@@ -287,34 +290,34 @@ fun JobListScreen(
         val incompleteCount = item.subtaskTotal - item.subtaskDone
         AlertDialog(
             onDismissRequest = { itemPendingForceComplete = null },
-            title = { Text("Mark as done?") },
-            text = {
-                Text("$incompleteCount subtask(s) are still open. They'll stay open, but this job will be marked done.")
-            },
+            title = { Text(stringResource(R.string.dialog_mark_as_done_title)) },
+            text = { Text(stringResource(R.string.dialog_force_complete_body, incompleteCount)) },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.toggleDone(item.job)
                     itemPendingForceComplete = null
-                }) { Text("Mark done") }
+                }) { Text(stringResource(R.string.action_mark_done)) }
             },
             dismissButton = {
-                TextButton(onClick = { itemPendingForceComplete = null }) { Text("Cancel") }
+                TextButton(onClick = { itemPendingForceComplete = null }) { Text(stringResource(R.string.action_cancel)) }
             }
         )
     }
 }
 
+@Composable
 private fun categoryChipLabel(selected: Set<String>): String = when (selected.size) {
-    0 -> "Category"
+    0 -> stringResource(R.string.filter_category_default)
     1 -> selected.first()
     else -> "${selected.first()} +${selected.size - 1}"
 }
 
+@Composable
 private fun emptyStateText(state: JobListUiState): String = when {
-    state.searchQuery.isNotBlank() -> "No jobs match \"${state.searchQuery}\"."
-    state.hasActiveFilters -> "No jobs match these filters."
-    state.showCompleted -> "No completed jobs yet."
-    else -> "No jobs yet. Tap + to add one."
+    state.searchQuery.isNotBlank() -> stringResource(R.string.empty_no_search_match, state.searchQuery)
+    state.hasActiveFilters -> stringResource(R.string.empty_no_filter_match)
+    state.showCompleted -> stringResource(R.string.empty_no_completed)
+    else -> stringResource(R.string.empty_no_jobs)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -340,7 +343,7 @@ private fun SearchTopBar(
                 modifier = Modifier
                     .fillMaxWidth()
                     .focusRequester(focusRequester),
-                placeholder = { Text("Search jobs") },
+                placeholder = { Text(stringResource(R.string.cd_search_jobs)) },
                 singleLine = true,
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = MaterialTheme.colorScheme.surface,
@@ -351,7 +354,7 @@ private fun SearchTopBar(
                 trailingIcon = {
                     if (query.isNotEmpty()) {
                         IconButton(onClick = { onQueryChange("") }) {
-                            Icon(Icons.Filled.Close, contentDescription = "Clear search")
+                            Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.cd_clear_search))
                         }
                     }
                 }
@@ -359,7 +362,7 @@ private fun SearchTopBar(
         },
         navigationIcon = {
             IconButton(onClick = onClose) {
-                Icon(Icons.Filled.ArrowBack, contentDescription = "Close search")
+                Icon(Icons.Filled.ArrowBack, contentDescription = stringResource(R.string.cd_close_search))
             }
         }
     )
@@ -379,31 +382,31 @@ private fun JobRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(Spacing.lg),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(Spacing.lg)
         ) {
             IconButton(onClick = onToggleDone) {
                 Icon(
                     imageVector = if (!job.isPending()) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
-                    contentDescription = if (!job.isPending()) "Mark not done" else "Mark done"
+                    contentDescription = stringResource(if (!job.isPending()) R.string.cd_mark_not_done else R.string.cd_mark_done)
                 )
             }
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .padding(vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                    .padding(vertical = Spacing.xs),
+                verticalArrangement = Arrangement.spacedBy(Spacing.xs)
             ) {
                 Text(
                     text = job.title,
                     style = MaterialTheme.typography.titleMedium,
                     textDecoration = if (!job.isPending()) TextDecoration.LineThrough else null
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                     TimeBucketBadge(minutes = item.displayMinutes)
                     if (job.category.isNotBlank()) CategoryBadge(category = job.category)
-                    if (item.subtaskTotal > 0) InfoBadge(text = "${item.subtaskDone}/${item.subtaskTotal} done")
+                    if (item.subtaskTotal > 0) InfoBadge(text = stringResource(R.string.subtasks_done_count, item.subtaskDone, item.subtaskTotal))
                     if (item.recurrenceLabel != null) InfoBadge(text = item.recurrenceLabel)
                 }
                 if (item.dueStatus != null) {
@@ -416,16 +419,16 @@ private fun JobRow(
             }
             Box {
                 IconButton(onClick = { menuExpanded = true }) {
-                    Icon(Icons.Filled.MoreVert, contentDescription = "More options")
+                    Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.cd_more_options))
                 }
                 DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
                     DropdownMenuItem(
-                        text = { Text("Open") },
+                        text = { Text(stringResource(R.string.menu_open)) },
                         leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) },
                         onClick = { menuExpanded = false; onClick() }
                     )
                     DropdownMenuItem(
-                        text = { Text("Delete") },
+                        text = { Text(stringResource(R.string.action_delete)) },
                         leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null) },
                         onClick = { menuExpanded = false; onDeleteRequest() }
                     )

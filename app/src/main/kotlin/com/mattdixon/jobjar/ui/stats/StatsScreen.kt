@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
@@ -23,9 +22,13 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.mattdixon.jobjar.R
 import com.mattdixon.jobjar.data.JobRepository
+import com.mattdixon.jobjar.ui.theme.AppShapes
+import com.mattdixon.jobjar.ui.theme.Spacing
 import com.mattdixon.jobjar.util.formatMinutes
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -41,10 +44,10 @@ fun StatsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Stats") },
+                title = { Text(stringResource(R.string.stats_screen_title)) },
                 actions = {
                     TextButton(onClick = onToggleTheme) {
-                        Text(if (darkTheme) "Light" else "Dark")
+                        Text(stringResource(if (darkTheme) R.string.theme_toggle_light else R.string.theme_toggle_dark))
                     }
                 }
             )
@@ -54,24 +57,32 @@ fun StatsScreen(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(Spacing.xl),
+            verticalArrangement = Arrangement.spacedBy(Spacing.xl)
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatCard(label = "Active jobs", value = state.activeCount.toString(), modifier = Modifier.weight(1f))
-                StatCard(label = "Completed", value = state.completedCount.toString(), modifier = Modifier.weight(1f))
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.lg)) {
                 StatCard(
-                    label = "Time invested",
+                    label = stringResource(R.string.stat_active_jobs),
+                    value = state.activeCount.toString(),
+                    modifier = Modifier.weight(1f)
+                )
+                StatCard(
+                    label = stringResource(R.string.stat_completed),
+                    value = state.completedCount.toString(),
+                    modifier = Modifier.weight(1f)
+                )
+                StatCard(
+                    label = stringResource(R.string.stat_time_invested),
                     value = formatMinutes(state.totalMinutesCompleted),
                     modifier = Modifier.weight(1f)
                 )
             }
 
-            Text("By category", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.stats_by_category), style = MaterialTheme.typography.titleMedium)
 
             if (state.categoryStats.isEmpty()) {
                 Text(
-                    "Complete a few jobs to see your stats here.",
+                    stringResource(R.string.stats_empty_hint),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -79,14 +90,14 @@ fun StatsScreen(
                 // Sorted descending by totalMinutes already, so the first entry is the max -
                 // used to scale each bar relative to your biggest time sink.
                 val maxMinutes = state.categoryStats.first().totalMinutes.coerceAtLeast(1)
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
                     items(state.categoryStats, key = { it.category }) { stat ->
                         Card(modifier = Modifier.fillMaxWidth()) {
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    .padding(Spacing.xl),
+                                verticalArrangement = Arrangement.spacedBy(Spacing.md)
                             ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -94,7 +105,7 @@ fun StatsScreen(
                                 ) {
                                     Text(stat.category, style = MaterialTheme.typography.bodyLarge)
                                     Text(
-                                        "${stat.completedCount} done · ${formatMinutes(stat.totalMinutes)}",
+                                        stringResource(R.string.stats_category_summary, stat.completedCount, formatMinutes(stat.totalMinutes)),
                                         style = MaterialTheme.typography.bodyMedium
                                     )
                                 }
@@ -103,7 +114,7 @@ fun StatsScreen(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(6.dp)
-                                        .clip(RoundedCornerShape(3.dp))
+                                        .clip(AppShapes.hairline)
                                 )
                             }
                         }
@@ -118,8 +129,8 @@ fun StatsScreen(
 private fun StatCard(label: String, value: String, modifier: Modifier = Modifier) {
     Card(modifier = modifier) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            modifier = Modifier.padding(Spacing.xl),
+            verticalArrangement = Arrangement.spacedBy(Spacing.xs)
         ) {
             Text(value, style = MaterialTheme.typography.titleLarge)
             Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
