@@ -42,9 +42,21 @@ interface JobDao {
     @Query("UPDATE jobs SET timesDrawn = timesDrawn + 1 WHERE id = :id")
     suspend fun incrementDrawCount(id: Long)
 
-    @Query("UPDATE jobs SET isDone = 1, completedAt = :completedAt WHERE id = :id")
+    // isInProgress is cleared here too - a job can't be done and in-progress at once, and this
+    // is the one query every "mark done" path (including auto-complete-parent) routes through.
+    @Query("UPDATE jobs SET isDone = 1, isInProgress = 0, completedAt = :completedAt WHERE id = :id")
     suspend fun markDone(id: Long, completedAt: Long)
 
     @Query("UPDATE jobs SET isDone = 0, completedAt = NULL WHERE id = :id")
     suspend fun markNotDone(id: Long)
+
+    @Query("UPDATE jobs SET isInProgress = 1 WHERE id = :id")
+    suspend fun markInProgress(id: Long)
+
+    @Query("UPDATE jobs SET isInProgress = 0 WHERE id = :id")
+    suspend fun markNotInProgress(id: Long)
+
+    /** Full reset for a repeating job's fresh cycle: not done, not in progress, no completion timestamp. */
+    @Query("UPDATE jobs SET isDone = 0, completedAt = NULL, isInProgress = 0 WHERE id = :id")
+    suspend fun resetForNewCycle(id: Long)
 }

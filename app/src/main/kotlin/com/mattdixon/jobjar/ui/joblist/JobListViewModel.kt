@@ -43,17 +43,26 @@ data class JobListUiState(
     /** Empty = no category narrowing (all categories included). */
     val selectedCategories: Set<String> = emptySet(),
     val showRepeatingOnly: Boolean = false,
+    val showInProgressOnly: Boolean = false,
     val sortOrder: SortOrder = SortOrder.NEWEST,
     val searchQuery: String = ""
 ) {
     /** Whether any *narrowing* filter (as opposed to the Active/Completed view or sort) is on - drives the "Clear" chip. */
-    val hasActiveFilters: Boolean get() = selectedCategories.isNotEmpty() || showRepeatingOnly
+    val hasActiveFilters: Boolean get() = selectedCategories.isNotEmpty() || showRepeatingOnly || showInProgressOnly
 }
+
+private data class ToggleFilters(
+    val showCompleted: Boolean,
+    val categories: Set<String>,
+    val repeatingOnly: Boolean,
+    val inProgressOnly: Boolean
+)
 
 private data class ListFilters(
     val showCompleted: Boolean,
     val categories: Set<String>,
     val repeatingOnly: Boolean,
+    val inProgressOnly: Boolean,
     val sort: SortOrder,
     val searchQuery: String
 )
@@ -63,17 +72,32 @@ class JobListViewModel(private val repository: JobRepository) : ViewModel() {
     private val showCompleted = MutableStateFlow(false)
     private val selectedCategories = MutableStateFlow<Set<String>>(emptySet())
     private val showRepeatingOnly = MutableStateFlow(false)
+    private val showInProgressOnly = MutableStateFlow(false)
     private val sortOrder = MutableStateFlow(SortOrder.NEWEST)
     private val searchQuery = MutableStateFlow("")
 
-    private val filters = combine(
+    // kotlinx.coroutines' typed combine() overloads only go up to 5 flows, and a vararg
+    // combine() would require every flow to share one type - not possible here with a mix of
+    // Boolean/Set<String>/SortOrder/String. Combining the four toggle-style filters first, then
+    // combining that with sort and search, keeps everything typed without that limitation.
+    private val toggleFilters = combine(
         showCompleted,
         selectedCategories,
         showRepeatingOnly,
-        sortOrder,
-        searchQuery
-    ) { showDone, categories, repeatingOnly, sort, query ->
-        ListFilters(showDone, categories, repeatingOnly, sort, query)
+        showInProgressOnly
+    ) { showDone, categories, repeatingOnly, inProgressOnly ->
+        ToggleFilters(showDone, categories, repeatingOnly, inProgressOnly)
+    }
+
+    private val filters = combine(toggleFilters, sortOrder, searchQuery) { toggles, sort, query ->
+        ListFilters(
+            showCompleted = toggles.showCompleted,
+            categories = toggles.categories,
+            repeatingOnly = toggles.repeatingOnly,
+            inProgressOnly = toggles.inProgressOnly,
+            sort = sort,
+            searchQuery = query
+        )
     }
 
     val uiState: StateFlow<JobListUiState> = combine(
@@ -106,6 +130,7 @@ class JobListViewModel(private val repository: JobRepository) : ViewModel() {
         val filtered = items
             .filter { currentFilters.categories.isEmpty() || it.job.category in currentFilters.categories }
             .filter { !currentFilters.repeatingOnly || it.job.recurrenceDays != null }
+            .filter { !currentFilters.inProgressOnly || it.job.isInProgress }
             .filter { currentFilters.repeatingOnly || it.job.isPending() != currentFilters.showCompleted }
             .filter {
                 query.isBlank() ||
@@ -127,6 +152,7 @@ class JobListViewModel(private val repository: JobRepository) : ViewModel() {
             showCompleted = currentFilters.showCompleted,
             selectedCategories = currentFilters.categories,
             showRepeatingOnly = currentFilters.repeatingOnly,
+            showInProgressOnly = currentFilters.inProgressOnly,
             sortOrder = currentFilters.sort,
             searchQuery = currentFilters.searchQuery
         )
@@ -141,17 +167,24 @@ class JobListViewModel(private val repository: JobRepository) : ViewModel() {
     }
 
     fun setShowRepeatingOnly(value: Boolean) { showRepeatingOnly.value = value }
+    fun setShowInProgressOnly(value: Boolean) { showInProgressOnly.value = value }
     fun setSortOrder(value: SortOrder) { sortOrder.value = value }
     fun setSearchQuery(value: String) { searchQuery.value = value }
 
-    /** Resets every *narrowing* filter (category, repeating) - deliberately leaves Active/Completed and sort alone, since those aren't "filters" in the same sense. */
+    /** Resets every *narrowing* filter (category, repeating, in progress) - deliberately leaves Active/Completed and sort alone, since those aren't "filters" in the same sense. */
     fun clearFilters() {
         selectedCategories.value = emptySet()
         showRepeatingOnly.value = false
+        showInProgressOnly.value = false
     }
 
     fun toggleDone(job: Job) {
         viewModelScope.launch { repository.toggleDone(job) }
+    }
+
+    /** Starts or reverts a job's in-progress flag - the same toggle backs both the "Start" and "Move back to jar" row menu items, since only one is ever shown for a given job at a time. */
+    fun toggleInProgress(job: Job) {
+        viewModelScope.launch { repository.toggleInProgress(job) }
     }
 
     fun deleteJob(job: Job) {

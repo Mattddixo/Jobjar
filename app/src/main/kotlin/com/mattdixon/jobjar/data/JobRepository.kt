@@ -94,7 +94,8 @@ class JobRepository(private val dao: JobDao) {
      * [Job.completedAt] as this moment, and schedules [Job.nextDueAt] this many days out from
      * now (not from any fixed calendar date - completing late just shifts the next one later
      * too). isDone is left false throughout, since the job isn't "finished," it's cycling.
-     * Its own subtasks (if any) reset to not-done for the fresh cycle.
+     * isInProgress is cleared too - the fresh cycle hasn't been started yet, regardless of
+     * whether this occurrence was. Its own subtasks (if any) get the same fresh-cycle reset.
      */
     private suspend fun cycleRepeatingJob(job: Job) {
         val now = System.currentTimeMillis()
@@ -102,12 +103,13 @@ class JobRepository(private val dao: JobDao) {
             job.copy(
                 completedAt = now,
                 nextDueAt = now + job.recurrenceDays!! * DAY_MILLIS,
-                completionCount = job.completionCount + 1
+                completionCount = job.completionCount + 1,
+                isInProgress = false
             )
         )
         dao.getSubtasksSnapshot(job.id)
-            .filter { it.isDone }
-            .forEach { dao.markNotDone(it.id) }
+            .filter { it.isDone || it.isInProgress }
+            .forEach { dao.resetForNewCycle(it.id) }
     }
 
     private suspend fun autoCompleteParentIfFinished(parentId: Long) {
@@ -136,17 +138,33 @@ class JobRepository(private val dao: JobDao) {
     }
 
     /**
+     * Flips a job's in-progress flag. Starting (false -> true) doesn't touch [Job.isDone] - a
+     * job you're actively working on obviously isn't done yet - and is the only place that sets
+     * it true. Reverting (true -> false) just puts it back in the jar's draw pool, same as
+     * pausing; nothing else about the job changes.
+     */
+    suspend fun toggleInProgress(job: Job) {
+        if (job.isInProgress) {
+            dao.markNotInProgress(job.id)
+        } else {
+            dao.markInProgress(job.id)
+        }
+    }
+
+    /**
      * Draws one random eligible job matching (optionally) [category]. By default this matches
      * jobs that *fit* [maxMinutes] (a ceiling - "what can I do with the time I have"). Pass
      * [longOnly] = true to flip that to a floor instead - only jobs needing [LONG_JOB_MINUTES]
      * or more are eligible, ignoring [maxMinutes] entirely, for when you deliberately want to
      * pull a big project rather than something that merely fits.
      *
-     * Eligibility is [Job.isPending], not just "not done": a repeating job that isn't due yet
-     * is excluded even though it's technically not marked done, so the jar doesn't hand you a
-     * chore ahead of its schedule. A subtask that's [Job.isUnblocked] = false (waiting on a
-     * linked sibling subtask) is excluded here too - that's the only place the link matters,
-     * since it's still fully completable by hand at any time.
+     * Eligibility is [Job.isAvailableToDraw], not just "not done": a repeating job that isn't
+     * due yet is excluded even though it's technically not marked done, so the jar doesn't hand
+     * you a chore ahead of its schedule; a job that's already [Job.isInProgress] is excluded too,
+     * so drawing again can't hand you something you're already working on. A subtask that's
+     * [Job.isUnblocked] = false (waiting on a linked sibling subtask) is excluded here too -
+     * that's the only place the link matters, since it's still fully completable by hand at any
+     * time.
      *
      * A top-level job with subtasks is matched by its *remaining* minutes (its own estimate
      * minus what completed subtasks already accounted for), so it becomes eligible for shorter
@@ -163,7 +181,7 @@ class JobRepository(private val dao: JobDao) {
         val subtasksById = subtasksByParent.values.flatten().associateBy { it.id }
 
         val candidates = all.filter { job ->
-            job.isPending() &&
+            job.isAvailableToDraw() &&
                 job.id !in excludeIds &&
                 (category == null || job.category == category) &&
                 (job.parentId == null || job.isUnblocked(subtasksById)) &&

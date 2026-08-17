@@ -21,10 +21,12 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sort
+import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
@@ -180,6 +182,14 @@ fun JobListScreen(
                         label = { Text(stringResource(R.string.filter_repeating)) }
                     )
                 }
+                item {
+                    FilterChip(
+                        selected = state.showInProgressOnly,
+                        onClick = { viewModel.setShowInProgressOnly(!state.showInProgressOnly) },
+                        leadingIcon = { Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                        label = { Text(stringResource(R.string.filter_in_progress)) }
+                    )
+                }
                 if (state.categories.isNotEmpty()) {
                     item {
                         Box {
@@ -253,6 +263,7 @@ fun JobListScreen(
                                     viewModel.toggleDone(item.job)
                                 }
                             },
+                            onToggleInProgress = { viewModel.toggleInProgress(item.job) },
                             onDeleteRequest = { itemPendingDelete = item }
                         )
                     }
@@ -373,6 +384,7 @@ private fun JobRow(
     item: JobListItem,
     onClick: () -> Unit,
     onToggleDone: () -> Unit,
+    onToggleInProgress: () -> Unit,
     onDeleteRequest: () -> Unit
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -404,6 +416,7 @@ private fun JobRow(
                     textDecoration = if (!job.isPending()) TextDecoration.LineThrough else null
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                    if (job.isInProgress) InfoBadge(text = stringResource(R.string.badge_in_progress))
                     TimeBucketBadge(minutes = item.displayMinutes)
                     if (job.category.isNotBlank()) CategoryBadge(category = job.category)
                     if (item.subtaskTotal > 0) InfoBadge(text = stringResource(R.string.subtasks_done_count, item.subtaskDone, item.subtaskTotal))
@@ -427,6 +440,21 @@ private fun JobRow(
                         leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) },
                         onClick = { menuExpanded = false; onClick() }
                     )
+                    // Starting doesn't need the subtask guard completing does - nothing gets
+                    // silently closed by picking a job up, so it's a plain toggle either way.
+                    if (job.isInProgress) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.action_move_to_jar)) },
+                            leadingIcon = { Icon(Icons.Filled.Undo, contentDescription = null) },
+                            onClick = { menuExpanded = false; onToggleInProgress() }
+                        )
+                    } else if (job.isPending()) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.action_start)) },
+                            leadingIcon = { Icon(Icons.Filled.PlayArrow, contentDescription = null) },
+                            onClick = { menuExpanded = false; onToggleInProgress() }
+                        )
+                    }
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.action_delete)) },
                         leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null) },

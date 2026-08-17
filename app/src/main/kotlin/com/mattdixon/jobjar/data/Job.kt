@@ -28,6 +28,15 @@ data class Job(
     val category: String = "",
     val priority: Priority = Priority.NORMAL,
     val isDone: Boolean = false,
+    /**
+     * Actively being worked on right now. Deliberately a separate flag from [isDone] rather than
+     * folding both into one tri-state status column: [isDone]'s state machine (repeating-job
+     * cycling, parent auto-complete/reopen cascades) is already carefully correct, and layering
+     * in-progress on top as an orthogonal bit avoids touching any of that. The only invariant
+     * this flag has to maintain is "never true at the same time as [isDone]" - every path that
+     * sets isDone = true also clears this (see [JobDao.markDone], [JobRepository.cycleRepeatingJob]).
+     */
+    val isInProgress: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
     val completedAt: Long? = null,
     val timesDrawn: Int = 0,
@@ -49,6 +58,17 @@ fun Job.isPending(now: Long = System.currentTimeMillis()): Boolean =
     } else {
         !isDone
     }
+
+/**
+ * Whether this job could actually be pulled from the jar right now: [isPending] (not done, and
+ * due if it's a repeating job) but also not already [isInProgress]. Kept separate from
+ * [isPending] itself rather than folding the in-progress check into it, because the two mean
+ * different things to different callers - the Jobs list's Active/Completed split wants the
+ * broader "not done" sense of pending (an in-progress job is still "Active"), while the draw
+ * pool and the jar's headline count want this narrower "genuinely available" sense.
+ */
+fun Job.isAvailableToDraw(now: Long = System.currentTimeMillis()): Boolean =
+    isPending(now) && !isInProgress
 
 /**
  * A blocked subtask (prerequisite not yet done) is only excluded from the random draw pool -

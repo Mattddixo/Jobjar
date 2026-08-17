@@ -23,7 +23,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Shuffle
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -96,7 +95,6 @@ fun DrawScreen(
 ) {
     val viewModel: DrawViewModel = viewModel(factory = DrawViewModel.Factory(repository))
     val state by viewModel.uiState.collectAsState()
-    var forceCompleteJobId by remember { mutableStateOf<Long?>(null) }
 
     Scaffold(
         topBar = {
@@ -126,7 +124,7 @@ fun DrawScreen(
                 .padding(horizontal = Spacing.xl, vertical = Spacing.lg),
             verticalArrangement = Arrangement.spacedBy(Spacing.lg)
         ) {
-            JarHero(pendingCount = state.pendingCount)
+            JarHero(pendingCount = state.pendingCount, inProgressCount = state.inProgressCount)
 
             PickerPanel(
                 state = state,
@@ -167,16 +165,7 @@ fun DrawScreen(
                         remainingMinutes = state.remainingMinutesAfterDraw,
                         isBusy = state.isDrawing,
                         onOpen = { jobId -> onOpenJob(jobId) },
-                        onDone = { jobId ->
-                            val entry = state.drawnJobs.find { it.job.id == jobId }
-                            val hasOpenSubtasks = entry?.context != null &&
-                                entry.context.subtaskDone < entry.context.subtaskTotal
-                            if (hasOpenSubtasks) {
-                                forceCompleteJobId = jobId
-                            } else {
-                                viewModel.completeJob(jobId)
-                            }
-                        },
+                        onStart = { jobId -> viewModel.startJob(jobId) },
                         onSkipAll = { viewModel.draw(excludeCurrent = true) }
                     )
                     state.noMatchFound -> EmptyStateText(
@@ -191,25 +180,6 @@ fun DrawScreen(
             }
         }
     }
-
-    forceCompleteJobId?.let { jobId ->
-        val entry = state.drawnJobs.find { it.job.id == jobId }
-        val incompleteCount = (entry?.context?.subtaskTotal ?: 0) - (entry?.context?.subtaskDone ?: 0)
-        AlertDialog(
-            onDismissRequest = { forceCompleteJobId = null },
-            title = { Text(stringResource(R.string.dialog_mark_as_done_title)) },
-            text = { Text(stringResource(R.string.dialog_force_complete_body, incompleteCount)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.completeJob(jobId)
-                    forceCompleteJobId = null
-                }) { Text(stringResource(R.string.action_mark_done)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { forceCompleteJobId = null }) { Text(stringResource(R.string.action_cancel)) }
-            }
-        )
-    }
 }
 
 /**
@@ -217,10 +187,13 @@ fun DrawScreen(
  * now. Deliberately just a count, not a dashboard - a completed-vs-pending ratio was here before
  * and it decayed toward "always looks full" as lifetime completions piled up, which stopped
  * meaning anything after a while. Anyone who wants completion history has the Stats tab for
- * that; this is just "how full does my jar look today."
+ * that; this is just "how full does my jar look today." [pendingCount] (and the glyph's fill
+ * level) only counts jobs actually available to draw - once a job is started it's left the jar,
+ * so [inProgressCount] is shown as its own small line rather than folded into the main count,
+ * and only when it's actually nonzero so an idle jar doesn't show a "0 in progress" line.
  */
 @Composable
-private fun JarHero(pendingCount: Int, modifier: Modifier = Modifier) {
+private fun JarHero(pendingCount: Int, inProgressCount: Int, modifier: Modifier = Modifier) {
     val fraction = (pendingCount.toFloat() / JAR_FILL_CAP).coerceIn(0f, 1f)
     Row(
         modifier = modifier.fillMaxWidth(),
@@ -229,11 +202,20 @@ private fun JarHero(pendingCount: Int, modifier: Modifier = Modifier) {
     ) {
         JarGlyph(fraction = fraction, modifier = Modifier.size(width = 52.dp, height = 70.dp))
         Spacer(modifier = Modifier.width(Spacing.lg))
-        Text(
-            stringResource(R.string.draw_jar_count, pendingCount),
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.SemiBold
-        )
+        Column {
+            Text(
+                stringResource(R.string.draw_jar_count, pendingCount),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold
+            )
+            if (inProgressCount > 0) {
+                Text(
+                    stringResource(R.string.draw_in_progress_count, inProgressCount),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
     }
 }
 
@@ -503,7 +485,7 @@ private fun DrawnJobsBatch(
     remainingMinutes: Int,
     isBusy: Boolean,
     onOpen: (Long) -> Unit,
-    onDone: (Long) -> Unit,
+    onStart: (Long) -> Unit,
     onSkipAll: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
@@ -525,7 +507,7 @@ private fun DrawnJobsBatch(
                     entry = entry,
                     isBusy = isBusy,
                     onOpen = { onOpen(entry.job.id) },
-                    onDone = { onDone(entry.job.id) }
+                    onStart = { onStart(entry.job.id) }
                 )
             }
         }
@@ -546,16 +528,18 @@ private fun DrawnJobsBatch(
  * A drawn job gets the app's one reserved accent (tertiary) - every other surface on this
  * screen is in the primary family, so this card reads as "the spotlight," not just another
  * panel. The whole card is tappable to open the job's detail page - a dedicated "View details"
- * button would just be redundant with that. "Skip all" (below the list) redraws the whole
- * batch. Notes are deliberately left off (available on the detail page) so a long description
- * can't grow a card unpredictably.
+ * button would just be redundant with that. The only action here is "Start" - a job being drawn
+ * doesn't mean it's finished, just that you've picked it up, so completing it happens later from
+ * its detail page or the Jobs list, once you actually are done. "Skip all" (below the list)
+ * redraws the whole batch. Notes are deliberately left off (available on the detail page) so a
+ * long description can't grow a card unpredictably.
  */
 @Composable
 private fun BatchJobCard(
     entry: DrawnJobEntry,
     isBusy: Boolean,
     onOpen: () -> Unit,
-    onDone: () -> Unit
+    onStart: () -> Unit
 ) {
     val job = entry.job
     val context = entry.context
@@ -609,7 +593,7 @@ private fun BatchJobCard(
                 )
             }
             Button(
-                onClick = onDone,
+                onClick = onStart,
                 enabled = !isBusy,
                 shape = AppShapes.control,
                 colors = ButtonDefaults.buttonColors(
@@ -620,7 +604,7 @@ private fun BatchJobCard(
                     .fillMaxWidth()
                     .height(34.dp)
             ) {
-                Text(stringResource(R.string.action_mark_done), style = MaterialTheme.typography.labelMedium)
+                Text(stringResource(R.string.action_start), style = MaterialTheme.typography.labelMedium)
             }
         }
     }

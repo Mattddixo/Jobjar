@@ -18,11 +18,16 @@
     <string name="cd_mark_not_done">Mark not done</string>
     <string name="cd_back">Back</string>
     <string name="cd_edit">Edit</string>
+    <string name="action_start">Start</string>
+    <string name="action_move_to_jar">Move back to jar</string>
+    <string name="badge_in_progress">In progress</string>
+    <string name="filter_in_progress">In Progress</string>
 
     <!-- Draw (Jar) screen -->
     <string name="draw_screen_title">The Job Jar</string>
     <string name="draw_button">Draw a job</string>
     <string name="draw_jar_count">%1$d in the jar</string>
+    <string name="draw_in_progress_count">%1$d in progress</string>
     <string name="draw_section_time_available">TIME AVAILABLE</string>
     <string name="draw_section_how_many">HOW MANY</string>
     <string name="draw_section_category">CATEGORY</string>

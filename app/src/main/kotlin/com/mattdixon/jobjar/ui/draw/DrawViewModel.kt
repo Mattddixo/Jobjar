@@ -6,7 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.mattdixon.jobjar.data.DrawPick
 import com.mattdixon.jobjar.data.Job
 import com.mattdixon.jobjar.data.JobRepository
-import com.mattdixon.jobjar.data.isPending
+import com.mattdixon.jobjar.data.isAvailableToDraw
 import com.mattdixon.jobjar.data.remainingMinutes
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -66,13 +66,16 @@ data class DrawUiState(
     val isDrawing: Boolean = false,
     val noMatchFound: Boolean = false,
     /**
-     * How many jobs (parents and subtasks alike) are currently pending - i.e. actually in the
-     * jar right now, per [Job.isPending]. This drives the jar glyph's fill level. Deliberately
-     * just a count, not a ratio against completed work: that decays toward "always looks full"
-     * as your lifetime completed total grows, which stops meaning anything after a while. If you
-     * want completion history, that's what the Stats tab is for.
+     * How many jobs (parents and subtasks alike) could actually be drawn right now, per
+     * [Job.isAvailableToDraw] - not done, due if repeating, and not already in progress. This
+     * drives the jar glyph's fill level. Deliberately just a count, not a ratio against
+     * completed work: that decays toward "always looks full" as your lifetime completed total
+     * grows, which stops meaning anything after a while. If you want completion history, that's
+     * what the Stats tab is for.
      */
-    val pendingCount: Int = 0
+    val pendingCount: Int = 0,
+    /** How many jobs are currently in progress - shown alongside [pendingCount] since those jobs have left the jar but aren't done yet either. */
+    val inProgressCount: Int = 0
 )
 
 class DrawViewModel(private val repository: JobRepository) : ViewModel() {
@@ -87,7 +90,8 @@ class DrawViewModel(private val repository: JobRepository) : ViewModel() {
             }.collect { (categories, allJobs) ->
                 _uiState.value = _uiState.value.copy(
                     categories = categories,
-                    pendingCount = allJobs.count { it.isPending() }
+                    pendingCount = allJobs.count { it.isAvailableToDraw() },
+                    inProgressCount = allJobs.count { it.isInProgress }
                 )
             }
         }
@@ -178,11 +182,17 @@ class DrawViewModel(private val repository: JobRepository) : ViewModel() {
         _uiState.value = _uiState.value.copy(drawnJobs = emptyList(), excludedIds = emptyList(), noMatchFound = false)
     }
 
-    /** Marks one job in the current batch done and drops it from the visible list - any other jobs in the batch stay put. */
-    fun completeJob(jobId: Long) {
+    /**
+     * Marks one job in the current batch as started and drops it from the visible list - a
+     * drawn job isn't completed right away just by being drawn, so this is the only action a
+     * batch card offers. From here it's tracked via the Jobs list' "In Progress" filter (or its
+     * own detail page) until you actually mark it done there; any other jobs in the batch stay
+     * put.
+     */
+    fun startJob(jobId: Long) {
         val entry = _uiState.value.drawnJobs.find { it.job.id == jobId } ?: return
         viewModelScope.launch {
-            repository.toggleDone(entry.job)
+            repository.toggleInProgress(entry.job)
             _uiState.value = _uiState.value.copy(
                 drawnJobs = _uiState.value.drawnJobs.filterNot { it.job.id == jobId }
             )

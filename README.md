@@ -17,31 +17,54 @@ platform rather than transliterated line-by-line.
    and a priority. Duration is picked from quick presets (5 min to 3 hr) or
    a **"4+ hrs"** option for jobs too big to size precisely up front.
 2. On the **Jar** tab, a jar-shaped glyph shows how many jobs (and
-   subtasks) are actually pending right now — a plain count, not a
-   completed-vs-pending ratio (that decays toward "always looks full" as
-   your lifetime completions pile up, which stops meaning anything after a
-   while; the Stats tab is where completion history actually belongs). Set
-   how much time you have with the slider, or jump straight to a preset via
-   the **Time** dropdown; optionally narrow by **Category** the same way.
-   A third dropdown, **How many**, lets you draw more than one job at once
-   (1/2/3/4/All) — the draw greedily fills your time budget: pick a job,
-   subtract what it needs, pick another that fits what's left, and so on
-   until it hits your chosen count or nothing eligible fits anymore. A
-   separate **"4+ hrs"** option (inside the Time dropdown) flips the match
-   from a ceiling to a floor — instead of "what fits," it explicitly draws
-   from jobs needing 4+ hours, always as a single job since there's no
-   remaining budget left to keep filling after an open-ended pick.
+   subtasks) are actually *available to draw* right now — a plain count,
+   not a completed-vs-pending ratio (that decays toward "always looks
+   full" as your lifetime completions pile up, which stops meaning
+   anything after a while; the Stats tab is where completion history
+   actually belongs). A job that's currently in progress has left the jar,
+   so it's excluded from that count and shown as its own small "N in
+   progress" line next to it instead. Set how much time you have with the
+   slider, or jump straight to a preset via the **Time** dropdown;
+   optionally narrow by **Category** the same way. A third dropdown, **How
+   many**, lets you draw more than one job at once (1/2/3/4/All) — the
+   draw greedily fills your time budget: pick a job, subtract what it
+   needs, pick another that fits what's left, and so on until it hits your
+   chosen count or nothing eligible fits anymore. A separate **"4+ hrs"**
+   option (inside the Time dropdown) flips the match from a ceiling to a
+   floor — instead of "what fits," it explicitly draws from jobs needing
+   4+ hours, always as a single job since there's no remaining budget left
+   to keep filling after an open-ended pick.
 
    Drawn jobs get their own subtle tonal treatment (a warm-toned taupe
    grey, the app's one reserved accent) so results are distinct from the
    neutral controls above them without introducing actual color — tap a
-   card to open its detail page, tap **Mark done** to
-   complete it, or tap **Skip all** below the list to redraw the whole
-   batch fresh.
-3. The **Jobs** tab is the full list — filter by category or by **Repeating**,
-   toggle Active/Completed, sort by time/priority/newest/category, tap into
-   a job to view or edit it, or swipe into its overflow menu to delete it.
-4. The **Stats** tab shows how many jobs are active vs. completed, total
+   card to open its detail page, or tap **Start** to mark it in progress.
+   Drawing a job doesn't mean finishing it right away, so that's the only
+   action a card offers; a started job drops out of the batch (and out of
+   the jar's draw pool - see below) and is tracked from there via the Jobs
+   list or its own detail page, where you actually mark it done. Tap
+   **Skip all** below the list to redraw the whole batch fresh instead.
+3. **In progress**: any job can be started - from a drawn card, from its
+   row's overflow menu on the Jobs list, or from its detail page - without
+   drawing it first. An in-progress job is excluded from the jar's random
+   draw (you can't pull something you're already working on) and from the
+   jar's headline count, but it still shows under the Jobs list's Active
+   tab (it's obviously not *done*) with its own "In progress" badge, and
+   can be filtered to on its own via the **In Progress** chip. Starting is
+   reversible any time via **Move back to jar** on the same menu/button it
+   started from; there's no cap on how many jobs can be in progress at
+   once, matching the jar's own batch draws already surfacing several jobs
+   for one sitting. It's tracked as its own flag (`Job.isInProgress`)
+   rather than folded into `isDone` as a three-way status, specifically so
+   it doesn't have to touch the already-correct `isDone` state machine
+   (repeating-job cycling, parent auto-complete/reopen) - every path that
+   marks a job done clears it, and that's the only invariant it has to
+   maintain.
+4. The **Jobs** tab is the full list — filter by category, by **Repeating**,
+   or by **In Progress**, toggle Active/Completed, sort by
+   time/priority/newest/category, tap into a job to view or edit it, or use
+   its overflow menu to start it, move it back to the jar, or delete it.
+5. The **Stats** tab shows how many jobs are active vs. completed, total
    time invested, and a breakdown by category with a relative-size bar per
    category, so you can see where your time actually goes at a glance.
 
@@ -216,6 +239,7 @@ data class Job(
     val category: String = "",
     val priority: Priority = Priority.NORMAL,   // LOW / NORMAL / HIGH
     val isDone: Boolean = false,
+    val isInProgress: Boolean = false,           // actively being worked on; excluded from the draw pool
     val createdAt: Long = System.currentTimeMillis(),
     val completedAt: Long? = null,
     val timesDrawn: Int = 0,                     // how often it's come up in the jar

@@ -13,6 +13,8 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -20,6 +22,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -42,6 +45,7 @@ import com.mattdixon.jobjar.ui.components.CategoryBadge
 import com.mattdixon.jobjar.ui.components.InfoBadge
 import com.mattdixon.jobjar.ui.components.SubtasksSection
 import com.mattdixon.jobjar.ui.components.TimeBucketBadge
+import com.mattdixon.jobjar.ui.theme.AppShapes
 import com.mattdixon.jobjar.ui.theme.Spacing
 import com.mattdixon.jobjar.util.formatDueStatus
 import com.mattdixon.jobjar.util.formatMinutes
@@ -132,6 +136,7 @@ fun JobDetailScreen(
                 Text(currentJob.title, style = MaterialTheme.typography.headlineMedium)
 
                 Row(horizontalArrangement = Arrangement.spacedBy(Spacing.md)) {
+                    if (currentJob.isInProgress) InfoBadge(text = stringResource(R.string.badge_in_progress))
                     TimeBucketBadge(minutes = displayMinutes)
                     if (currentJob.category.isNotBlank()) CategoryBadge(category = currentJob.category)
                     currentJob.recurrenceDays?.let { InfoBadge(text = formatRecurrenceInterval(it)) }
@@ -198,6 +203,24 @@ fun JobDetailScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+
+                // Only offered while the job is actually pending - a resting repeating job (not
+                // due yet) or an already-done job has nothing to "start." Starting itself needs
+                // no guard dialog the way completing does: nothing gets silently left behind by
+                // picking a job up, so it's a plain toggle either way.
+                if (currentJob.isPending()) {
+                    OutlinedButton(
+                        onClick = { scope.launch { repository.toggleInProgress(currentJob) } },
+                        shape = AppShapes.control,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            if (currentJob.isInProgress) Icons.Filled.Undo else Icons.Filled.PlayArrow,
+                            contentDescription = null
+                        )
+                        Text(stringResource(if (currentJob.isInProgress) R.string.action_move_to_jar else R.string.action_start))
+                    }
                 }
 
                 Button(
