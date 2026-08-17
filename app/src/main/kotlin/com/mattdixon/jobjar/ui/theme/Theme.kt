@@ -11,18 +11,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 
 private val LightColorScheme = lightColorScheme(
-    primary = AmberPrimaryLight,
-    onPrimary = AmberOnPrimaryLight,
-    primaryContainer = AmberContainerLight,
-    onPrimaryContainer = AmberOnContainerLight,
-    secondary = JadeSecondaryLight,
-    onSecondary = JadeOnSecondaryLight,
-    secondaryContainer = JadeContainerLight,
-    onSecondaryContainer = JadeOnContainerLight,
-    tertiary = CoralTertiaryLight,
-    onTertiary = CoralOnTertiaryLight,
-    tertiaryContainer = CoralContainerLight,
-    onTertiaryContainer = CoralOnContainerLight,
+    primary = TealPrimaryLight,
+    onPrimary = TealOnPrimaryLight,
+    primaryContainer = TealContainerLight,
+    onPrimaryContainer = TealOnContainerLight,
+    secondary = SandSecondaryLight,
+    onSecondary = SandOnSecondaryLight,
+    secondaryContainer = SandContainerLight,
+    onSecondaryContainer = SandOnContainerLight,
+    tertiary = HoneyTertiaryLight,
+    onTertiary = HoneyOnTertiaryLight,
+    tertiaryContainer = HoneyContainerLight,
+    onTertiaryContainer = HoneyOnContainerLight,
     background = WarmBackgroundLight,
     onBackground = WarmOnBackgroundLight,
     surface = WarmBackgroundLight,
@@ -33,7 +33,7 @@ private val LightColorScheme = lightColorScheme(
     surfaceContainerLow = WarmSurfaceContainerLowLight,
     surfaceContainer = WarmSurfaceContainerLight,
     surfaceContainerHigh = WarmSurfaceContainerHighLight,
-    surfaceContainerHighest = WarmSurfaceVariantLight,
+    surfaceContainerHighest = WarmSurfaceContainerHighestLight,
     outline = WarmOutlineLight,
     outlineVariant = WarmOutlineVariantLight,
     error = ErrorLight,
@@ -43,29 +43,29 @@ private val LightColorScheme = lightColorScheme(
 )
 
 private val DarkColorScheme = darkColorScheme(
-    primary = AmberPrimaryDark,
-    onPrimary = AmberOnPrimaryDark,
-    primaryContainer = AmberContainerDark,
-    onPrimaryContainer = AmberOnContainerDark,
-    secondary = JadeSecondaryDark,
-    onSecondary = JadeOnSecondaryDark,
-    secondaryContainer = JadeContainerDark,
-    onSecondaryContainer = JadeOnContainerDark,
-    tertiary = CoralTertiaryDark,
-    onTertiary = CoralOnTertiaryDark,
-    tertiaryContainer = CoralContainerDark,
-    onTertiaryContainer = CoralOnContainerDark,
+    primary = TealPrimaryDark,
+    onPrimary = TealOnPrimaryDark,
+    primaryContainer = TealContainerDark,
+    onPrimaryContainer = TealOnContainerDark,
+    secondary = SandSecondaryDark,
+    onSecondary = SandOnSecondaryDark,
+    secondaryContainer = SandContainerDark,
+    onSecondaryContainer = SandOnContainerDark,
+    tertiary = HoneyTertiaryDark,
+    onTertiary = HoneyOnTertiaryDark,
+    tertiaryContainer = HoneyContainerDark,
+    onTertiaryContainer = HoneyOnContainerDark,
     background = WarmBackgroundDark,
     onBackground = WarmOnBackgroundDark,
     surface = WarmBackgroundDark,
     onSurface = WarmOnBackgroundDark,
     surfaceVariant = WarmSurfaceVariantDark,
     onSurfaceVariant = WarmOnSurfaceVariantDark,
-    surfaceContainerLowest = WarmBackgroundDark,
+    surfaceContainerLowest = WarmSurfaceContainerLowestDark,
     surfaceContainerLow = WarmSurfaceContainerLowDark,
     surfaceContainer = WarmSurfaceContainerDark,
     surfaceContainerHigh = WarmSurfaceContainerHighDark,
-    surfaceContainerHighest = WarmSurfaceVariantDark,
+    surfaceContainerHighest = WarmSurfaceContainerHighestDark,
     outline = WarmOutlineDark,
     outlineVariant = WarmOutlineVariantDark,
     error = ErrorDark,
@@ -77,11 +77,9 @@ private val DarkColorScheme = darkColorScheme(
 @Composable
 fun JobJarTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    // Off by default now: Android 12+'s dynamic color pulls the whole palette from the phone's
-    // wallpaper, silently discarding every color chosen above - that's what made the app look
-    // grey regardless of what this file defined. This app has a real designed palette, so it
-    // should actually be used; dynamicColor is left as a parameter (not deleted) in case that
-    // tradeoff is ever wanted back for a specific build.
+    // Off by default: Android 12+'s dynamic color pulls the whole palette from the phone's
+    // wallpaper, silently discarding every color chosen above. This app has a real designed
+    // palette (light and dark both), so it should actually be the one that renders.
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
