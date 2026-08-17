@@ -508,7 +508,7 @@ private fun DrawnJobsBatch(
     onDone: (Long) -> Unit,
     onSkipAll: () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (showBudgetSummary) {
             Text(
                 "${entries.size} job(s) · ${formatMinutes(remainingMinutes)} left of ${formatMinutes(availableMinutes)}",
@@ -529,15 +529,19 @@ private fun DrawnJobsBatch(
         OutlinedButton(
             onClick = onSkipAll,
             enabled = !isBusy,
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(10.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .height(40.dp)
+                .height(36.dp)
         ) {
-            Text("Skip all", style = MaterialTheme.typography.labelLarge)
+            Text("Skip all", style = MaterialTheme.typography.labelMedium)
         }
     }
 }
+
+/** Tighter rounding than [PanelShape] - drawn-job cards are meant to read as compact result
+ * chips you skim through quickly, not another full-size panel like the picker above them. */
+private val BatchCardShape = RoundedCornerShape(14.dp)
 
 /**
  * A drawn job gets the app's one reserved accent (tertiary) - every other surface on this
@@ -559,7 +563,7 @@ private fun BatchJobCard(
 
     Card(
         onClick = onOpen,
-        shape = PanelShape,
+        shape = BatchCardShape,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.tertiaryContainer,
             contentColor = MaterialTheme.colorScheme.onTertiaryContainer
@@ -567,25 +571,25 @@ private fun BatchJobCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp)
         ) {
             Text(
                 job.title,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                TimeBucketBadge(minutes = context?.remainingMinutes ?: job.estimatedMinutes)
-                if (job.category.isNotBlank()) CategoryBadge(category = job.category)
-                job.recurrenceDays?.let { InfoBadge(text = formatRecurrenceInterval(it)) }
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TimeBucketBadge(minutes = context?.remainingMinutes ?: job.estimatedMinutes, compact = true)
+                if (job.category.isNotBlank()) CategoryBadge(category = job.category, compact = true)
+                job.recurrenceDays?.let { InfoBadge(text = formatRecurrenceInterval(it), compact = true) }
             }
             if (context?.parentTitle != null) {
                 Text(
                     "Part of: ${context.parentTitle}",
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onTertiaryContainer,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -594,7 +598,7 @@ private fun BatchJobCard(
             if (context != null && context.subtaskTotal > 0) {
                 Text(
                     "${context.subtaskDone}/${context.subtaskTotal} subtasks done · ${formatMinutes(context.remainingMinutes ?: job.estimatedMinutes)} left",
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onTertiaryContainer,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -603,16 +607,16 @@ private fun BatchJobCard(
             Button(
                 onClick = onDone,
                 enabled = !isBusy,
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(10.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.tertiary,
                     contentColor = MaterialTheme.colorScheme.onTertiary
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(40.dp)
+                    .height(34.dp)
             ) {
-                Text("Mark done", style = MaterialTheme.typography.labelLarge)
+                Text("Mark done", style = MaterialTheme.typography.labelMedium)
             }
         }
     }

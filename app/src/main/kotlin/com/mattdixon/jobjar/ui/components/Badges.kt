@@ -10,8 +10,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.mattdixon.jobjar.util.formatMinutes
 
+/** [compact] trims the padding for tighter contexts (e.g. the Jar screen's drawn-job cards)
+ * without changing how the badge looks anywhere that doesn't opt in. */
 @Composable
-fun InfoBadge(text: String, modifier: Modifier = Modifier) {
+fun InfoBadge(text: String, modifier: Modifier = Modifier, compact: Boolean = false) {
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(50),
@@ -21,17 +23,20 @@ fun InfoBadge(text: String, modifier: Modifier = Modifier) {
             text = text,
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSecondaryContainer,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+            modifier = Modifier.padding(
+                horizontal = if (compact) 7.dp else 10.dp,
+                vertical = if (compact) 2.dp else 4.dp
+            )
         )
     }
 }
 
 @Composable
-fun TimeBucketBadge(minutes: Int, modifier: Modifier = Modifier) {
-    InfoBadge(text = formatMinutes(minutes), modifier = modifier)
+fun TimeBucketBadge(minutes: Int, modifier: Modifier = Modifier, compact: Boolean = false) {
+    InfoBadge(text = formatMinutes(minutes), modifier = modifier, compact = compact)
 }
 
 @Composable
-fun CategoryBadge(category: String, modifier: Modifier = Modifier) {
-    InfoBadge(text = category, modifier = modifier)
+fun CategoryBadge(category: String, modifier: Modifier = Modifier, compact: Boolean = false) {
+    InfoBadge(text = category, modifier = modifier, compact = compact)
 }

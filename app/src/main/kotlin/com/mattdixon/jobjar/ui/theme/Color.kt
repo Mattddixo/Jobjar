@@ -11,16 +11,17 @@ import androidx.compose.ui.graphics.Color
 
 // Ink - primary. Charcoal/off-white rather than literal black/white - carries the "this is the
 // main action" weight that would normally come from a brand color, without the harsher contrast
-// of pure black-on-white (light) or pure white-on-black (dark).
-val InkPrimaryLight = Color(0xFF2E2D2B)
+// of pure black-on-white (light) or pure white-on-black (dark). Softened a second time - the
+// first pass (near-black/near-white to charcoal/light-grey) still read as too intense.
+val InkPrimaryLight = Color(0xFF42413F)
 val InkOnPrimaryLight = Color(0xFFFFFFFF)
 val InkContainerLight = Color(0xFFE4E4E4)
-val InkOnContainerLight = Color(0xFF2E2D2B)
+val InkOnContainerLight = Color(0xFF42413F)
 
-val InkPrimaryDark = Color(0xFFD9D9D6)
+val InkPrimaryDark = Color(0xFFC5C5C2)
 val InkOnPrimaryDark = Color(0xFF1A1A1A)
 val InkContainerDark = Color(0xFF333333)
-val InkOnContainerDark = Color(0xFFD9D9D6)
+val InkOnContainerDark = Color(0xFFC5C5C2)
 
 // Slate - secondary, a cool-neutral mid grey for badges/tags.
 val SlateSecondaryLight = Color(0xFF5B5B5B)
@@ -28,7 +29,7 @@ val SlateOnSecondaryLight = Color(0xFFFFFFFF)
 val SlateContainerLight = Color(0xFFE9E9E9)
 val SlateOnContainerLight = Color(0xFF262626)
 
-val SlateSecondaryDark = Color(0xFFB3B3B3)
+val SlateSecondaryDark = Color(0xFF9F9F9F)
 val SlateOnSecondaryDark = Color(0xFF2E2E2E)
 val SlateContainerDark = Color(0xFF3A3A3A)
 val SlateOnContainerDark = Color(0xFFE9E9E9)
@@ -41,7 +42,7 @@ val TaupeOnTertiaryLight = Color(0xFFFFFFFF)
 val TaupeContainerLight = Color(0xFFEDE7E1)
 val TaupeOnContainerLight = Color(0xFF2A231D)
 
-val TaupeTertiaryDark = Color(0xFFC4B8AC)
+val TaupeTertiaryDark = Color(0xFFB0A498)
 val TaupeOnTertiaryDark = Color(0xFF352D25)
 val TaupeContainerDark = Color(0xFF3D362F)
 val TaupeOnContainerDark = Color(0xFFEDE7E1)
