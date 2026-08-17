@@ -6,7 +6,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,17 +18,18 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -35,6 +38,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -56,6 +60,7 @@ import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -269,7 +274,11 @@ private fun JarGlyph(fraction: Float, modifier: Modifier = Modifier) {
     }
 }
 
-/** The actually-functional part of the screen: time budget and category filter. */
+/**
+ * The actually-functional part of the screen: time budget and category filter. Both narrow down
+ * to a single dropdown chip - showing the current value doubles as the control that changes it -
+ * instead of a whole row of preset chips each, which is what made this panel tall to begin with.
+ */
 @Composable
 private fun PickerPanel(
     state: DrawUiState,
@@ -278,6 +287,8 @@ private fun PickerPanel(
     onCategorySelect: (String?) -> Unit
 ) {
     val dividerColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+    var timeMenuExpanded by remember { mutableStateOf(false) }
+    var categoryMenuExpanded by remember { mutableStateOf(false) }
 
     Card(
         shape = PanelShape,
@@ -294,56 +305,88 @@ private fun PickerPanel(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 SectionLabel("TIME AVAILABLE")
-                Text(
-                    if (state.longJobsOnly) "4+ hrs" else formatMinutes(state.availableMinutes),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
+                Box {
+                    FilterChip(
+                        selected = true,
+                        onClick = { timeMenuExpanded = true },
+                        label = {
+                            Text(if (state.longJobsOnly) "4+ hrs" else formatMinutes(state.availableMinutes))
+                        },
+                        trailingIcon = {
+                            Icon(Icons.Filled.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp))
+                        }
+                    )
+                    DropdownMenu(expanded = timeMenuExpanded, onDismissRequest = { timeMenuExpanded = false }) {
+                        TIME_PRESETS.forEach { minutes ->
+                            DropdownMenuItem(
+                                text = { Text(formatMinutes(minutes)) },
+                                onClick = {
+                                    onAvailableMinutesChange(minutes)
+                                    timeMenuExpanded = false
+                                }
+                            )
+                        }
+                        // Not a duration like the presets above it - picking this flips the draw
+                        // from "fits this time" to "needs 4+ hours" and ignores the slider
+                        // entirely, but it's still just one more value this control can be set to.
+                        DropdownMenuItem(
+                            text = { Text("4+ hrs") },
+                            onClick = {
+                                onLongJobsOnly()
+                                timeMenuExpanded = false
+                            }
+                        )
+                    }
+                }
             }
             Slider(
                 value = state.availableMinutes.toFloat(),
                 onValueChange = { onAvailableMinutesChange(it.toInt()) },
                 valueRange = 5f..240f,
-                enabled = !state.longJobsOnly
+                enabled = !state.longJobsOnly,
+                thumb = {
+                    SliderDefaults.Thumb(
+                        interactionSource = remember { MutableInteractionSource() },
+                        thumbSize = DpSize(16.dp, 16.dp)
+                    )
+                }
             )
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(TIME_PRESETS) { minutes ->
-                    FilterChip(
-                        selected = !state.longJobsOnly && state.availableMinutes == minutes,
-                        onClick = { onAvailableMinutesChange(minutes) },
-                        label = { Text(formatMinutes(minutes)) }
-                    )
-                }
-                item {
-                    // Not a ceiling like the other chips - an explicit "pull from the big
-                    // projects" request, since the slider above can't reach past 4 hours.
-                    FilterChip(
-                        selected = state.longJobsOnly,
-                        onClick = onLongJobsOnly,
-                        label = { Text("4+ hrs") }
-                    )
-                }
-            }
 
             if (state.categories.isNotEmpty()) {
                 HorizontalDivider(color = dividerColor, modifier = Modifier.padding(vertical = 2.dp))
-                SectionLabel("CATEGORY")
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    SectionLabel("CATEGORY")
+                    Box {
                         FilterChip(
-                            selected = state.selectedCategory == null,
-                            onClick = { onCategorySelect(null) },
-                            label = { Text("Any") }
+                            selected = state.selectedCategory != null,
+                            onClick = { categoryMenuExpanded = true },
+                            label = { Text(state.selectedCategory ?: "Any") },
+                            trailingIcon = {
+                                Icon(Icons.Filled.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp))
+                            }
                         )
-                    }
-                    items(state.categories) { category ->
-                        FilterChip(
-                            selected = state.selectedCategory == category,
-                            onClick = {
-                                onCategorySelect(if (state.selectedCategory == category) null else category)
-                            },
-                            label = { Text(category) }
-                        )
+                        DropdownMenu(expanded = categoryMenuExpanded, onDismissRequest = { categoryMenuExpanded = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Any") },
+                                onClick = {
+                                    onCategorySelect(null)
+                                    categoryMenuExpanded = false
+                                }
+                            )
+                            state.categories.forEach { category ->
+                                DropdownMenuItem(
+                                    text = { Text(category) },
+                                    onClick = {
+                                        onCategorySelect(category)
+                                        categoryMenuExpanded = false
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
             }
