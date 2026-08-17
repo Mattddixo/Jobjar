@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -94,11 +93,6 @@ private val PanelShape = RoundedCornerShape(20.dp)
  */
 private const val JAR_FILL_CAP = 15
 
-/** Max height of the drawn-jobs list before it scrolls internally - bounded so it can live
- * inside the screen's own outer scroll without an infinite-height measurement error, and so it
- * naturally shrinks to fit when there are only 1-2 cards instead of always reserving max space. */
-private val BatchListMaxHeight = 340.dp
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DrawScreen(
@@ -127,12 +121,6 @@ fun DrawScreen(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
-                // Every section below is sized to fit a normal phone screen without scrolling
-                // by default (that's the actual design goal), but this stays as a safety net -
-                // a large system font size or an unusually short screen shouldn't be able to
-                // strand controls somewhere unreachable. The drawn-jobs list below has its own
-                // bounded, independently-scrolling area regardless.
-                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -159,40 +147,51 @@ fun DrawScreen(
                 Text("Draw a job", style = MaterialTheme.typography.titleSmall)
             }
 
-            AnimatedContent(
-                targetState = state.drawnJobs,
-                transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(120)) },
-                label = "drawn-jobs"
-            ) { drawnJobs ->
-                when {
-                    drawnJobs.isNotEmpty() -> DrawnJobsBatch(
-                        entries = drawnJobs,
-                        showBudgetSummary = !state.longJobsOnly && state.batchSize != DrawBatchSize.ONE,
-                        availableMinutes = state.availableMinutes,
-                        remainingMinutes = state.remainingMinutesAfterDraw,
-                        isBusy = state.isDrawing,
-                        onOpen = { jobId -> onOpenJob(jobId) },
-                        onDone = { jobId ->
-                            val entry = drawnJobs.find { it.job.id == jobId }
-                            val hasOpenSubtasks = entry?.context != null &&
-                                entry.context.subtaskDone < entry.context.subtaskTotal
-                            if (hasOpenSubtasks) {
-                                forceCompleteJobId = jobId
+            // Keyed on "is there anything drawn" rather than the drawn-jobs list itself, so a
+            // single-card change (skipping one job in DrawViewModel.skipJob) doesn't read as a
+            // wholesale state change and crossfade the entire batch - only empty<->populated
+            // transitions animate. The content lambda still reads state.drawnJobs live on every
+            // recomposition regardless of whether the crossfade itself re-triggers.
+            Box(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                AnimatedContent(
+                    targetState = state.drawnJobs.isNotEmpty(),
+                    transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(120)) },
+                    label = "drawn-jobs"
+                ) { hasDrawnJobs ->
+                    when {
+                        hasDrawnJobs -> DrawnJobsBatch(
+                            entries = state.drawnJobs,
+                            showBudgetSummary = !state.longJobsOnly && state.batchSize != DrawBatchSize.ONE,
+                            availableMinutes = state.availableMinutes,
+                            remainingMinutes = state.remainingMinutesAfterDraw,
+                            isBusy = state.isDrawing,
+                            onOpen = { jobId -> onOpenJob(jobId) },
+                            onDone = { jobId ->
+                                val entry = state.drawnJobs.find { it.job.id == jobId }
+                                val hasOpenSubtasks = entry?.context != null &&
+                                    entry.context.subtaskDone < entry.context.subtaskTotal
+                                if (hasOpenSubtasks) {
+                                    forceCompleteJobId = jobId
+                                } else {
+                                    viewModel.completeJob(jobId)
+                                }
+                            },
+                            onSkipJob = { jobId -> viewModel.skipJob(jobId) },
+                            onSkipAll = { viewModel.draw(excludeCurrent = true) },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                        state.noMatchFound -> EmptyStateText(
+                            if (state.longJobsOnly) {
+                                "Nothing needs ${formatMinutes(LONG_JOB_MINUTES)}+ yet. Try a shorter time, or add a bigger job."
                             } else {
-                                viewModel.completeJob(jobId)
+                                "No jobs fit that time and category. Try a longer time or add more jobs."
                             }
-                        },
-                        onSkipJob = { jobId -> viewModel.skipJob(jobId) },
-                        onSkipAll = { viewModel.draw(excludeCurrent = true) }
-                    )
-                    state.noMatchFound -> EmptyStateText(
-                        if (state.longJobsOnly) {
-                            "Nothing needs ${formatMinutes(LONG_JOB_MINUTES)}+ yet. Try a shorter time, or add a bigger job."
-                        } else {
-                            "No jobs fit that time and category. Try a longer time or add more jobs."
-                        }
-                    )
-                    else -> EmptyStateText("Set your time and tap \"Draw a job\" to pick something from the jar.")
+                        )
+                        else -> EmptyStateText("Set your time and tap \"Draw a job\" to pick something from the jar.")
+                    }
                 }
             }
         }
@@ -488,13 +487,14 @@ private fun EmptyStateText(text: String) {
 /**
  * The current draw's results: an optional "how much budget is left" summary (only worth
  * showing when more than one job was actually requested - for the default single-job draw it'd
- * just be noise), a small swipe hint, a bounded independently-scrollable list of job cards, and
- * one "Skip all" button that redraws the whole batch. [BatchListMaxHeight] keeps the list from
- * growing without limit inside the screen's own outer scroll - it shrinks to fit when there are
- * only 1-2 cards and scrolls internally once there are more than that. Each card is wrapped in
- * `key(entry.job.id)` so swiping one away (see [BatchJobCard]) gets a fresh swipe-state instance
- * for whatever replaces it, instead of accidentally inheriting a half-swiped state from the slot
- * it used to occupy.
+ * just be noise), a small swipe hint, a scrollable list of job cards that claims whatever
+ * vertical space is actually left on screen (via `weight(1f)` on the caller's [Box] and again
+ * here), and one "Skip all" button pinned below it that redraws the whole batch. Scaling to real
+ * available space - rather than a fixed max height - is what makes the list "scale to fit the
+ * jobs nicely" instead of only ever showing a couple of cards' worth before scrolling. Each card
+ * is wrapped in `key(entry.job.id)` so swiping one away (see [BatchJobCard]) gets a fresh
+ * swipe-state instance for whatever replaces it, instead of accidentally inheriting a
+ * half-swiped state from the slot it used to occupy.
  */
 @Composable
 private fun DrawnJobsBatch(
@@ -506,9 +506,10 @@ private fun DrawnJobsBatch(
     onOpen: (Long) -> Unit,
     onDone: (Long) -> Unit,
     onSkipJob: (Long) -> Unit,
-    onSkipAll: () -> Unit
+    onSkipAll: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (showBudgetSummary) {
             Text(
                 "${entries.size} job(s) · ${formatMinutes(remainingMinutes)} left of ${formatMinutes(availableMinutes)}",
@@ -524,7 +525,7 @@ private fun DrawnJobsBatch(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(max = BatchListMaxHeight)
+                .weight(1f)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
