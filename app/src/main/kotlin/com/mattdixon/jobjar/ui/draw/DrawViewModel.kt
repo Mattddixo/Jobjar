@@ -25,8 +25,7 @@ data class DrawnJobContext(
 
 /**
  * One job in the current draw, paired with its display context and how many minutes it counted
- * against the time budget - [minutesUsed] is what [DrawViewModel.skipJob] needs to know how much
- * budget frees up when this one entry is swiped away and replaced.
+ * against the time budget.
  */
 data class DrawnJobEntry(
     val job: Job,
@@ -186,50 +185,6 @@ class DrawViewModel(private val repository: JobRepository) : ViewModel() {
             repository.toggleDone(entry.job)
             _uiState.value = _uiState.value.copy(
                 drawnJobs = _uiState.value.drawnJobs.filterNot { it.job.id == jobId }
-            )
-        }
-    }
-
-    /**
-     * Swipe-to-skip one job in the batch: it's dropped, and the time it was using (plus
-     * whatever was already left over from the original draw) gets one shot at pulling a
-     * replacement into that same slot, excluding every job currently in the batch (including
-     * the one just skipped) so it can't immediately reappear. If nothing fits, the batch just
-     * shrinks by one - same "came up short" outcome as the original draw finding fewer than
-     * requested.
-     */
-    fun skipJob(jobId: Long) {
-        val current = _uiState.value
-        val index = current.drawnJobs.indexOfFirst { it.job.id == jobId }
-        if (index == -1) return
-        val skipped = current.drawnJobs[index]
-        val freedMinutes = skipped.minutesUsed + current.remainingMinutesAfterDraw
-        val excludeIds = current.drawnJobs.map { it.job.id }
-
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isDrawing = true)
-
-            val replacement = repository.drawJob(
-                maxMinutes = freedMinutes,
-                category = current.selectedCategory,
-                excludeIds = excludeIds,
-                longOnly = current.longJobsOnly
-            )
-
-            val updated = current.drawnJobs.toMutableList()
-            val newRemaining: Int
-            if (replacement != null) {
-                updated[index] = DrawnJobEntry(replacement.job, buildContext(replacement.job), replacement.minutesUsed)
-                newRemaining = freedMinutes - replacement.minutesUsed
-            } else {
-                updated.removeAt(index)
-                newRemaining = freedMinutes
-            }
-
-            _uiState.value = _uiState.value.copy(
-                drawnJobs = updated,
-                remainingMinutesAfterDraw = newRemaining,
-                isDrawing = false
             )
         }
     }

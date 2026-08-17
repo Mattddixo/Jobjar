@@ -36,9 +36,8 @@ platform rather than transliterated line-by-line.
    grey, the app's one reserved accent) so results are distinct from the
    neutral controls above them without introducing actual color — tap a
    card to open its detail page, tap **Mark done** to
-   complete it, swipe a card left to skip just that one (it's replaced if
-   anything else still fits the time it freed up), or tap **Skip all**
-   below the list to redraw the whole batch fresh.
+   complete it, or tap **Skip all** below the list to redraw the whole
+   batch fresh.
 3. The **Jobs** tab is the full list — filter by category or by **Repeating**,
    toggle Active/Completed, sort by time/priority/newest/category, tap into
    a job to view or edit it, or swipe into its overflow menu to delete it.

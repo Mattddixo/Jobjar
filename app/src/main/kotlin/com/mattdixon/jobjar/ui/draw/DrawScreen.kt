@@ -6,7 +6,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,7 +24,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Shuffle
-import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -42,12 +40,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -57,7 +52,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.RoundRect
@@ -157,10 +151,10 @@ fun DrawScreen(
             }
 
             // Keyed on "is there anything drawn" rather than the drawn-jobs list itself, so a
-            // single-card change (skipping one job in DrawViewModel.skipJob) doesn't read as a
-            // wholesale state change and crossfade the entire batch - only empty<->populated
-            // transitions animate. The content lambda still reads state.drawnJobs live on every
-            // recomposition regardless of whether the crossfade itself re-triggers.
+            // change to the batch (e.g. "Skip all" redrawing it) doesn't cause a jarring
+            // full-list crossfade for no reason - only empty<->populated transitions animate.
+            // The content lambda still reads state.drawnJobs live on every recomposition
+            // regardless of whether the crossfade itself re-triggers.
             AnimatedContent(
                 targetState = state.drawnJobs.isNotEmpty(),
                 transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(120)) },
@@ -184,7 +178,6 @@ fun DrawScreen(
                                 viewModel.completeJob(jobId)
                             }
                         },
-                        onSkipJob = { jobId -> viewModel.skipJob(jobId) },
                         onSkipAll = { viewModel.draw(excludeCurrent = true) }
                     )
                     state.noMatchFound -> EmptyStateText(
@@ -498,12 +491,11 @@ private fun EmptyStateText(text: String) {
 /**
  * The current draw's results: an optional "how much budget is left" summary (only worth
  * showing when more than one job was actually requested - for the default single-job draw it'd
- * just be noise), a small swipe hint, each card at its natural size (no inner scroll region or
- * height cap of its own - the whole screen is the one scroll owner, see [DrawScreen]), and one
- * "Skip all" button after the last card that redraws the whole batch. Each card is wrapped in
- * `key(entry.job.id)` so swiping one away (see [BatchJobCard]) gets a fresh swipe-state instance
- * for whatever replaces it, instead of accidentally inheriting a half-swiped state from the slot
- * it used to occupy.
+ * just be noise), each card at its natural size (no inner scroll region or height cap of its
+ * own - the whole screen is the one scroll owner, see [DrawScreen]), and one "Skip all" button
+ * after the last card that redraws the whole batch. Each card is wrapped in `key(entry.job.id)`
+ * so a card that gets replaced (e.g. after "Skip all" redraws the batch) is a genuinely fresh
+ * composable instance rather than reusing whatever remembered state occupied that slot before.
  */
 @Composable
 private fun DrawnJobsBatch(
@@ -514,7 +506,6 @@ private fun DrawnJobsBatch(
     isBusy: Boolean,
     onOpen: (Long) -> Unit,
     onDone: (Long) -> Unit,
-    onSkipJob: (Long) -> Unit,
     onSkipAll: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -525,19 +516,13 @@ private fun DrawnJobsBatch(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        Text(
-            "Swipe a job to skip just that one",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
         entries.forEach { entry ->
             key(entry.job.id) {
                 BatchJobCard(
                     entry = entry,
                     isBusy = isBusy,
                     onOpen = { onOpen(entry.job.id) },
-                    onDone = { onDone(entry.job.id) },
-                    onSkip = { onSkipJob(entry.job.id) }
+                    onDone = { onDone(entry.job.id) }
                 )
             }
         }
@@ -555,118 +540,81 @@ private fun DrawnJobsBatch(
 }
 
 /**
- * A drawn job gets the app's one reserved accent (tertiary/coral) - every other surface on this
- * screen is in the amber primary family, so this card reads as "the spotlight," not just another
+ * A drawn job gets the app's one reserved accent (tertiary) - every other surface on this
+ * screen is in the primary family, so this card reads as "the spotlight," not just another
  * panel. The whole card is tappable to open the job's detail page - a dedicated "View details"
- * button would just be redundant with that. Swiping left (EndToStart) skips just this one job,
- * replacing it in place if anything else fits the freed-up time; "Skip all" (below the list)
- * covers redrawing the whole batch instead. Notes are deliberately left off (available on the
- * detail page) so a long description can't grow a card unpredictably inside the batch's bounded
- * list.
+ * button would just be redundant with that. "Skip all" (below the list) redraws the whole
+ * batch. Notes are deliberately left off (available on the detail page) so a long description
+ * can't grow a card unpredictably.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun BatchJobCard(
     entry: DrawnJobEntry,
     isBusy: Boolean,
     onOpen: () -> Unit,
-    onDone: () -> Unit,
-    onSkip: () -> Unit
+    onDone: () -> Unit
 ) {
     val job = entry.job
     val context = entry.context
 
-    val dismissState = rememberSwipeToDismissBoxState(
-        confirmValueChange = { value ->
-            if (value == SwipeToDismissBoxValue.EndToStart) {
-                onSkip()
-                true
-            } else {
-                false
-            }
-        }
-    )
-
-    SwipeToDismissBox(
-        state = dismissState,
-        enableDismissFromStartToEnd = false,
-        enableDismissFromEndToStart = !isBusy,
-        backgroundContent = {
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(PanelShape)
-                    .background(MaterialTheme.colorScheme.tertiary)
-                    .padding(horizontal = 20.dp),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    Icons.Filled.SkipNext,
-                    contentDescription = "Skip this job",
-                    tint = MaterialTheme.colorScheme.onTertiary
-                )
-            }
-        }
+    Card(
+        onClick = onOpen,
+        shape = PanelShape,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+            contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+        ),
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Card(
-            onClick = onOpen,
-            shape = PanelShape,
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                contentColor = MaterialTheme.colorScheme.onTertiaryContainer
-            ),
-            modifier = Modifier.fillMaxWidth()
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+            Text(
+                job.title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                TimeBucketBadge(minutes = context?.remainingMinutes ?: job.estimatedMinutes)
+                if (job.category.isNotBlank()) CategoryBadge(category = job.category)
+                job.recurrenceDays?.let { InfoBadge(text = formatRecurrenceInterval(it)) }
+            }
+            if (context?.parentTitle != null) {
                 Text(
-                    job.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 2,
+                    "Part of: ${context.parentTitle}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    TimeBucketBadge(minutes = context?.remainingMinutes ?: job.estimatedMinutes)
-                    if (job.category.isNotBlank()) CategoryBadge(category = job.category)
-                    job.recurrenceDays?.let { InfoBadge(text = formatRecurrenceInterval(it)) }
-                }
-                if (context?.parentTitle != null) {
-                    Text(
-                        "Part of: ${context.parentTitle}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onTertiaryContainer,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                if (context != null && context.subtaskTotal > 0) {
-                    Text(
-                        "${context.subtaskDone}/${context.subtaskTotal} subtasks done · ${formatMinutes(context.remainingMinutes ?: job.estimatedMinutes)} left",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onTertiaryContainer,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                Button(
-                    onClick = onDone,
-                    enabled = !isBusy,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.tertiary,
-                        contentColor = MaterialTheme.colorScheme.onTertiary
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(40.dp)
-                ) {
-                    Text("Mark done", style = MaterialTheme.typography.labelLarge)
-                }
+            }
+            if (context != null && context.subtaskTotal > 0) {
+                Text(
+                    "${context.subtaskDone}/${context.subtaskTotal} subtasks done · ${formatMinutes(context.remainingMinutes ?: job.estimatedMinutes)} left",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Button(
+                onClick = onDone,
+                enabled = !isBusy,
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.tertiary,
+                    contentColor = MaterialTheme.colorScheme.onTertiary
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(40.dp)
+            ) {
+                Text("Mark done", style = MaterialTheme.typography.labelLarge)
             }
         }
     }
 }
+
