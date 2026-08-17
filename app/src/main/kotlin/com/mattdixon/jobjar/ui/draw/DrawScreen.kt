@@ -121,6 +121,15 @@ fun DrawScreen(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
+                // The screen's header (jar + picker panel + button) is fixed, but the results
+                // below it can range from one card to ten - rather than squeezing that into
+                // whatever sliver of space happens to be left under the header (which is what a
+                // weight(1f) region does, and reads as "barely see anything"), the whole page is
+                // one scroll region. That's also the only sound option in Compose terms: a
+                // verticalScroll() container measures its content with unbounded height, so a
+                // weight()ed child inside it isn't just visually cramped, it's not a supported
+                // combination in the first place.
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -152,46 +161,40 @@ fun DrawScreen(
             // wholesale state change and crossfade the entire batch - only empty<->populated
             // transitions animate. The content lambda still reads state.drawnJobs live on every
             // recomposition regardless of whether the crossfade itself re-triggers.
-            Box(
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                contentAlignment = Alignment.TopCenter
-            ) {
-                AnimatedContent(
-                    targetState = state.drawnJobs.isNotEmpty(),
-                    transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(120)) },
-                    label = "drawn-jobs"
-                ) { hasDrawnJobs ->
-                    when {
-                        hasDrawnJobs -> DrawnJobsBatch(
-                            entries = state.drawnJobs,
-                            showBudgetSummary = !state.longJobsOnly && state.batchSize != DrawBatchSize.ONE,
-                            availableMinutes = state.availableMinutes,
-                            remainingMinutes = state.remainingMinutesAfterDraw,
-                            isBusy = state.isDrawing,
-                            onOpen = { jobId -> onOpenJob(jobId) },
-                            onDone = { jobId ->
-                                val entry = state.drawnJobs.find { it.job.id == jobId }
-                                val hasOpenSubtasks = entry?.context != null &&
-                                    entry.context.subtaskDone < entry.context.subtaskTotal
-                                if (hasOpenSubtasks) {
-                                    forceCompleteJobId = jobId
-                                } else {
-                                    viewModel.completeJob(jobId)
-                                }
-                            },
-                            onSkipJob = { jobId -> viewModel.skipJob(jobId) },
-                            onSkipAll = { viewModel.draw(excludeCurrent = true) },
-                            modifier = Modifier.fillMaxSize()
-                        )
-                        state.noMatchFound -> EmptyStateText(
-                            if (state.longJobsOnly) {
-                                "Nothing needs ${formatMinutes(LONG_JOB_MINUTES)}+ yet. Try a shorter time, or add a bigger job."
+            AnimatedContent(
+                targetState = state.drawnJobs.isNotEmpty(),
+                transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(120)) },
+                label = "drawn-jobs"
+            ) { hasDrawnJobs ->
+                when {
+                    hasDrawnJobs -> DrawnJobsBatch(
+                        entries = state.drawnJobs,
+                        showBudgetSummary = !state.longJobsOnly && state.batchSize != DrawBatchSize.ONE,
+                        availableMinutes = state.availableMinutes,
+                        remainingMinutes = state.remainingMinutesAfterDraw,
+                        isBusy = state.isDrawing,
+                        onOpen = { jobId -> onOpenJob(jobId) },
+                        onDone = { jobId ->
+                            val entry = state.drawnJobs.find { it.job.id == jobId }
+                            val hasOpenSubtasks = entry?.context != null &&
+                                entry.context.subtaskDone < entry.context.subtaskTotal
+                            if (hasOpenSubtasks) {
+                                forceCompleteJobId = jobId
                             } else {
-                                "No jobs fit that time and category. Try a longer time or add more jobs."
+                                viewModel.completeJob(jobId)
                             }
-                        )
-                        else -> EmptyStateText("Set your time and tap \"Draw a job\" to pick something from the jar.")
-                    }
+                        },
+                        onSkipJob = { jobId -> viewModel.skipJob(jobId) },
+                        onSkipAll = { viewModel.draw(excludeCurrent = true) }
+                    )
+                    state.noMatchFound -> EmptyStateText(
+                        if (state.longJobsOnly) {
+                            "Nothing needs ${formatMinutes(LONG_JOB_MINUTES)}+ yet. Try a shorter time, or add a bigger job."
+                        } else {
+                            "No jobs fit that time and category. Try a longer time or add more jobs."
+                        }
+                    )
+                    else -> EmptyStateText("Set your time and tap \"Draw a job\" to pick something from the jar.")
                 }
             }
         }
@@ -382,7 +385,15 @@ private fun PickerPanel(
                         interactionSource = remember { MutableInteractionSource() },
                         thumbSize = DpSize(16.dp, 16.dp)
                     )
-                }
+                },
+                // The default inactive-track color derives from surfaceVariant, which in light
+                // theme is nearly the same tone as this panel's own card background - the track
+                // all but disappears. outlineVariant has real contrast against the card in both
+                // themes, so the unfilled part of the bar stays visibly a bar.
+                colors = SliderDefaults.colors(
+                    inactiveTrackColor = MaterialTheme.colorScheme.outlineVariant,
+                    disabledInactiveTrackColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+                )
             )
 
             // "4+ hrs" always draws exactly one job (there's no remaining budget to keep
@@ -487,14 +498,12 @@ private fun EmptyStateText(text: String) {
 /**
  * The current draw's results: an optional "how much budget is left" summary (only worth
  * showing when more than one job was actually requested - for the default single-job draw it'd
- * just be noise), a small swipe hint, a scrollable list of job cards that claims whatever
- * vertical space is actually left on screen (via `weight(1f)` on the caller's [Box] and again
- * here), and one "Skip all" button pinned below it that redraws the whole batch. Scaling to real
- * available space - rather than a fixed max height - is what makes the list "scale to fit the
- * jobs nicely" instead of only ever showing a couple of cards' worth before scrolling. Each card
- * is wrapped in `key(entry.job.id)` so swiping one away (see [BatchJobCard]) gets a fresh
- * swipe-state instance for whatever replaces it, instead of accidentally inheriting a
- * half-swiped state from the slot it used to occupy.
+ * just be noise), a small swipe hint, each card at its natural size (no inner scroll region or
+ * height cap of its own - the whole screen is the one scroll owner, see [DrawScreen]), and one
+ * "Skip all" button after the last card that redraws the whole batch. Each card is wrapped in
+ * `key(entry.job.id)` so swiping one away (see [BatchJobCard]) gets a fresh swipe-state instance
+ * for whatever replaces it, instead of accidentally inheriting a half-swiped state from the slot
+ * it used to occupy.
  */
 @Composable
 private fun DrawnJobsBatch(
@@ -506,10 +515,9 @@ private fun DrawnJobsBatch(
     onOpen: (Long) -> Unit,
     onDone: (Long) -> Unit,
     onSkipJob: (Long) -> Unit,
-    onSkipAll: () -> Unit,
-    modifier: Modifier = Modifier
+    onSkipAll: () -> Unit
 ) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (showBudgetSummary) {
             Text(
                 "${entries.size} job(s) · ${formatMinutes(remainingMinutes)} left of ${formatMinutes(availableMinutes)}",
@@ -522,23 +530,15 @@ private fun DrawnJobsBatch(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            entries.forEach { entry ->
-                key(entry.job.id) {
-                    BatchJobCard(
-                        entry = entry,
-                        isBusy = isBusy,
-                        onOpen = { onOpen(entry.job.id) },
-                        onDone = { onDone(entry.job.id) },
-                        onSkip = { onSkipJob(entry.job.id) }
-                    )
-                }
+        entries.forEach { entry ->
+            key(entry.job.id) {
+                BatchJobCard(
+                    entry = entry,
+                    isBusy = isBusy,
+                    onOpen = { onOpen(entry.job.id) },
+                    onDone = { onDone(entry.job.id) },
+                    onSkip = { onSkipJob(entry.job.id) }
+                )
             }
         }
         OutlinedButton(
