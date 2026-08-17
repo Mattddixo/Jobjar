@@ -374,6 +374,15 @@ private fun EmptyStateText(text: String) {
     )
 }
 
+/**
+ * The whole card is tappable to open the job's detail page (notes, subtasks, everything) - the
+ * dedicated "View details" button that used to sit here was redundant with that and just ate
+ * space. Skip/Mark done stay as explicit buttons since those are the two actions you'd actually
+ * take *without* leaving this screen; opening details is a "step away from the jar" action, so
+ * it gets the plain-tap affordance instead of competing for button space. Notes are deliberately
+ * left off this card (available on the detail page) so a long description can't push the card -
+ * and with it, the buttons - past what fits on screen.
+ */
 @Composable
 private fun DrawnJobCard(
     job: Job,
@@ -383,7 +392,7 @@ private fun DrawnJobCard(
     onDone: () -> Unit,
     onSkip: () -> Unit
 ) {
-    Card(shape = PanelShape, modifier = Modifier.fillMaxWidth()) {
+    Card(onClick = onOpen, shape = PanelShape, modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -418,14 +427,6 @@ private fun DrawnJobCard(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            if (job.notes.isNotBlank()) {
-                Text(
-                    job.notes,
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth()
@@ -450,15 +451,6 @@ private fun DrawnJobCard(
                 ) {
                     Text("Mark done", style = MaterialTheme.typography.labelLarge)
                 }
-            }
-            OutlinedButton(
-                onClick = onOpen,
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(40.dp)
-            ) {
-                Text("View details", style = MaterialTheme.typography.labelLarge)
             }
         }
     }
