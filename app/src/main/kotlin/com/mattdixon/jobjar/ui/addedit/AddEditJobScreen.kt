@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -36,6 +37,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mattdixon.jobjar.data.JobRepository
@@ -48,6 +50,10 @@ import com.mattdixon.jobjar.util.formatRecurrenceInterval
 
 private val QUICK_DURATIONS = listOf(5, 15, 30, 45, 60, 90, 120, 180)
 private val RECURRENCE_PRESETS = listOf(1, 7, 14, 30)
+
+/** Generous enough for a real task phrase, short enough to always stay tidy in a list row, a
+ * badge-heavy card, or a detail-screen header - the places a title actually has to fit. */
+private const val MAX_TITLE_LENGTH = 80
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -103,10 +109,17 @@ fun AddEditJobScreen(
         ) {
             OutlinedTextField(
                 value = state.title,
-                onValueChange = viewModel::setTitle,
+                onValueChange = { if (it.length <= MAX_TITLE_LENGTH) viewModel.setTitle(it) },
                 label = { Text("Title") },
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                supportingText = {
+                    Text(
+                        "${state.title.length}/$MAX_TITLE_LENGTH",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             )
 
             OutlinedTextField(
@@ -115,7 +128,8 @@ fun AddEditJobScreen(
                 label = { Text("Notes (optional)") },
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 2,
-                maxLines = 4
+                maxLines = 4,
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences)
             )
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -159,7 +173,8 @@ fun AddEditJobScreen(
                     onValueChange = viewModel::setCategory,
                     label = { Text("e.g. Chores, Work, Errands") },
                     modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words)
                 )
                 if (categories.isNotEmpty()) {
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
