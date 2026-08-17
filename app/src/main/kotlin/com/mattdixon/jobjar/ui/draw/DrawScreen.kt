@@ -279,6 +279,7 @@ private fun JarGlyph(fraction: Float, modifier: Modifier = Modifier) {
  * to a single dropdown chip - showing the current value doubles as the control that changes it -
  * instead of a whole row of preset chips each, which is what made this panel tall to begin with.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PickerPanel(
     state: DrawUiState,
