@@ -49,7 +49,6 @@
     <string name="filter_repeating">Repeating</string>
     <string name="filter_category_default">Category</string>
     <string name="filter_category_selected_count">Category · %1$d</string>
-    <string name="filter_clear">Clear filters</string>
     <string name="cd_more_options">More options</string>
     <string name="menu_open">Open</string>
     <string name="dialog_delete_job_title">Delete job?</string>

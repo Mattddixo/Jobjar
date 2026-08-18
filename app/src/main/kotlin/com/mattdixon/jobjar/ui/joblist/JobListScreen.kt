@@ -165,84 +165,62 @@ fun JobListScreen(
             }
 
             // Every filter - current and future - lives in this one horizontally-scrollable
-            // row instead of each getting its own dedicated widget/row. Repeating is a plain
-            // toggle chip; Category opens a multi-select dropdown from its chip, and always
-            // shows a fixed "Category · N" label rather than the actual selected names - the
-            // label's width can't grow with the selection, which is what used to let a few
-            // categories push the row's other content past the edge of the screen. "Clear" is
-            // a fixed icon button anchored outside the scrollable row entirely (not one more
-            // item competing for scroll space) so it can't scroll out of view the moment it
-            // appears, however many chips are ahead of it.
-            Row(
+            // row instead of each getting its own dedicated widget/row. Repeating and In
+            // Progress are plain toggle chips, cleared the same way they're set - tap again.
+            // Category opens a multi-select dropdown from its chip and always shows a fixed
+            // "Category · N" label rather than the actual selected names, so the chip's own
+            // width can never grow with the selection; each category clears the same way it's
+            // set too - re-tick its checkbox in the dropdown. There's deliberately no separate
+            // "clear all" control living in this row: that was a second element competing for
+            // the same scrollable space, which is exactly what caused it to visually collide
+            // with the Category chip.
+            LazyRow(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+                contentPadding = PaddingValues(horizontal = ScreenHPadding),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.md)
             ) {
-                LazyRow(
-                    modifier = Modifier.weight(1f),
-                    // The fixed Clear button (below) already carries its own end inset via its
-                    // touch target, so this only needs a small gap before it when it's showing;
-                    // without it, the row needs the screen's normal trailing inset itself.
-                    contentPadding = PaddingValues(
-                        start = ScreenHPadding,
-                        end = if (state.hasActiveFilters) Spacing.xxs else ScreenHPadding
-                    ),
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.md)
-                ) {
+                item {
+                    FilterChip(
+                        selected = state.showRepeatingOnly,
+                        onClick = { viewModel.setShowRepeatingOnly(!state.showRepeatingOnly) },
+                        leadingIcon = { Icon(Icons.Filled.Repeat, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                        label = { Text(stringResource(R.string.filter_repeating)) }
+                    )
+                }
+                item {
+                    FilterChip(
+                        selected = state.showInProgressOnly,
+                        onClick = { viewModel.setShowInProgressOnly(!state.showInProgressOnly) },
+                        leadingIcon = { Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                        label = { Text(stringResource(R.string.filter_in_progress)) }
+                    )
+                }
+                if (state.categories.isNotEmpty()) {
                     item {
-                        FilterChip(
-                            selected = state.showRepeatingOnly,
-                            onClick = { viewModel.setShowRepeatingOnly(!state.showRepeatingOnly) },
-                            leadingIcon = { Icon(Icons.Filled.Repeat, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                            label = { Text(stringResource(R.string.filter_repeating)) }
-                        )
-                    }
-                    item {
-                        FilterChip(
-                            selected = state.showInProgressOnly,
-                            onClick = { viewModel.setShowInProgressOnly(!state.showInProgressOnly) },
-                            leadingIcon = { Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                            label = { Text(stringResource(R.string.filter_in_progress)) }
-                        )
-                    }
-                    if (state.categories.isNotEmpty()) {
-                        item {
-                            Box {
-                                FilterChip(
-                                    selected = state.selectedCategories.isNotEmpty(),
-                                    onClick = { categoryMenuExpanded = true },
-                                    label = { Text(categoryChipLabel(state.selectedCategories.size)) },
-                                    trailingIcon = {
-                                        Icon(Icons.Filled.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    }
-                                )
-                                DropdownMenu(expanded = categoryMenuExpanded, onDismissRequest = { categoryMenuExpanded = false }) {
-                                    state.categories.forEach { category ->
-                                        DropdownMenuItem(
-                                            text = { Text(category) },
-                                            leadingIcon = {
-                                                Checkbox(
-                                                    checked = category in state.selectedCategories,
-                                                    onCheckedChange = null
-                                                )
-                                            },
-                                            onClick = { viewModel.toggleCategory(category) }
-                                        )
-                                    }
+                        Box {
+                            FilterChip(
+                                selected = state.selectedCategories.isNotEmpty(),
+                                onClick = { categoryMenuExpanded = true },
+                                label = { Text(categoryChipLabel(state.selectedCategories.size)) },
+                                trailingIcon = {
+                                    Icon(Icons.Filled.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp))
+                                }
+                            )
+                            DropdownMenu(expanded = categoryMenuExpanded, onDismissRequest = { categoryMenuExpanded = false }) {
+                                state.categories.forEach { category ->
+                                    DropdownMenuItem(
+                                        text = { Text(category) },
+                                        leadingIcon = {
+                                            Checkbox(
+                                                checked = category in state.selectedCategories,
+                                                onCheckedChange = null
+                                            )
+                                        },
+                                        onClick = { viewModel.toggleCategory(category) }
+                                    )
                                 }
                             }
                         }
-                    }
-                }
-                if (state.hasActiveFilters) {
-                    IconButton(
-                        onClick = { viewModel.clearFilters() },
-                        modifier = Modifier.padding(end = Spacing.xs)
-                    ) {
-                        Icon(
-                            Icons.Filled.Close,
-                            contentDescription = stringResource(R.string.filter_clear),
-                            tint = MaterialTheme.colorScheme.error
-                        )
                     }
                 }
             }

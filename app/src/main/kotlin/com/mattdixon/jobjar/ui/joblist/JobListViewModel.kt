@@ -199,13 +199,6 @@ class JobListViewModel(private val repository: JobRepository) : ViewModel() {
     fun setSortOrder(value: SortOrder) { sortOrder.value = value }
     fun setSearchQuery(value: String) { searchQuery.value = value }
 
-    /** Resets every *narrowing* filter (category, repeating, in progress) - deliberately leaves Active/Completed and sort alone, since those aren't "filters" in the same sense. */
-    fun clearFilters() {
-        selectedCategories.value = emptySet()
-        showRepeatingOnly.value = false
-        showInProgressOnly.value = false
-    }
-
     fun toggleDone(job: Job) {
         viewModelScope.launch { repository.toggleDone(job) }
     }
