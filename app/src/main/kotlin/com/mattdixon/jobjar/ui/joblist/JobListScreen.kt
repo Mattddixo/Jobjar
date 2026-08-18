@@ -20,6 +20,8 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
@@ -258,6 +260,7 @@ fun JobListScreen(
                     items(state.items, key = { it.job.id }) { item ->
                         JobRow(
                             item = item,
+                            isExpanded = item.job.id in state.expandedParentIds,
                             onClick = { onOpenJob(item.job.id) },
                             onToggleDone = {
                                 val hasOpenSubtasks = item.subtaskTotal > 0 && item.subtaskDone < item.subtaskTotal
@@ -268,7 +271,8 @@ fun JobListScreen(
                                 }
                             },
                             onToggleInProgress = { viewModel.toggleInProgress(item.job) },
-                            onDeleteRequest = { itemPendingDelete = item }
+                            onDeleteRequest = { itemPendingDelete = item },
+                            onToggleExpanded = { viewModel.toggleExpanded(item.job.id) }
                         )
                     }
                 }
@@ -379,10 +383,12 @@ private fun SearchTopBar(
 @Composable
 private fun JobRow(
     item: JobListItem,
+    isExpanded: Boolean,
     onClick: () -> Unit,
     onToggleDone: () -> Unit,
     onToggleInProgress: () -> Unit,
-    onDeleteRequest: () -> Unit
+    onDeleteRequest: () -> Unit,
+    onToggleExpanded: () -> Unit
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     val job = item.job
@@ -465,6 +471,21 @@ private fun JobRow(
                         item.dueStatus,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            // Only a parent with subtasks needs a way to reveal/hide its group - groups default
+            // to collapsed, so this is the sole way in besides an active search/filter that
+            // auto-reveals matches. Sits inside the same Card(onClick = ...) as the overflow
+            // menu icon below it and relies on the same nested-clickable isolation to avoid also
+            // triggering the row's own navigate-to-detail click.
+            if (item.subtaskTotal > 0) {
+                IconButton(onClick = onToggleExpanded) {
+                    Icon(
+                        if (isExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                        contentDescription = stringResource(
+                            if (isExpanded) R.string.cd_collapse_subtasks else R.string.cd_expand_subtasks
+                        )
                     )
                 }
             }

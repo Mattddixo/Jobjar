@@ -77,12 +77,17 @@ platform rather than transliterated line-by-line.
    scattered wherever the chosen sort would otherwise land them: the sort
    (time/priority/newest/category) orders the top-level jobs, and each
    parent's subtasks always sort immediately beneath it, in the order they
-   were added, indented to mark them as nested. A subtask whose own parent
-   doesn't currently match the filter (e.g. only the subtask matches an
-   **In Progress** filter or a search term) has no group to join, so it
-   just shows on its own, same as any top-level entry - it still carries
-   its "Part of:" caption either way. A subtask row also shows what it's
-   still waiting on, if it's soft-blocked. Filter by category, by
+   were added, indented to mark them as nested. Each parent's subtask group
+   starts **collapsed**, with a chevron to expand or collapse it on demand,
+   so a long list of subtasks doesn't bury the surrounding top-level jobs;
+   an active category/Repeating/In Progress filter or search term
+   auto-reveals a matching parent's subtasks regardless of its collapsed
+   state, so a search hit is never hidden with no way to reach it. A
+   subtask whose own parent doesn't currently match the filter (e.g. only
+   the subtask matches an **In Progress** filter or a search term) has no
+   group to join, so it just shows on its own, same as any top-level entry
+   - it still carries its "Part of:" caption either way. A subtask row also
+   shows what it's still waiting on, if it's soft-blocked. Filter by category, by
    **Repeating**, or by **In Progress**, toggle Active/Completed, sort by
    time/priority/newest/category, tap into a job to view or edit it, or use
    its overflow menu to start it, move it back to the jar, or delete it.

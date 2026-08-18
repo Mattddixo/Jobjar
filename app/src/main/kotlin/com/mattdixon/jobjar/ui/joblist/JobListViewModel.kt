@@ -55,7 +55,9 @@ data class JobListUiState(
     val showRepeatingOnly: Boolean = false,
     val showInProgressOnly: Boolean = false,
     val sortOrder: SortOrder = SortOrder.NEWEST,
-    val searchQuery: String = ""
+    val searchQuery: String = "",
+    /** Parent job IDs whose subtask group is currently expanded. Collapsed (not present) by default. */
+    val expandedParentIds: Set<Long> = emptySet()
 ) {
     /** Whether any *narrowing* filter (as opposed to the Active/Completed view or sort) is on - drives the "Clear" chip. */
     val hasActiveFilters: Boolean get() = selectedCategories.isNotEmpty() || showRepeatingOnly || showInProgressOnly
@@ -85,6 +87,7 @@ class JobListViewModel(private val repository: JobRepository) : ViewModel() {
     private val showInProgressOnly = MutableStateFlow(false)
     private val sortOrder = MutableStateFlow(SortOrder.NEWEST)
     private val searchQuery = MutableStateFlow("")
+    private val expandedParentIds = MutableStateFlow<Set<Long>>(emptySet())
 
     // kotlinx.coroutines' typed combine() overloads only go up to 5 flows, and a vararg
     // combine() would require every flow to share one type - not possible here with a mix of
@@ -113,8 +116,9 @@ class JobListViewModel(private val repository: JobRepository) : ViewModel() {
     val uiState: StateFlow<JobListUiState> = combine(
         filters,
         repository.allJobsFlat,
-        repository.categories
-    ) { currentFilters, allFlat, categories ->
+        repository.categories,
+        expandedParentIds
+    ) { currentFilters, allFlat, categories, expanded ->
         val allById = allFlat.associateBy { it.id }
         val subtasksByParent = allFlat.filter { it.parentId != null }.groupBy { it.parentId }
 
@@ -189,8 +193,22 @@ class JobListViewModel(private val repository: JobRepository) : ViewModel() {
             it.job.parentId == null || it.job.parentId !in visibleParentIds
         }
 
+        // Subtask groups default to collapsed, but a search/filter that's actively narrowing the
+        // list should still surface a matching subtask even if its parent's group hasn't been
+        // manually expanded - otherwise a search hit could be hidden with no visible way to reach
+        // it. Plain narrowing by Active/Completed doesn't count, since every list view has that.
+        val hasActiveNarrowing = currentFilters.categories.isNotEmpty() ||
+            currentFilters.repeatingOnly ||
+            currentFilters.inProgressOnly ||
+            query.isNotBlank()
+
         val sorted = sortTopLevel(topLevelAndStandalone).flatMap { entry ->
-            listOf(entry) + subtasksByVisibleParent[entry.job.id].orEmpty()
+            val subs = subtasksByVisibleParent[entry.job.id].orEmpty()
+            if (subs.isEmpty() || hasActiveNarrowing || entry.job.id in expanded) {
+                listOf(entry) + subs
+            } else {
+                listOf(entry)
+            }
         }
 
         JobListUiState(
@@ -201,7 +219,8 @@ class JobListViewModel(private val repository: JobRepository) : ViewModel() {
             showRepeatingOnly = currentFilters.repeatingOnly,
             showInProgressOnly = currentFilters.inProgressOnly,
             sortOrder = currentFilters.sort,
-            searchQuery = currentFilters.searchQuery
+            searchQuery = currentFilters.searchQuery,
+            expandedParentIds = expanded
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), JobListUiState())
 
@@ -217,6 +236,12 @@ class JobListViewModel(private val repository: JobRepository) : ViewModel() {
     fun setShowInProgressOnly(value: Boolean) { showInProgressOnly.value = value }
     fun setSortOrder(value: SortOrder) { sortOrder.value = value }
     fun setSearchQuery(value: String) { searchQuery.value = value }
+
+    fun toggleExpanded(parentId: Long) {
+        expandedParentIds.value = expandedParentIds.value.let {
+            if (parentId in it) it - parentId else it + parentId
+        }
+    }
 
     fun toggleDone(job: Job) {
         viewModelScope.launch { repository.toggleDone(job) }

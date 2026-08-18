@@ -14,6 +14,8 @@
     <string name="theme_toggle_light">Light</string>
     <string name="theme_toggle_dark">Dark</string>
     <string name="cd_add_subtask">Add subtask</string>
+    <string name="cd_expand_subtasks">Show subtasks</string>
+    <string name="cd_collapse_subtasks">Hide subtasks</string>
     <string name="cd_mark_done">Mark done</string>
     <string name="cd_mark_not_done">Mark not done</string>
     <string name="cd_back">Back</string>
