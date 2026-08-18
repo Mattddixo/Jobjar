@@ -50,16 +50,25 @@ platform rather than transliterated line-by-line.
    draw (you can't pull something you're already working on) and from the
    jar's headline count, but it still shows under the Jobs list's Active
    tab (it's obviously not *done*) with its own "In progress" badge, and
-   can be filtered to on its own via the **In Progress** chip. Starting is
-   reversible any time via **Move back to jar** on the same menu/button it
-   started from; there's no cap on how many jobs can be in progress at
-   once, matching the jar's own batch draws already surfacing several jobs
-   for one sitting. It's tracked as its own flag (`Job.isInProgress`)
-   rather than folded into `isDone` as a three-way status, specifically so
-   it doesn't have to touch the already-correct `isDone` state machine
-   (repeating-job cycling, parent auto-complete/reopen) - every path that
-   marks a job done clears it, and that's the only invariant it has to
-   maintain.
+   can be filtered to on its own via the **In Progress** chip. Starting a
+   top-level job also excludes its own not-done subtasks from the random
+   draw for as long as it stays in progress - the same "excluded from the
+   draw, still fully completable by hand" treatment a dependency-blocked
+   subtask already gets, and for a similar reason: once you've committed
+   to the whole project, the jar shouldn't hand you a random piece of it
+   as a separate draw too. That exclusion is purely computed from the
+   parent's own in-progress flag (`Job.isParentAvailable`), not a
+   cascading write to every subtask, so it needs no separate bookkeeping
+   and reverses itself the instant the parent is moved back to the jar.
+   Starting anything is reversible any time via **Move back to jar** on
+   the same menu/button it started from; there's no cap on how many jobs
+   can be in progress at once, matching the jar's own batch draws already
+   surfacing several jobs for one sitting. It's tracked as its own flag
+   (`Job.isInProgress`) rather than folded into `isDone` as a three-way
+   status, specifically so it doesn't have to touch the already-correct
+   `isDone` state machine (repeating-job cycling, parent auto-complete/
+   reopen) - every path that marks a job done clears it, and that's the
+   only invariant it has to maintain.
 4. The **Jobs** tab is the full list — every job *and* every subtask, since
    a subtask is just as independently drawable/startable/completable as a
    top-level job and hiding it here (visible only by drilling into its

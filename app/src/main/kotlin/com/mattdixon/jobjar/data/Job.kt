@@ -81,6 +81,16 @@ fun Job.isUnblocked(siblingsById: Map<Long, Job>): Boolean {
 }
 
 /**
+ * True unless this subtask's own parent is currently in progress - the same "excluded from the
+ * random draw, still fully completable by hand" treatment a dependency-blocked subtask already
+ * gets (see [isUnblocked]), for the same reason: if you've committed to working through the
+ * overall project, the jar shouldn't also hand you a random piece of it as its own separate
+ * draw. [parent] is looked up by the caller (typically from a full job map by id); this only
+ * answers the question given that lookup, same division of responsibility as [isUnblocked].
+ */
+fun Job.isParentAvailable(parent: Job?): Boolean = parent?.isInProgress != true
+
+/**
  * Which of [siblings] (subtasks sharing the same parent) [excludingSelfId] could validly depend
  * on, without creating a cycle. A candidate is excluded if it already (transitively) depends on
  * the subtask being edited, since linking to it would close a loop.

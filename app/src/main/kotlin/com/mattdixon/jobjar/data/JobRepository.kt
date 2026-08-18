@@ -158,10 +158,11 @@ class JobRepository(private val dao: JobDao) {
      * Eligibility is [Job.isAvailableToDraw], not just "not done": a repeating job that isn't
      * due yet is excluded even though it's technically not marked done, so the jar doesn't hand
      * you a chore ahead of its schedule; a job that's already [Job.isInProgress] is excluded too,
-     * so drawing again can't hand you something you're already working on. A subtask that's
-     * [Job.isUnblocked] = false (waiting on a linked sibling subtask) is excluded here too -
-     * that's the only place the link matters, since it's still fully completable by hand at any
-     * time.
+     * so drawing again can't hand you something you're already working on. A subtask is excluded
+     * two further ways, both only from this random pool - it stays fully completable by hand at
+     * any time regardless of either: [Job.isUnblocked] = false (waiting on a linked sibling
+     * subtask), or [Job.isParentAvailable] = false (its own parent is in progress - if you've
+     * committed to the whole project, the jar shouldn't hand you a random piece of it too).
      *
      * A top-level job with subtasks is matched by its *remaining* minutes (its own estimate
      * minus what completed subtasks already accounted for), so it becomes eligible for shorter
@@ -174,6 +175,7 @@ class JobRepository(private val dao: JobDao) {
      */
     suspend fun drawJob(maxMinutes: Int, category: String?, excludeIds: List<Long>, longOnly: Boolean = false): DrawPick? {
         val all = allJobsFlat.first()
+        val allById = all.associateBy { it.id }
         val subtasksByParent = all.filter { it.parentId != null }.groupBy { it.parentId }
         val subtasksById = subtasksByParent.values.flatten().associateBy { it.id }
 
@@ -182,6 +184,7 @@ class JobRepository(private val dao: JobDao) {
                 job.id !in excludeIds &&
                 (category == null || job.category == category) &&
                 (job.parentId == null || job.isUnblocked(subtasksById)) &&
+                (job.parentId == null || job.isParentAvailable(allById[job.parentId])) &&
                 minutesNeeded(job, subtasksByParent).let { needed ->
                     if (longOnly) needed >= LONG_JOB_MINUTES else needed <= maxMinutes
                 }
