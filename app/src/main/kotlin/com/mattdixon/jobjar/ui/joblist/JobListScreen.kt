@@ -6,11 +6,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -418,7 +417,6 @@ private fun JobRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(IntrinsicSize.Min)
                 .padding(rowPadding),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Spacing.lg)
@@ -453,7 +451,9 @@ private fun JobRow(
                 }
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                    modifier = Modifier.background(androidx.compose.ui.graphics.Color.Cyan.copy(alpha = 0.4f))
+                    modifier = Modifier
+                        .wrapContentHeight(unbounded = true)
+                        .background(androidx.compose.ui.graphics.Color.Cyan.copy(alpha = 0.4f))
                 ) {
                     if (job.isInProgress) InfoBadge(text = stringResource(R.string.badge_in_progress))
                     TimeBucketBadge(minutes = item.displayMinutes)
