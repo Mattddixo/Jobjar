@@ -144,6 +144,23 @@ only shows up for a 4-hour draw; knock out a 90-minute subtask and that
 same parent now also matches a 2.5-hour draw, alongside the parent itself
 and each remaining subtask, all as separate candidates in the jar.
 
+While a job's subtask list is still being built (on the add/edit screen,
+not the detail screen), `SubtasksSection` swaps its usual "remaining"
+line for an allocation summary instead - `estimatedMinutes − Σ(every
+subtask's minutes, done or not)`
+(`Job.kt#unallocatedMinutesOf`), a different question from remaining
+minutes above (which only counts unfinished work, so it can't tell you
+anything useful while every subtask you've just created is still
+undone). "1h 30m left to allocate · 3h total" while under, "Fully
+allocated · 3h total" at exactly zero, "Over by 30m · 3h total" once
+subtasks add up to more than the typed total - the cue to either trim a
+subtask or bump the total yourself, since this doesn't re-read the
+auto-grown value back into the form. A job at or above the 4-hour "4+
+hrs" threshold skips this framing entirely (there's no real ceiling to
+compare against for those) and just shows a running sum, "Subtasks so
+far: 2h 15m," matching how its own total is meant to emerge from the
+subtasks rather than the other way around.
+
 A parent auto-completes once every subtask is done; you can also mark it
 done manually at any point (a confirmation dialog warns if subtasks are
 still open, since they're left as-is, not force-completed). Deleting a

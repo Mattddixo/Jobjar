@@ -104,6 +104,10 @@
     <!-- Subtasks section (shared component) -->
     <string name="subtasks_done_count">%1$d/%2$d done</string>
     <string name="subtasks_empty_hint">Break this job into smaller pieces you can draw on their own.</string>
+    <string name="subtasks_allocation_under">%1$s left to allocate · %2$s total</string>
+    <string name="subtasks_allocation_exact">Fully allocated · %1$s total</string>
+    <string name="subtasks_allocation_over">Over by %1$s · %2$s total</string>
+    <string name="subtasks_allocation_running_total">Subtasks so far: %1$s</string>
 
     <!-- Stats screen -->
     <string name="stats_screen_title">Stats</string>

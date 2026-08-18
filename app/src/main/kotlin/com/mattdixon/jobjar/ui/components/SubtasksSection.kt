@@ -28,8 +28,10 @@ import androidx.compose.ui.res.stringResource
 import com.mattdixon.jobjar.R
 import com.mattdixon.jobjar.data.Job
 import com.mattdixon.jobjar.data.JobRepository
+import com.mattdixon.jobjar.data.LONG_JOB_MINUTES
 import com.mattdixon.jobjar.data.isUnblocked
 import com.mattdixon.jobjar.data.remainingMinutesOf
+import com.mattdixon.jobjar.data.unallocatedMinutesOf
 import com.mattdixon.jobjar.ui.theme.Spacing
 import com.mattdixon.jobjar.util.formatMinutes
 import kotlinx.coroutines.launch
@@ -49,7 +51,17 @@ fun SubtasksSection(
     parentEstimatedMinutes: Int,
     onOpenSubtask: (Long) -> Unit,
     onAddSubtask: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /**
+     * Swaps the usual "remaining of total" line (unfinished work left, meaningless while a
+     * subtask list is still being built - a freshly created subtask is never done, so that
+     * number would just sit at the full total the whole time) for an allocation summary instead:
+     * how much of the typed total these subtasks add up to so far. Meant for the add/edit screen
+     * while a job's subtask list is actively being sketched out; the detail screen leaves this
+     * false and keeps the done-work-remaining framing, which is what matters once a job's
+     * actually being worked.
+     */
+    showAllocationSummary: Boolean = false
 ) {
     val subtasksFlow = remember(repository, parentId) { repository.subtasksOf(parentId) }
     val subtasks by subtasksFlow.collectAsState(initial = emptyList())
@@ -78,12 +90,16 @@ fun SubtasksSection(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         } else {
-            val remaining = remainingMinutesOf(parentEstimatedMinutes, subtasks)
-            Text(
-                stringResource(R.string.label_remaining_of_total, formatMinutes(remaining), formatMinutes(parentEstimatedMinutes)),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            if (showAllocationSummary) {
+                AllocationSummary(estimatedMinutes = parentEstimatedMinutes, subtasks = subtasks)
+            } else {
+                val remaining = remainingMinutesOf(parentEstimatedMinutes, subtasks)
+                Text(
+                    stringResource(R.string.label_remaining_of_total, formatMinutes(remaining), formatMinutes(parentEstimatedMinutes)),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             val siblingsById = subtasks.associateBy { it.id }
             Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
                 subtasks.forEach { subtask ->
@@ -104,6 +120,29 @@ fun SubtasksSection(
             Text(stringResource(R.string.cd_add_subtask))
         }
     }
+}
+
+/**
+ * How much of the typed total these subtasks add up to so far. A job at or above
+ * [LONG_JOB_MINUTES] never had a firm target in the first place (see the "4+ hrs" duration
+ * option) - "left to allocate" or "over by" would imply a ceiling that doesn't really exist, so
+ * this just reports a running sum instead, no comparison to any total.
+ */
+@Composable
+private fun AllocationSummary(estimatedMinutes: Int, subtasks: List<Job>) {
+    val text = if (estimatedMinutes >= LONG_JOB_MINUTES) {
+        stringResource(R.string.subtasks_allocation_running_total, formatMinutes(subtasks.sumOf { it.estimatedMinutes }))
+    } else {
+        when (val unallocated = unallocatedMinutesOf(estimatedMinutes, subtasks)) {
+            0 -> stringResource(R.string.subtasks_allocation_exact, formatMinutes(estimatedMinutes))
+            else -> if (unallocated > 0) {
+                stringResource(R.string.subtasks_allocation_under, formatMinutes(unallocated), formatMinutes(estimatedMinutes))
+            } else {
+                stringResource(R.string.subtasks_allocation_over, formatMinutes(-unallocated), formatMinutes(estimatedMinutes))
+            }
+        }
+    }
+    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 /**

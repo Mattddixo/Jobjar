@@ -298,7 +298,8 @@ fun AddEditJobScreen(
                         parentId = savedId,
                         parentEstimatedMinutes = state.estimatedMinutes,
                         onOpenSubtask = onOpenSubtask,
-                        onAddSubtask = { onAddSubtask(savedId) }
+                        onAddSubtask = { onAddSubtask(savedId) },
+                        showAllocationSummary = true
                     )
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
