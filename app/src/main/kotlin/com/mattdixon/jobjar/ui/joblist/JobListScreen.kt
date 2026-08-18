@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -425,6 +426,7 @@ private fun JobRow(
             Column(
                 modifier = Modifier
                     .weight(1f)
+                    .background(androidx.compose.ui.graphics.Color.Red.copy(alpha = 0.3f))
                     .padding(vertical = Spacing.xs),
                 verticalArrangement = Arrangement.spacedBy(Spacing.xs)
             ) {
@@ -483,7 +485,10 @@ private fun JobRow(
             // menu icon below it and relies on the same nested-clickable isolation to avoid also
             // triggering the row's own navigate-to-detail click.
             if (item.subtaskTotal > 0) {
-                IconButton(onClick = onToggleExpanded) {
+                IconButton(
+                    onClick = onToggleExpanded,
+                    modifier = Modifier.background(androidx.compose.ui.graphics.Color.Blue.copy(alpha = 0.3f))
+                ) {
                     Icon(
                         if (isExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
                         contentDescription = stringResource(
@@ -492,7 +497,7 @@ private fun JobRow(
                     )
                 }
             }
-            Box {
+            Box(modifier = Modifier.background(androidx.compose.ui.graphics.Color.Green.copy(alpha = 0.3f))) {
                 IconButton(onClick = { menuExpanded = true }) {
                     Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.cd_more_options))
                 }
