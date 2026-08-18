@@ -386,7 +386,12 @@ private fun JobRow(
     var menuExpanded by remember { mutableStateOf(false) }
     val job = item.job
 
-    Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+    // A subtask row is inset from the screen edge - reinforcing that it belongs under the
+    // parent row directly above it (see JobListViewModel's grouping) rather than reading as
+    // just another independent top-level entry with a "Part of:" caption.
+    val indent = if (job.parentId != null) Spacing.xxl else 0.dp
+
+    Card(onClick = onClick, modifier = Modifier.fillMaxWidth().padding(start = indent)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()

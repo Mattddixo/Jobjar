@@ -166,12 +166,31 @@ class JobListViewModel(private val repository: JobRepository) : ViewModel() {
                     it.job.notes.contains(query, ignoreCase = true)
             }
 
-        val sorted = when (currentFilters.sort) {
-            SortOrder.TIME_ASC -> filtered.sortedBy { it.displayMinutes }
-            SortOrder.TIME_DESC -> filtered.sortedByDescending { it.displayMinutes }
-            SortOrder.PRIORITY -> filtered.sortedByDescending { it.job.priority.ordinal }
-            SortOrder.NEWEST -> filtered.sortedByDescending { it.job.createdAt }
-            SortOrder.CATEGORY -> filtered.sortedBy { it.job.category }
+        fun sortTopLevel(entries: List<JobListItem>): List<JobListItem> = when (currentFilters.sort) {
+            SortOrder.TIME_ASC -> entries.sortedBy { it.displayMinutes }
+            SortOrder.TIME_DESC -> entries.sortedByDescending { it.displayMinutes }
+            SortOrder.PRIORITY -> entries.sortedByDescending { it.job.priority.ordinal }
+            SortOrder.NEWEST -> entries.sortedByDescending { it.job.createdAt }
+            SortOrder.CATEGORY -> entries.sortedBy { it.job.category }
+        }
+
+        // Subtasks sort immediately under their own parent instead of scattering wherever the
+        // chosen sort would otherwise place them - that's the actual "messy" part of a flat list,
+        // not just the missing indent. A subtask whose own parent isn't in this filtered view
+        // (e.g. it matches In Progress or a search term but the parent doesn't) has no group to
+        // join, so it's treated like any other top-level entry for sorting purposes instead of
+        // being hidden or force-attached to an unrelated/invisible parent.
+        val visibleParentIds = filtered.filter { it.job.parentId == null }.mapTo(mutableSetOf()) { it.job.id }
+        val subtasksByVisibleParent = filtered
+            .filter { it.job.parentId != null && it.job.parentId in visibleParentIds }
+            .groupBy { it.job.parentId }
+            .mapValues { (_, subs) -> subs.sortedBy { it.job.createdAt } }
+        val topLevelAndStandalone = filtered.filter {
+            it.job.parentId == null || it.job.parentId !in visibleParentIds
+        }
+
+        val sorted = sortTopLevel(topLevelAndStandalone).flatMap { entry ->
+            listOf(entry) + subtasksByVisibleParent[entry.job.id].orEmpty()
         }
 
         JobListUiState(
