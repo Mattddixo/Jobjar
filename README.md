@@ -161,6 +161,14 @@ compare against for those) and just shows a running sum, "Subtasks so
 far: 2h 15m," matching how its own total is meant to emerge from the
 subtasks rather than the other way around.
 
+The same summary also shows on a subtask's own add/edit screen, right
+under its duration picker - the place you're actually choosing that
+subtask's time, not just the parent's subtask list further down. It's a
+live projection while you're there: the subtask being edited contributes
+whatever's currently selected above (not its last-saved value), so the
+number tracks the duration chips and custom-minutes field as you use
+them, updating before you've saved anything.
+
 A parent auto-completes once every subtask is done; you can also mark it
 done manually at any point (a confirmation dialog warns if subtasks are
 still open, since they're left as-is, not force-completed). Deleting a

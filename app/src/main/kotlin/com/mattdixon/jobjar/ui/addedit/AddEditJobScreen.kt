@@ -45,10 +45,12 @@ import com.mattdixon.jobjar.data.JobRepository
 import com.mattdixon.jobjar.data.LONG_JOB_MINUTES
 import com.mattdixon.jobjar.data.Priority
 import com.mattdixon.jobjar.data.subtasksAvailableAsDependency
+import com.mattdixon.jobjar.ui.components.AllocationSummary
 import com.mattdixon.jobjar.ui.components.SubtasksSection
 import com.mattdixon.jobjar.ui.theme.Spacing
 import com.mattdixon.jobjar.util.formatMinutes
 import com.mattdixon.jobjar.util.formatRecurrenceInterval
+import kotlinx.coroutines.flow.flowOf
 
 private val QUICK_DURATIONS = listOf(5, 15, 30, 45, 60, 90, 120, 180)
 private val RECURRENCE_PRESETS = listOf(1, 7, 14, 30)
@@ -72,6 +74,20 @@ fun AddEditJobScreen(
     )
     val state by viewModel.formState.collectAsState()
     val categories by repository.categories.collectAsState(initial = emptyList())
+
+    // Only meaningful for a subtask (state.parentId != null): its own parent, and every sibling
+    // sharing that parent. Hoisted here rather than fetched separately by each section that
+    // needs it (the live allocation summary next to the duration picker below, and the
+    // "Depends on" picker further down) - one subscription, not two.
+    val subtaskParentId = state.parentId
+    val parentJobFlow = remember(repository, subtaskParentId) {
+        subtaskParentId?.let { repository.jobById(it) } ?: flowOf(null)
+    }
+    val parentJob by parentJobFlow.collectAsState(initial = null)
+    val siblingsFlow = remember(repository, subtaskParentId) {
+        subtaskParentId?.let { repository.subtasksOf(it) } ?: flowOf(emptyList())
+    }
+    val siblings by siblingsFlow.collectAsState(initial = emptyList())
 
     LaunchedEffect(state.isSaved) {
         if (state.isSaved) onDone()
@@ -166,6 +182,20 @@ fun AddEditJobScreen(
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
+
+                // Only a subtask has a parent to allocate against. Live projection, not a
+                // straight sum of already-saved siblings: this subtask's own last-saved estimate
+                // (if it has one) is swapped out for whatever's currently typed above, so the
+                // summary tracks the duration picker as it's being used instead of only updating
+                // after a save.
+                val currentParent = parentJob
+                if (state.isLoaded && subtaskParentId != null && currentParent != null) {
+                    val otherSiblingsTotal = siblings.filter { it.id != state.id }.sumOf { it.estimatedMinutes }
+                    AllocationSummary(
+                        estimatedMinutes = currentParent.estimatedMinutes,
+                        subtasksTotalMinutes = otherSiblingsTotal + state.estimatedMinutes
+                    )
+                }
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
@@ -205,13 +235,12 @@ fun AddEditJobScreen(
             }
 
             // The opposite gate from below: only a subtask can depend on another subtask, and
-            // only among its own siblings (same parent).
-            val subtaskParentId = state.parentId
+            // only among its own siblings (same parent). subtaskParentId/siblings are the
+            // hoisted values from the top of this composable, shared with the allocation
+            // summary next to the duration picker above.
             if (state.isLoaded && subtaskParentId != null) {
                 HorizontalDivider()
 
-                val siblingsFlow = remember(repository, subtaskParentId) { repository.subtasksOf(subtaskParentId) }
-                val siblings by siblingsFlow.collectAsState(initial = emptyList())
                 val candidates = subtasksAvailableAsDependency(siblings, excludingSelfId = state.id)
 
                 Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {

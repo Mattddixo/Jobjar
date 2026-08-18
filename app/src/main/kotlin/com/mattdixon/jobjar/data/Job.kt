@@ -126,13 +126,16 @@ fun Job.remainingMinutes(subtasks: List<Job>): Int = remainingMinutesOf(estimate
 
 /**
  * How much of [estimatedMinutes] is still unspoken-for while *building* a job's subtask list -
- * [estimatedMinutes] minus every subtask's own estimate, done or not. Deliberately a different
- * question from [remainingMinutesOf] (which only counts unfinished work, for "how much is left
- * to actually do"): a freshly created subtask is never done, so that metric can't tell you
- * anything useful while you're still dividing up the time - this one can, and can go negative,
- * which is the point - it's the cue that the subtasks you've sketched out already add up to more
- * than the total you typed.
+ * [estimatedMinutes] minus [subtasksTotalMinutes] (every subtask's own estimate, done or not, or
+ * a live projection of that while one's still being edited). Deliberately a different question
+ * from [remainingMinutesOf] (which only counts unfinished work, for "how much is left to
+ * actually do"): a freshly created subtask is never done, so that metric can't tell you anything
+ * useful while you're still dividing up the time - this one can, and can go negative, which is
+ * the point - it's the cue that the subtasks you've sketched out already add up to more than the
+ * total you typed. Takes the sum directly rather than a `List<Job>` since the add/edit screen's
+ * own use of this needs to substitute a subtask's live in-progress estimate for its last-saved
+ * one, which isn't a real `Job` to sum over.
  */
-fun unallocatedMinutesOf(estimatedMinutes: Int, subtasks: List<Job>): Int =
-    estimatedMinutes - subtasks.sumOf { it.estimatedMinutes }
+fun unallocatedMinutesOf(estimatedMinutes: Int, subtasksTotalMinutes: Int): Int =
+    estimatedMinutes - subtasksTotalMinutes
 

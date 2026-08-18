@@ -91,7 +91,10 @@ fun SubtasksSection(
             )
         } else {
             if (showAllocationSummary) {
-                AllocationSummary(estimatedMinutes = parentEstimatedMinutes, subtasks = subtasks)
+                AllocationSummary(
+                    estimatedMinutes = parentEstimatedMinutes,
+                    subtasksTotalMinutes = subtasks.sumOf { it.estimatedMinutes }
+                )
             } else {
                 val remaining = remainingMinutesOf(parentEstimatedMinutes, subtasks)
                 Text(
@@ -123,17 +126,20 @@ fun SubtasksSection(
 }
 
 /**
- * How much of the typed total these subtasks add up to so far. A job at or above
- * [LONG_JOB_MINUTES] never had a firm target in the first place (see the "4+ hrs" duration
- * option) - "left to allocate" or "over by" would imply a ceiling that doesn't really exist, so
- * this just reports a running sum instead, no comparison to any total.
+ * How much of the typed total [subtasksTotalMinutes] worth of subtasks add up to so far. A job
+ * at or above [LONG_JOB_MINUTES] never had a firm target in the first place (see the "4+ hrs"
+ * duration option) - "left to allocate" or "over by" would imply a ceiling that doesn't really
+ * exist, so this just reports a running sum instead, no comparison to any total. Not private:
+ * also used directly by the add/edit screen next to the duration picker itself, where
+ * [subtasksTotalMinutes] is a live projection (every sibling subtask plus whatever's currently
+ * typed for the one being edited) rather than a straight sum of already-saved subtasks.
  */
 @Composable
-private fun AllocationSummary(estimatedMinutes: Int, subtasks: List<Job>) {
+fun AllocationSummary(estimatedMinutes: Int, subtasksTotalMinutes: Int) {
     val text = if (estimatedMinutes >= LONG_JOB_MINUTES) {
-        stringResource(R.string.subtasks_allocation_running_total, formatMinutes(subtasks.sumOf { it.estimatedMinutes }))
+        stringResource(R.string.subtasks_allocation_running_total, formatMinutes(subtasksTotalMinutes))
     } else {
-        when (val unallocated = unallocatedMinutesOf(estimatedMinutes, subtasks)) {
+        when (val unallocated = unallocatedMinutesOf(estimatedMinutes, subtasksTotalMinutes)) {
             0 -> stringResource(R.string.subtasks_allocation_exact, formatMinutes(estimatedMinutes))
             else -> if (unallocated > 0) {
                 stringResource(R.string.subtasks_allocation_under, formatMinutes(unallocated), formatMinutes(estimatedMinutes))
