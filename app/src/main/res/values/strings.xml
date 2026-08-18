@@ -34,6 +34,7 @@
     <string name="draw_section_how_many">HOW MANY</string>
     <string name="draw_section_category">CATEGORY</string>
     <string name="draw_category_any">Any</string>
+    <string name="draw_category_n_selected">%1$d categories</string>
     <string name="draw_no_match_long">Nothing needs %1$s+ yet. Try a shorter time, or add a bigger job.</string>
     <string name="draw_no_match_short">No jobs fit that time and category. Try a longer time or add more jobs.</string>
     <string name="draw_empty_prompt">Set your time and tap \"Draw a job\" to pick something from the jar.</string>

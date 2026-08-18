@@ -23,8 +23,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Shuffle
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -420,27 +418,25 @@ private fun PickerPanel(
                         // Same checkbox multiselect as the Jobs list's own Category filter,
                         // rather than the single-pick dropdown this used to be - drawing from
                         // more than one category at once ("Home or Errands tonight") is just as
-                        // reasonable a want here as it is when filtering that list. The chip's
-                        // own label stays "Any" regardless of selection - like the Jobs list's
-                        // chip, which never resizes with the picks - and a Badge carries the
-                        // count instead; there's already a "CATEGORY" section label to its left
-                        // in this row, so repeating the word on the chip itself would be redundant.
-                        BadgedBox(
-                            badge = {
-                                if (state.selectedCategories.isNotEmpty()) {
-                                    Badge { Text(state.selectedCategories.size.toString()) }
-                                }
-                            }
-                        ) {
-                            FilterChip(
-                                selected = state.selectedCategories.isNotEmpty(),
-                                onClick = { categoryMenuExpanded = true },
-                                label = { Text(stringResource(R.string.draw_category_any)) },
-                                trailingIcon = {
-                                    Icon(Icons.Filled.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp))
-                                }
-                            )
+                        // reasonable a want here as it is when filtering that list. Unlike the
+                        // Jobs list's fixed "Category" chip + count badge, this chip's label
+                        // stays dynamic (it already was, before multiselect): "Any" with nothing
+                        // picked, the category name itself with exactly one, or a plain count
+                        // once there's more than one - "Any" plus a badge number would have
+                        // directly contradicted each other, since "Any" means no restriction at all.
+                        val categoryLabel = when {
+                            state.selectedCategories.isEmpty() -> stringResource(R.string.draw_category_any)
+                            state.selectedCategories.size == 1 -> state.selectedCategories.first()
+                            else -> stringResource(R.string.draw_category_n_selected, state.selectedCategories.size)
                         }
+                        FilterChip(
+                            selected = state.selectedCategories.isNotEmpty(),
+                            onClick = { categoryMenuExpanded = true },
+                            label = { Text(categoryLabel) },
+                            trailingIcon = {
+                                Icon(Icons.Filled.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp))
+                            }
+                        )
                         DropdownMenu(expanded = categoryMenuExpanded, onDismissRequest = { categoryMenuExpanded = false }) {
                             state.categories.forEach { category ->
                                 DropdownMenuItem(
