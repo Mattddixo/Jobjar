@@ -173,7 +173,7 @@ class JobRepository(private val dao: JobDao) {
      * ([DrawPick.minutesUsed]) - the caller (multi-job batch draws) needs that to decrement a
      * running budget between picks without duplicating the parent-vs-subtask minutes logic.
      */
-    suspend fun drawJob(maxMinutes: Int, category: String?, excludeIds: List<Long>, longOnly: Boolean = false): DrawPick? {
+    suspend fun drawJob(maxMinutes: Int, categories: Set<String>, excludeIds: List<Long>, longOnly: Boolean = false): DrawPick? {
         val all = allJobsFlat.first()
         val allById = all.associateBy { it.id }
         val subtasksByParent = all.filter { it.parentId != null }.groupBy { it.parentId }
@@ -182,7 +182,7 @@ class JobRepository(private val dao: JobDao) {
         val candidates = all.filter { job ->
             job.isAvailableToDraw() &&
                 job.id !in excludeIds &&
-                (category == null || job.category == category) &&
+                (categories.isEmpty() || job.category in categories) &&
                 (job.parentId == null || job.isUnblocked(subtasksById)) &&
                 (job.parentId == null || job.isParentAvailable(allById[job.parentId])) &&
                 minutesNeeded(job, subtasksByParent).let { needed ->

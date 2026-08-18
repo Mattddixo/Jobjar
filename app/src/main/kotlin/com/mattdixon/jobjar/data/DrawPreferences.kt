@@ -5,7 +5,7 @@ import android.content.Context
 private const val PREFS_NAME = "job_jar_settings"
 private const val KEY_AVAILABLE_MINUTES = "draw_available_minutes"
 private const val KEY_LONG_JOBS_ONLY = "draw_long_jobs_only"
-private const val KEY_SELECTED_CATEGORY = "draw_selected_category"
+private const val KEY_SELECTED_CATEGORIES = "draw_selected_categories"
 private const val KEY_BATCH_SIZE = "draw_batch_size"
 
 /**
@@ -22,7 +22,9 @@ object DrawPreferences {
         return SavedDrawSettings(
             availableMinutes = prefs.getInt(KEY_AVAILABLE_MINUTES, 30),
             longJobsOnly = prefs.getBoolean(KEY_LONG_JOBS_ONLY, false),
-            selectedCategory = prefs.getString(KEY_SELECTED_CATEGORY, null),
+            // Defensively copied: SharedPreferences.getStringSet() returns the exact instance
+            // backing the store, which must never be mutated by the caller.
+            selectedCategories = prefs.getStringSet(KEY_SELECTED_CATEGORIES, null)?.toSet() ?: emptySet(),
             batchSizeName = prefs.getString(KEY_BATCH_SIZE, null)
         )
     }
@@ -32,13 +34,7 @@ object DrawPreferences {
             .edit()
             .putInt(KEY_AVAILABLE_MINUTES, settings.availableMinutes)
             .putBoolean(KEY_LONG_JOBS_ONLY, settings.longJobsOnly)
-            .apply {
-                if (settings.selectedCategory != null) {
-                    putString(KEY_SELECTED_CATEGORY, settings.selectedCategory)
-                } else {
-                    remove(KEY_SELECTED_CATEGORY)
-                }
-            }
+            .putStringSet(KEY_SELECTED_CATEGORIES, HashSet(settings.selectedCategories))
             .putString(KEY_BATCH_SIZE, settings.batchSizeName)
             .apply()
     }
@@ -47,7 +43,7 @@ object DrawPreferences {
 data class SavedDrawSettings(
     val availableMinutes: Int,
     val longJobsOnly: Boolean,
-    val selectedCategory: String?,
+    val selectedCategories: Set<String>,
     /** The enum name of the caller's DrawBatchSize choice - kept as a raw string so this file has no dependency on that ui-layer type. */
     val batchSizeName: String?
 )

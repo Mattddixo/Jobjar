@@ -25,7 +25,10 @@ platform rather than transliterated line-by-line.
    so it's excluded from that count and shown as its own small "N in
    progress" line next to it instead. Set how much time you have with the
    slider, or jump straight to a preset via the **Time** dropdown;
-   optionally narrow by **Category** the same way. A third dropdown, **How
+   optionally narrow by **Category** the same checkbox multiselect as the
+   Jobs list's own Category filter (tick to add, tick again to remove) -
+   drawing from more than one category at once is just as reasonable a
+   want here as filtering a list that way. A third dropdown, **How
    many**, lets you draw more than one job at once (1/2/3/4/All) — the
    draw greedily fills your time budget: pick a job, subtract what it
    needs, pick another that fits what's left, and so on until it hits your

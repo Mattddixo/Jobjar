@@ -23,10 +23,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -132,7 +135,7 @@ fun DrawScreen(
                 state = state,
                 onAvailableMinutesChange = viewModel::setAvailableMinutes,
                 onLongJobsOnly = viewModel::setLongJobsOnly,
-                onCategorySelect = viewModel::setCategory,
+                onToggleCategory = viewModel::toggleCategory,
                 onBatchSizeChange = viewModel::setBatchSize
             )
 
@@ -292,7 +295,7 @@ private fun PickerPanel(
     state: DrawUiState,
     onAvailableMinutesChange: (Int) -> Unit,
     onLongJobsOnly: () -> Unit,
-    onCategorySelect: (String?) -> Unit,
+    onToggleCategory: (String) -> Unit,
     onBatchSizeChange: (DrawBatchSize) -> Unit
 ) {
     val dividerColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
@@ -414,29 +417,41 @@ private fun PickerPanel(
                 ) {
                     SectionLabel(stringResource(R.string.draw_section_category))
                     Box {
-                        FilterChip(
-                            selected = state.selectedCategory != null,
-                            onClick = { categoryMenuExpanded = true },
-                            label = { Text(state.selectedCategory ?: stringResource(R.string.draw_category_any)) },
-                            trailingIcon = {
-                                Icon(Icons.Filled.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp))
+                        // Same checkbox multiselect as the Jobs list's own Category filter,
+                        // rather than the single-pick dropdown this used to be - drawing from
+                        // more than one category at once ("Home or Errands tonight") is just as
+                        // reasonable a want here as it is when filtering that list. The chip's
+                        // own label stays "Any" regardless of selection - like the Jobs list's
+                        // chip, which never resizes with the picks - and a Badge carries the
+                        // count instead; there's already a "CATEGORY" section label to its left
+                        // in this row, so repeating the word on the chip itself would be redundant.
+                        BadgedBox(
+                            badge = {
+                                if (state.selectedCategories.isNotEmpty()) {
+                                    Badge { Text(state.selectedCategories.size.toString()) }
+                                }
                             }
-                        )
-                        DropdownMenu(expanded = categoryMenuExpanded, onDismissRequest = { categoryMenuExpanded = false }) {
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.draw_category_any)) },
-                                onClick = {
-                                    onCategorySelect(null)
-                                    categoryMenuExpanded = false
+                        ) {
+                            FilterChip(
+                                selected = state.selectedCategories.isNotEmpty(),
+                                onClick = { categoryMenuExpanded = true },
+                                label = { Text(stringResource(R.string.draw_category_any)) },
+                                trailingIcon = {
+                                    Icon(Icons.Filled.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp))
                                 }
                             )
+                        }
+                        DropdownMenu(expanded = categoryMenuExpanded, onDismissRequest = { categoryMenuExpanded = false }) {
                             state.categories.forEach { category ->
                                 DropdownMenuItem(
                                     text = { Text(category) },
-                                    onClick = {
-                                        onCategorySelect(category)
-                                        categoryMenuExpanded = false
-                                    }
+                                    leadingIcon = {
+                                        Checkbox(
+                                            checked = category in state.selectedCategories,
+                                            onCheckedChange = null
+                                        )
+                                    },
+                                    onClick = { onToggleCategory(category) }
                                 )
                             }
                         }

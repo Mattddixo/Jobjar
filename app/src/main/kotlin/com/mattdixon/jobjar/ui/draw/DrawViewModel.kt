@@ -59,7 +59,8 @@ data class DrawUiState(
      * [batchSize]: there's no "remaining budget" left to fill after a single open-ended pick.
      */
     val longJobsOnly: Boolean = false,
-    val selectedCategory: String? = null,
+    /** Empty = no category narrowing (draw from any category) - same convention as the Jobs list's own multiselect category filter. */
+    val selectedCategories: Set<String> = emptySet(),
     val categories: List<String> = emptyList(),
     val batchSize: DrawBatchSize = DrawBatchSize.ONE,
     val drawnJobs: List<DrawnJobEntry> = emptyList(),
@@ -95,7 +96,7 @@ class DrawViewModel(
             DrawUiState(
                 availableMinutes = saved.availableMinutes,
                 longJobsOnly = saved.longJobsOnly,
-                selectedCategory = saved.selectedCategory,
+                selectedCategories = saved.selectedCategories,
                 batchSize = DrawBatchSize.entries.find { it.name == saved.batchSizeName } ?: DrawBatchSize.ONE
             )
         )
@@ -124,7 +125,7 @@ class DrawViewModel(
             SavedDrawSettings(
                 availableMinutes = state.availableMinutes,
                 longJobsOnly = state.longJobsOnly,
-                selectedCategory = state.selectedCategory,
+                selectedCategories = state.selectedCategories,
                 batchSizeName = state.batchSize.name
             )
         )
@@ -140,8 +141,12 @@ class DrawViewModel(
         saveSettings(_uiState.value)
     }
 
-    fun setCategory(category: String?) {
-        _uiState.value = _uiState.value.copy(selectedCategory = category)
+    fun toggleCategory(category: String) {
+        _uiState.value = _uiState.value.copy(
+            selectedCategories = _uiState.value.selectedCategories.let {
+                if (category in it) it - category else it + category
+            }
+        )
         saveSettings(_uiState.value)
     }
 
@@ -180,7 +185,7 @@ class DrawViewModel(
             while (picks.size < maxJobs) {
                 val pick = repository.drawJob(
                     maxMinutes = remaining,
-                    category = current.selectedCategory,
+                    categories = current.selectedCategories,
                     excludeIds = excluded,
                     longOnly = current.longJobsOnly
                 ) ?: break
