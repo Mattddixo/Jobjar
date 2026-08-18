@@ -394,12 +394,6 @@ private fun JobRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Spacing.lg)
         ) {
-            IconButton(onClick = onToggleDone) {
-                Icon(
-                    imageVector = if (!job.isPending()) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
-                    contentDescription = stringResource(if (!job.isPending()) R.string.cd_mark_not_done else R.string.cd_mark_done)
-                )
-            }
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -464,6 +458,16 @@ private fun JobRow(
                         text = { Text(stringResource(R.string.menu_open)) },
                         leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) },
                         onClick = { menuExpanded = false; onClick() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(if (!job.isPending()) R.string.cd_mark_not_done else R.string.cd_mark_done)) },
+                        leadingIcon = {
+                            Icon(
+                                if (!job.isPending()) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
+                                contentDescription = null
+                            )
+                        },
+                        onClick = { menuExpanded = false; onToggleDone() }
                     )
                     // Starting doesn't need the subtask guard completing does - nothing gets
                     // silently closed by picking a job up, so it's a plain toggle either way.
