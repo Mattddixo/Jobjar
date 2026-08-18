@@ -209,14 +209,6 @@ fun JobDetailScreen(
                     Text(currentJob.notes, style = MaterialTheme.typography.bodyLarge)
                 }
 
-                if (currentJob.timesDrawn > 0) {
-                    Text(
-                        stringResource(R.string.drawn_n_times, currentJob.timesDrawn),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
                 // Only offered while the job is actually pending - a resting repeating job (not
                 // due yet) or an already-done job has nothing to "start." Starting itself needs
                 // no guard dialog the way completing does: nothing gets silently left behind by
