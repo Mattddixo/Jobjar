@@ -5,12 +5,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -424,21 +424,13 @@ private fun JobRow(
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .background(androidx.compose.ui.graphics.Color.Red.copy(alpha = 0.3f))
                     .padding(vertical = Spacing.xs),
                 verticalArrangement = Arrangement.spacedBy(Spacing.xs)
             ) {
                 Text(
                     text = job.title,
                     style = titleStyle,
-                    textDecoration = if (!job.isPending()) TextDecoration.LineThrough else null,
-                    modifier = Modifier.background(androidx.compose.ui.graphics.Color.Yellow.copy(alpha = 0.4f))
-                )
-                Text(
-                    text = "DEBUG len=${job.title.length} rawTitle=[${job.title}] done=${item.subtaskDone}/${item.subtaskTotal} disp=${item.displayMinutes}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = androidx.compose.ui.graphics.Color.White,
-                    modifier = Modifier.background(androidx.compose.ui.graphics.Color.Magenta.copy(alpha = 0.6f))
+                    textDecoration = if (!job.isPending()) TextDecoration.LineThrough else null
                 )
                 if (item.parentTitle != null) {
                     Text(
@@ -449,28 +441,21 @@ private fun JobRow(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
+                // A plain Row neither wraps nor scrolls, so once enough badges are present at
+                // once (e.g. In Progress + time + category + a subtask count) their combined
+                // width can exceed what's left after the trailing icons - and instead of just
+                // spilling off-screen, the badge that doesn't fit gets squeezed toward zero
+                // width, wrapping its text one character per line and inflating the whole row's
+                // height. Scrolling keeps every badge at its natural size; anything that doesn't
+                // fit is reachable with a swipe instead of corrupting the layout.
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                    modifier = Modifier
-                        .wrapContentHeight(unbounded = true)
-                        .background(androidx.compose.ui.graphics.Color.Cyan.copy(alpha = 0.4f))
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
                 ) {
-                    if (job.isInProgress) InfoBadge(
-                        text = stringResource(R.string.badge_in_progress),
-                        modifier = Modifier.background(androidx.compose.ui.graphics.Color(0xFFFF9800))
-                    )
-                    TimeBucketBadge(
-                        minutes = item.displayMinutes,
-                        modifier = Modifier.background(androidx.compose.ui.graphics.Color(0xFF9C27B0))
-                    )
-                    if (job.category.isNotBlank()) CategoryBadge(
-                        category = job.category,
-                        modifier = Modifier.background(androidx.compose.ui.graphics.Color(0xFFE91E63))
-                    )
-                    if (item.subtaskTotal > 0) InfoBadge(
-                        text = stringResource(R.string.subtasks_done_count, item.subtaskDone, item.subtaskTotal),
-                        modifier = Modifier.background(androidx.compose.ui.graphics.Color(0xFFFFFFFF))
-                    )
+                    if (job.isInProgress) InfoBadge(text = stringResource(R.string.badge_in_progress))
+                    TimeBucketBadge(minutes = item.displayMinutes)
+                    if (job.category.isNotBlank()) CategoryBadge(category = job.category)
+                    if (item.subtaskTotal > 0) InfoBadge(text = stringResource(R.string.subtasks_done_count, item.subtaskDone, item.subtaskTotal))
                     if (item.recurrenceLabel != null) InfoBadge(text = item.recurrenceLabel)
                 }
                 if (item.waitingOnTitle != null) {
@@ -507,10 +492,7 @@ private fun JobRow(
             // menu icon below it and relies on the same nested-clickable isolation to avoid also
             // triggering the row's own navigate-to-detail click.
             if (item.subtaskTotal > 0) {
-                IconButton(
-                    onClick = onToggleExpanded,
-                    modifier = Modifier.background(androidx.compose.ui.graphics.Color.Blue.copy(alpha = 0.3f))
-                ) {
+                IconButton(onClick = onToggleExpanded) {
                     Icon(
                         if (isExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
                         contentDescription = stringResource(
@@ -519,7 +501,7 @@ private fun JobRow(
                     )
                 }
             }
-            Box(modifier = Modifier.background(androidx.compose.ui.graphics.Color.Green.copy(alpha = 0.3f))) {
+            Box {
                 IconButton(onClick = { menuExpanded = true }) {
                     Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.cd_more_options))
                 }
