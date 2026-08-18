@@ -433,7 +433,14 @@ private fun JobRow(
                 Text(
                     text = job.title,
                     style = titleStyle,
-                    textDecoration = if (!job.isPending()) TextDecoration.LineThrough else null
+                    textDecoration = if (!job.isPending()) TextDecoration.LineThrough else null,
+                    modifier = Modifier.background(androidx.compose.ui.graphics.Color.Yellow.copy(alpha = 0.4f))
+                )
+                Text(
+                    text = "DEBUG len=${job.title.length} rawTitle=[${job.title}] done=${item.subtaskDone}/${item.subtaskTotal} disp=${item.displayMinutes}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = androidx.compose.ui.graphics.Color.White,
+                    modifier = Modifier.background(androidx.compose.ui.graphics.Color.Magenta.copy(alpha = 0.6f))
                 )
                 if (item.parentTitle != null) {
                     Text(
@@ -444,7 +451,10 @@ private fun JobRow(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                    modifier = Modifier.background(androidx.compose.ui.graphics.Color.Cyan.copy(alpha = 0.4f))
+                ) {
                     if (job.isInProgress) InfoBadge(text = stringResource(R.string.badge_in_progress))
                     TimeBucketBadge(minutes = item.displayMinutes)
                     if (job.category.isNotBlank()) CategoryBadge(category = job.category)
