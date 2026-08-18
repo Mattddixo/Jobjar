@@ -53,15 +53,14 @@ fun SubtasksSection(
     onAddSubtask: () -> Unit,
     modifier: Modifier = Modifier,
     /**
-     * Swaps the usual "remaining of total" line (unfinished work left, meaningless while a
-     * subtask list is still being built - a freshly created subtask is never done, so that
-     * number would just sit at the full total the whole time) for an allocation summary instead:
-     * how much of the typed total these subtasks add up to so far. Meant for the add/edit screen
-     * while a job's subtask list is actively being sketched out; the detail screen leaves this
-     * false and keeps the done-work-remaining framing, which is what matters once a job's
-     * actually being worked.
+     * The "remaining of total" line (unfinished work left) is only meaningful once a job's
+     * actually being worked - a freshly created subtask is never done, so it'd just sit at the
+     * full total the whole time a list is being built. The add/edit screen leaves this false and
+     * shows its own live [AllocationSummary] next to the duration picker instead (for both the
+     * job being edited and, while adding a subtask, the parent it belongs to) - not here, so the
+     * two don't compete for attention on the same screen. The detail screen leaves this true.
      */
-    showAllocationSummary: Boolean = false
+    showRemainingSummary: Boolean = true
 ) {
     val subtasksFlow = remember(repository, parentId) { repository.subtasksOf(parentId) }
     val subtasks by subtasksFlow.collectAsState(initial = emptyList())
@@ -90,12 +89,7 @@ fun SubtasksSection(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         } else {
-            if (showAllocationSummary) {
-                AllocationSummary(
-                    estimatedMinutes = parentEstimatedMinutes,
-                    subtasksTotalMinutes = subtasks.sumOf { it.estimatedMinutes }
-                )
-            } else {
+            if (showRemainingSummary) {
                 val remaining = remainingMinutesOf(parentEstimatedMinutes, subtasks)
                 Text(
                     stringResource(R.string.label_remaining_of_total, formatMinutes(remaining), formatMinutes(parentEstimatedMinutes)),

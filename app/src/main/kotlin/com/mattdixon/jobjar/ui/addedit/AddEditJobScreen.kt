@@ -89,6 +89,18 @@ fun AddEditJobScreen(
     }
     val siblings by siblingsFlow.collectAsState(initial = emptyList())
 
+    // The opposite direction: only meaningful for a job that ISN'T itself a subtask (it's the
+    // one this screen is editing, not its parent) and already has an id to have subtasks of its
+    // own - its own subtask list, purely for the live allocation summary next to its duration
+    // picker. SubtasksSection further down fetches this same job's subtasks independently for
+    // its own list rendering; not worth threading a pre-fetched list through it just to avoid
+    // one extra cheap Room query subscription.
+    val savedId = state.id
+    val ownSubtasksFlow = remember(repository, savedId) {
+        savedId?.let { repository.subtasksOf(it) } ?: flowOf(emptyList())
+    }
+    val ownSubtasks by ownSubtasksFlow.collectAsState(initial = emptyList())
+
     LaunchedEffect(state.isSaved) {
         if (state.isSaved) onDone()
     }
@@ -194,6 +206,19 @@ fun AddEditJobScreen(
                     AllocationSummary(
                         estimatedMinutes = currentParent.estimatedMinutes,
                         subtasksTotalMinutes = otherSiblingsTotal + state.estimatedMinutes
+                    )
+                }
+
+                // The other direction: this job isn't a subtask, but already has subtasks of its
+                // own - shows here, next to its own duration picker, instead of above the
+                // subtask list further down (SubtasksSection's own summary line is off for this
+                // screen; see showRemainingSummary = false below), so both this screen and a
+                // subtask's own screen keep the same summary in the same relative spot: right
+                // where its own time gets chosen.
+                if (subtaskParentId == null && savedId != null && ownSubtasks.isNotEmpty()) {
+                    AllocationSummary(
+                        estimatedMinutes = state.estimatedMinutes,
+                        subtasksTotalMinutes = ownSubtasks.sumOf { it.estimatedMinutes }
                     )
                 }
             }
@@ -320,7 +345,6 @@ fun AddEditJobScreen(
 
                 HorizontalDivider()
 
-                val savedId = state.id
                 if (savedId != null) {
                     SubtasksSection(
                         repository = repository,
@@ -328,7 +352,7 @@ fun AddEditJobScreen(
                         parentEstimatedMinutes = state.estimatedMinutes,
                         onOpenSubtask = onOpenSubtask,
                         onAddSubtask = { onAddSubtask(savedId) },
-                        showAllocationSummary = true
+                        showRemainingSummary = false
                     )
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {

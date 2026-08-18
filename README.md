@@ -145,29 +145,31 @@ same parent now also matches a 2.5-hour draw, alongside the parent itself
 and each remaining subtask, all as separate candidates in the jar.
 
 While a job's subtask list is still being built (on the add/edit screen,
-not the detail screen), `SubtasksSection` swaps its usual "remaining"
-line for an allocation summary instead - `estimatedMinutes − Σ(every
-subtask's minutes, done or not)`
-(`Job.kt#unallocatedMinutesOf`), a different question from remaining
-minutes above (which only counts unfinished work, so it can't tell you
-anything useful while every subtask you've just created is still
-undone). "1h 30m left to allocate · 3h total" while under, "Fully
-allocated · 3h total" at exactly zero, "Over by 30m · 3h total" once
-subtasks add up to more than the typed total - the cue to either trim a
-subtask or bump the total yourself, since this doesn't re-read the
-auto-grown value back into the form. A job at or above the 4-hour "4+
-hrs" threshold skips this framing entirely (there's no real ceiling to
-compare against for those) and just shows a running sum, "Subtasks so
-far: 2h 15m," matching how its own total is meant to emerge from the
-subtasks rather than the other way around.
+not the detail screen), an **allocation summary** shows right next to
+the duration picker itself - not above the subtask list further down,
+which on this screen shows no summary line at all
+(`SubtasksSection(showRemainingSummary = false)`) so the two don't
+compete for attention. It answers a different question from the detail
+screen's "remaining" line (which only counts unfinished work, so it
+can't tell you anything useful while every subtask you've just created
+is still undone): `estimatedMinutes − Σ(every subtask's minutes, done or
+not)` (`Job.kt#unallocatedMinutesOf`). "1h 30m left to allocate · 3h
+total" while under, "Fully allocated · 3h total" at exactly zero, "Over
+by 30m · 3h total" once subtasks add up to more than the typed total -
+the cue to either trim a subtask or bump the total yourself, since this
+doesn't re-read the auto-grown value back into the form. A job at or
+above the 4-hour "4+ hrs" threshold skips this framing entirely (there's
+no real ceiling to compare against for those) and just shows a running
+sum, "Subtasks so far: 2h 15m," matching how its own total is meant to
+emerge from the subtasks rather than the other way around.
 
-The same summary also shows on a subtask's own add/edit screen, right
-under its duration picker - the place you're actually choosing that
-subtask's time, not just the parent's subtask list further down. It's a
-live projection while you're there: the subtask being edited contributes
-whatever's currently selected above (not its last-saved value), so the
-number tracks the duration chips and custom-minutes field as you use
-them, updating before you've saved anything.
+The same summary, in the same spot relative to the duration picker,
+shows on a subtask's own add/edit screen too - against its *parent's*
+total this time, not its own. Both are live projections rather than a
+plain sum of what's already saved: whichever job is currently open
+contributes whatever's selected in its own duration picker right now
+(not its last-saved estimate), so the number tracks the chips and
+custom-minutes field as they're used, updating before anything's saved.
 
 A parent auto-completes once every subtask is done; you can also mark it
 done manually at any point (a confirmation dialog warns if subtasks are
