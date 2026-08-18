@@ -455,10 +455,22 @@ private fun JobRow(
                         .wrapContentHeight(unbounded = true)
                         .background(androidx.compose.ui.graphics.Color.Cyan.copy(alpha = 0.4f))
                 ) {
-                    if (job.isInProgress) InfoBadge(text = stringResource(R.string.badge_in_progress))
-                    TimeBucketBadge(minutes = item.displayMinutes)
-                    if (job.category.isNotBlank()) CategoryBadge(category = job.category)
-                    if (item.subtaskTotal > 0) InfoBadge(text = stringResource(R.string.subtasks_done_count, item.subtaskDone, item.subtaskTotal))
+                    if (job.isInProgress) InfoBadge(
+                        text = stringResource(R.string.badge_in_progress),
+                        modifier = Modifier.background(androidx.compose.ui.graphics.Color(0xFFFF9800))
+                    )
+                    TimeBucketBadge(
+                        minutes = item.displayMinutes,
+                        modifier = Modifier.background(androidx.compose.ui.graphics.Color(0xFF9C27B0))
+                    )
+                    if (job.category.isNotBlank()) CategoryBadge(
+                        category = job.category,
+                        modifier = Modifier.background(androidx.compose.ui.graphics.Color(0xFFE91E63))
+                    )
+                    if (item.subtaskTotal > 0) InfoBadge(
+                        text = stringResource(R.string.subtasks_done_count, item.subtaskDone, item.subtaskTotal),
+                        modifier = Modifier.background(androidx.compose.ui.graphics.Color(0xFFFFFFFF))
+                    )
                     if (item.recurrenceLabel != null) InfoBadge(text = item.recurrenceLabel)
                 }
                 if (item.waitingOnTitle != null) {
