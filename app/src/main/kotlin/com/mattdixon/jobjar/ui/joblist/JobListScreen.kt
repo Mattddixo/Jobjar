@@ -5,12 +5,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -446,11 +445,11 @@ private fun JobRow(
                 // width can exceed what's left after the trailing icons - and instead of just
                 // spilling off-screen, the badge that doesn't fit gets squeezed toward zero
                 // width, wrapping its text one character per line and inflating the whole row's
-                // height. Scrolling keeps every badge at its natural size; anything that doesn't
-                // fit is reachable with a swipe instead of corrupting the layout.
-                Row(
-                    modifier = Modifier.horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+                // height. FlowRow keeps every badge at its natural size and wraps any overflow
+                // onto a second line instead - visible outright, no swipe needed to discover it.
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.xs)
                 ) {
                     if (job.isInProgress) InfoBadge(text = stringResource(R.string.badge_in_progress))
                     TimeBucketBadge(minutes = item.displayMinutes)
