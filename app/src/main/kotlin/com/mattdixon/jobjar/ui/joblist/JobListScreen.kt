@@ -9,11 +9,14 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
@@ -43,6 +46,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -99,6 +103,8 @@ fun JobListScreen(
     var sortMenuExpanded by remember { mutableStateOf(false) }
     var categoryMenuExpanded by remember { mutableStateOf(false) }
     var searchActive by remember { mutableStateOf(false) }
+    var manageCategoriesOpen by remember { mutableStateOf(false) }
+    var categoryPendingRemoval by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
         topBar = {
@@ -237,6 +243,20 @@ fun JobListScreen(
                                         onClick = { viewModel.toggleCategory(category) }
                                     )
                                 }
+                                // Category is free text typed while creating/editing a job, with
+                                // no dedicated management screen of its own - this is the one
+                                // place that already lists every category in use, so it's also
+                                // where removing one belongs, rather than bolting a global,
+                                // multi-job action onto the single-job add/edit form.
+                                HorizontalDivider()
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.manage_categories_title)) },
+                                    leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) },
+                                    onClick = {
+                                        categoryMenuExpanded = false
+                                        manageCategoriesOpen = true
+                                    }
+                                )
                             }
                         }
                     }
@@ -324,6 +344,78 @@ fun JobListScreen(
             }
         )
     }
+
+    if (manageCategoriesOpen) {
+        ManageCategoriesDialog(
+            categories = state.categories,
+            categoryCounts = state.categoryCounts,
+            onRemoveRequest = { category -> categoryPendingRemoval = category },
+            onDismiss = { manageCategoriesOpen = false }
+        )
+    }
+
+    categoryPendingRemoval?.let { category ->
+        AlertDialog(
+            onDismissRequest = { categoryPendingRemoval = null },
+            title = { Text(stringResource(R.string.dialog_remove_category_title)) },
+            text = {
+                Text(stringResource(R.string.dialog_remove_category_body, category, state.categoryCounts[category] ?: 0))
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.removeCategory(category)
+                    categoryPendingRemoval = null
+                }) { Text(stringResource(R.string.action_remove)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { categoryPendingRemoval = null }) { Text(stringResource(R.string.action_cancel)) }
+            }
+        )
+    }
+}
+
+/**
+ * Category is free text typed while creating/editing a job - there's no separate entity to
+ * browse or manage, so this lists whatever's currently in use (from the same source as the
+ * filter dropdown it's opened from) and lets each be detached from every job that has it. The
+ * actual removal is a separate confirm step owned by the caller, not this dialog - deleting is
+ * bulk and not undoable, so it shouldn't be one tap away from an otherwise-safe browsing list.
+ */
+@Composable
+private fun ManageCategoriesDialog(
+    categories: List<String>,
+    categoryCounts: Map<String, Int>,
+    onRemoveRequest: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.manage_categories_title)) },
+        text = {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 320.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+            ) {
+                categories.forEach { category ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(category, style = MaterialTheme.typography.bodyLarge)
+                        IconButton(onClick = { onRemoveRequest(category) }) {
+                            Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.cd_remove_category, category))
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_done)) }
+        }
+    )
 }
 
 @Composable

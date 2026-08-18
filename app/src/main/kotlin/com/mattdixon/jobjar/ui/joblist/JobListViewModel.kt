@@ -49,6 +49,8 @@ data class JobListItem(
 data class JobListUiState(
     val items: List<JobListItem> = emptyList(),
     val categories: List<String> = emptyList(),
+    /** How many jobs (parents and subtasks alike) currently carry each category - shown in the "Manage categories" dialog so removing one can say how many jobs it'll clear. */
+    val categoryCounts: Map<String, Int> = emptyMap(),
     val showCompleted: Boolean = false,
     /** Empty = no category narrowing (all categories included). */
     val selectedCategories: Set<String> = emptySet(),
@@ -214,6 +216,7 @@ class JobListViewModel(private val repository: JobRepository) : ViewModel() {
         JobListUiState(
             items = sorted,
             categories = categories,
+            categoryCounts = allFlat.filter { it.category.isNotBlank() }.groupingBy { it.category }.eachCount(),
             showCompleted = currentFilters.showCompleted,
             selectedCategories = currentFilters.categories,
             showRepeatingOnly = currentFilters.repeatingOnly,
@@ -254,6 +257,14 @@ class JobListViewModel(private val repository: JobRepository) : ViewModel() {
 
     fun deleteJob(job: Job) {
         viewModelScope.launch { repository.deleteJob(job) }
+    }
+
+    /** Drops [category] from the active filter selection too, if it was one of the ones
+     * narrowing the list - otherwise a just-removed category could stay checked "invisibly"
+     * since it can no longer appear in the dropdown to be unchecked by hand. */
+    fun removeCategory(category: String) {
+        viewModelScope.launch { repository.removeCategory(category) }
+        selectedCategories.value = selectedCategories.value - category
     }
 
     class Factory(private val repository: JobRepository) : ViewModelProvider.Factory {

@@ -12,6 +12,11 @@ class JobRepository(private val dao: JobDao) {
 
     val categories: Flow<List<String>> = dao.getCategories()
 
+    /** Detaches [category] from every job that currently has it (they end up with no category,
+     * same as a fresh job before one's typed in) - there's no separate category entity to
+     * delete, so this is what "removing" a category actually means. */
+    suspend fun removeCategory(category: String) = dao.clearCategory(category)
+
     fun jobById(id: Long): Flow<Job?> = dao.getJobById(id)
     fun subtasksOf(parentId: Long): Flow<List<Job>> = dao.getSubtasks(parentId)
 

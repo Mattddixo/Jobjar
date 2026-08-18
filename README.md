@@ -99,6 +99,16 @@ platform rather than transliterated line-by-line.
    **Repeating**, or by **In Progress**, toggle Active/Completed, sort by
    time/priority/newest/category, tap into a job to view or edit it, or use
    its overflow menu to start it, move it back to the jar, or delete it.
+   Category itself is free text typed while creating or editing a job, with
+   no separate list to manage it from - so the Category filter's own
+   dropdown doubles as that list, via a **Manage categories** entry at its
+   bottom. It shows every category currently in use with a delete icon
+   next to each; removing one (after a confirm step, since it touches
+   every job with that category at once) clears it back to no category on
+   those jobs rather than deleting them, and drops it from any active
+   filter - on this tab or the Jar tab's own category picker - that had it
+   selected, so a just-removed category can't stay checked somewhere with
+   no way left to uncheck it.
 5. The **Stats** tab shows how many jobs are active vs. completed, total
    time invested, and a breakdown by category with a relative-size bar per
    category, so you can see where your time actually goes at a glance.

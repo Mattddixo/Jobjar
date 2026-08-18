@@ -106,11 +106,20 @@ class DrawViewModel(
             combine(repository.categories, repository.allJobsFlat) { categories, allJobs ->
                 categories to allJobs
             }.collect { (categories, allJobs) ->
+                // A category removed elsewhere (Jobs list's "Manage categories") could otherwise
+                // stay checked here indefinitely - it can no longer appear in this screen's own
+                // dropdown to be unchecked by hand, and every draw would silently match nothing.
+                val previousSelection = _uiState.value.selectedCategories
+                val stillValidSelection = previousSelection.intersect(categories.toSet())
                 _uiState.value = _uiState.value.copy(
                     categories = categories,
+                    selectedCategories = stillValidSelection,
                     pendingCount = allJobs.count { it.isAvailableToDraw() },
                     inProgressCount = allJobs.count { it.isInProgress }
                 )
+                if (stillValidSelection != previousSelection) {
+                    saveSettings(_uiState.value)
+                }
             }
         }
     }

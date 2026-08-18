@@ -56,6 +56,12 @@
     <string name="dialog_delete_job_title">Delete job?</string>
     <string name="dialog_delete_job_with_subtasks">\"%1$s\" and its %2$d subtask(s) will be removed permanently.</string>
     <string name="dialog_delete_job_plain">\"%1$s\" will be removed permanently.</string>
+    <string name="manage_categories_title">Manage categories</string>
+    <string name="cd_remove_category">Remove %1$s</string>
+    <string name="dialog_remove_category_title">Remove category?</string>
+    <string name="dialog_remove_category_body">\"%1$s\" will be removed from %2$d job(s). Those jobs will have no category - nothing else about them changes.</string>
+    <string name="action_remove">Remove</string>
+    <string name="action_done">Done</string>
     <string name="cd_close_search">Close search</string>
     <string name="cd_clear_search">Clear search</string>
     <string name="empty_no_search_match">No jobs match \"%1$s\".</string>

@@ -18,6 +18,10 @@ interface JobDao {
     @Query("SELECT DISTINCT category FROM jobs WHERE category != '' ORDER BY category ASC")
     fun getCategories(): Flow<List<String>>
 
+    /** Category is a free-text field on Job, not its own table - "removing" one just clears it back to blank on every job that has it. */
+    @Query("UPDATE jobs SET category = '' WHERE category = :category")
+    suspend fun clearCategory(category: String)
+
     @Query("SELECT * FROM jobs WHERE id = :id")
     fun getJobById(id: Long): Flow<Job?>
 
