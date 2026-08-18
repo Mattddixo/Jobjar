@@ -29,6 +29,8 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
@@ -198,14 +200,25 @@ fun JobListScreen(
                 if (state.categories.isNotEmpty()) {
                     item {
                         Box {
-                            FilterChip(
-                                selected = state.selectedCategories.isNotEmpty(),
-                                onClick = { categoryMenuExpanded = true },
-                                label = { Text(categoryChipLabel(state.selectedCategories.size)) },
-                                trailingIcon = {
-                                    Icon(Icons.Filled.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp))
+                            // The chip's own label never changes with the selection - only the
+                            // badge does - so the chip itself never resizes and can't throw off
+                            // the row's rhythm the way a growing "Category · N" label used to.
+                            BadgedBox(
+                                badge = {
+                                    if (state.selectedCategories.isNotEmpty()) {
+                                        Badge { Text(state.selectedCategories.size.toString()) }
+                                    }
                                 }
-                            )
+                            ) {
+                                FilterChip(
+                                    selected = state.selectedCategories.isNotEmpty(),
+                                    onClick = { categoryMenuExpanded = true },
+                                    label = { Text(stringResource(R.string.filter_category_default)) },
+                                    trailingIcon = {
+                                        Icon(Icons.Filled.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    }
+                                )
+                            }
                             DropdownMenu(expanded = categoryMenuExpanded, onDismissRequest = { categoryMenuExpanded = false }) {
                                 state.categories.forEach { category ->
                                     DropdownMenuItem(
@@ -305,17 +318,6 @@ fun JobListScreen(
         )
     }
 }
-
-// Always a fixed "Category" / "Category · N" shape regardless of which or how many categories
-// are selected - showing the actual name(s) instead let the chip's width grow with the
-// selection, which is what let a few picks push the rest of the filter row off-screen.
-@Composable
-private fun categoryChipLabel(selectedCount: Int): String =
-    if (selectedCount == 0) {
-        stringResource(R.string.filter_category_default)
-    } else {
-        stringResource(R.string.filter_category_selected_count, selectedCount)
-    }
 
 @Composable
 private fun emptyStateText(state: JobListUiState): String = when {
