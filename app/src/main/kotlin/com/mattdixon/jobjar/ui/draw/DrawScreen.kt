@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -435,7 +436,14 @@ private fun PickerPanel(
                             label = { Text(categoryLabel) },
                             trailingIcon = {
                                 Icon(Icons.Filled.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp))
-                            }
+                            },
+                            // The chip is right-pinned by this row's SpaceBetween, so a label
+                            // that changes length (Any / a category name / "N categories") moves
+                            // the chip's own left edge - and the dropdown it anchors - every time
+                            // the selection changes. A minimum width absorbs that for every short
+                            // label (which covers the everyday cases); it can still grow for an
+                            // unusually long single category name, same as it always could.
+                            modifier = Modifier.widthIn(min = 88.dp)
                         )
                         DropdownMenu(expanded = categoryMenuExpanded, onDismissRequest = { categoryMenuExpanded = false }) {
                             state.categories.forEach { category ->
