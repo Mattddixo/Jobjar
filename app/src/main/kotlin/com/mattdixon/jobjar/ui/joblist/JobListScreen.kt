@@ -328,7 +328,6 @@ fun JobListScreen(
     }
 }
 
-@Composable
 // Always a fixed "Category" / "Category · N" shape regardless of which or how many categories
 // are selected - showing the actual name(s) instead let the chip's width grow with the
 // selection, which is what let a few picks push the rest of the filter row off-screen.
