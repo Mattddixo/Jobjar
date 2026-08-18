@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.mattdixon.jobjar.data.Job
 import com.mattdixon.jobjar.data.JobRepository
 import com.mattdixon.jobjar.data.isPending
+import com.mattdixon.jobjar.data.isUnblocked
 import com.mattdixon.jobjar.data.remainingMinutes
 import com.mattdixon.jobjar.util.formatDueStatus
 import com.mattdixon.jobjar.util.formatRecurrenceInterval
@@ -24,16 +25,25 @@ enum class SortOrder(val label: String) {
     CATEGORY("Category")
 }
 
-/** A top-level job plus how many of its subtasks (if any) are done, for the list row's badge. */
+/**
+ * One row on the Jobs list - either a top-level job or a subtask, since both are independently
+ * actionable (drawable, startable, completable) and both need to actually be findable here, not
+ * just visible by drilling into a parent's detail page. [parentTitle] is non-null only for a
+ * subtask row; [subtaskDone]/[subtaskTotal] are only meaningful for a top-level job that has
+ * subtasks of its own (a subtask can't have subtasks - one level deep); [waitingOnTitle] is
+ * non-null only for a subtask row that's blocked on an unfinished sibling.
+ */
 data class JobListItem(
     val job: Job,
     val displayMinutes: Int,
-    val subtaskDone: Int,
-    val subtaskTotal: Int,
+    val parentTitle: String? = null,
+    val subtaskDone: Int = 0,
+    val subtaskTotal: Int = 0,
+    val waitingOnTitle: String? = null,
     /** "Weekly" etc, or null if this job doesn't repeat. */
-    val recurrenceLabel: String?,
+    val recurrenceLabel: String? = null,
     /** "Due now" / "Next: in 3 days", or null if this job doesn't repeat. */
-    val dueStatus: String?
+    val dueStatus: String? = null
 )
 
 data class JobListUiState(
@@ -102,22 +112,40 @@ class JobListViewModel(private val repository: JobRepository) : ViewModel() {
 
     val uiState: StateFlow<JobListUiState> = combine(
         filters,
-        repository.topLevelJobs,
         repository.allJobsFlat,
         repository.categories
-    ) { currentFilters, topLevel, allFlat, categories ->
+    ) { currentFilters, allFlat, categories ->
+        val allById = allFlat.associateBy { it.id }
         val subtasksByParent = allFlat.filter { it.parentId != null }.groupBy { it.parentId }
 
-        val items = topLevel.map { job ->
-            val subtasks = subtasksByParent[job.id].orEmpty()
-            JobListItem(
-                job = job,
-                displayMinutes = if (subtasks.isEmpty()) job.estimatedMinutes else job.remainingMinutes(subtasks),
-                subtaskDone = subtasks.count { it.isDone },
-                subtaskTotal = subtasks.size,
-                recurrenceLabel = job.recurrenceDays?.let { formatRecurrenceInterval(it) },
-                dueStatus = job.recurrenceDays?.let { formatDueStatus(job.nextDueAt) }
-            )
+        // Every row - parents and subtasks alike - is its own list item. A subtask is just as
+        // independently actionable (drawable, startable, completable) as a top-level job, so
+        // scoping this list to top-level jobs only would hide half the picture: you could start
+        // or complete a subtask from the Draw screen or its parent's detail page, but never see
+        // or filter for it here. This matches the population the Jar meter and Stats already use
+        // (repository.allJobsFlat) rather than disagreeing with them about what "all jobs" means.
+        val items = allFlat.map { job ->
+            if (job.parentId == null) {
+                val subtasks = subtasksByParent[job.id].orEmpty()
+                JobListItem(
+                    job = job,
+                    displayMinutes = if (subtasks.isEmpty()) job.estimatedMinutes else job.remainingMinutes(subtasks),
+                    subtaskDone = subtasks.count { it.isDone },
+                    subtaskTotal = subtasks.size,
+                    recurrenceLabel = job.recurrenceDays?.let { formatRecurrenceInterval(it) },
+                    dueStatus = job.recurrenceDays?.let { formatDueStatus(job.nextDueAt) }
+                )
+            } else {
+                val siblingsById = subtasksByParent[job.parentId].orEmpty().associateBy { it.id }
+                JobListItem(
+                    job = job,
+                    displayMinutes = job.estimatedMinutes,
+                    parentTitle = allById[job.parentId]?.title,
+                    waitingOnTitle = job.dependsOnSubtaskId
+                        ?.takeUnless { job.isUnblocked(siblingsById) }
+                        ?.let { siblingsById[it]?.title }
+                )
+            }
         }
 
         val query = currentFilters.searchQuery.trim()

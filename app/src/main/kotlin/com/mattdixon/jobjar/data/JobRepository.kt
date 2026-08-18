@@ -7,11 +7,8 @@ private const val DAY_MILLIS = 24L * 60 * 60 * 1000
 
 class JobRepository(private val dao: JobDao) {
 
-    /** All rows, parents and subtasks. The single source of truth for stats and the draw candidate pool. */
+    /** All rows, parents and subtasks. The single source of truth for stats, the draw candidate pool, and the Jobs list. */
     val allJobsFlat: Flow<List<Job>> = dao.getAllJobsFlow()
-
-    /** Top-level jobs only - what the main Jobs list shows. */
-    val topLevelJobs: Flow<List<Job>> = dao.getTopLevelJobs()
 
     val categories: Flow<List<String>> = dao.getCategories()
 

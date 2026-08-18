@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
@@ -63,6 +64,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mattdixon.jobjar.R
@@ -415,12 +417,41 @@ private fun JobRow(
                     style = MaterialTheme.typography.titleMedium,
                     textDecoration = if (!job.isPending()) TextDecoration.LineThrough else null
                 )
+                if (item.parentTitle != null) {
+                    Text(
+                        stringResource(R.string.label_part_of, item.parentTitle),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                     if (job.isInProgress) InfoBadge(text = stringResource(R.string.badge_in_progress))
                     TimeBucketBadge(minutes = item.displayMinutes)
                     if (job.category.isNotBlank()) CategoryBadge(category = job.category)
                     if (item.subtaskTotal > 0) InfoBadge(text = stringResource(R.string.subtasks_done_count, item.subtaskDone, item.subtaskTotal))
                     if (item.recurrenceLabel != null) InfoBadge(text = item.recurrenceLabel)
+                }
+                if (item.waitingOnTitle != null) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.xxs)
+                    ) {
+                        Icon(
+                            Icons.Filled.Lock,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            stringResource(R.string.label_waiting_on, item.waitingOnTitle),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
                 if (item.dueStatus != null) {
                     Text(

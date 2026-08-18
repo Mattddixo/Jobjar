@@ -60,8 +60,13 @@ platform rather than transliterated line-by-line.
    (repeating-job cycling, parent auto-complete/reopen) - every path that
    marks a job done clears it, and that's the only invariant it has to
    maintain.
-4. The **Jobs** tab is the full list — filter by category, by **Repeating**,
-   or by **In Progress**, toggle Active/Completed, sort by
+4. The **Jobs** tab is the full list — every job *and* every subtask, since
+   a subtask is just as independently drawable/startable/completable as a
+   top-level job and hiding it here (visible only by drilling into its
+   parent) would make it impossible to find via a filter like **In
+   Progress**. A subtask row shows which job it's part of (and what it's
+   still waiting on, if it's soft-blocked). Filter by category, by
+   **Repeating**, or by **In Progress**, toggle Active/Completed, sort by
    time/priority/newest/category, tap into a job to view or edit it, or use
    its overflow menu to start it, move it back to the jar, or delete it.
 5. The **Stats** tab shows how many jobs are active vs. completed, total
