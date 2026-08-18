@@ -32,6 +32,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -385,17 +386,30 @@ private fun JobRow(
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     val job = item.job
+    val isSubtask = job.parentId != null
 
-    // A subtask row is inset from the screen edge - reinforcing that it belongs under the
-    // parent row directly above it (see JobListViewModel's grouping) rather than reading as
-    // just another independent top-level entry with a "Part of:" caption.
-    val indent = if (job.parentId != null) Spacing.xxl else 0.dp
+    // A subtask row reads as genuinely subordinate, not just a same-looking card nudged over:
+    // inset from the screen edge, a size step down on the title, tighter padding, and left at
+    // the Card default (surfaceContainerLowest, which this theme sets equal to the page
+    // background) rather than the parent's own explicit, visibly distinct surfaceContainer -
+    // so it quietly recedes instead of competing with the row above it.
+    val indent = if (isSubtask) Spacing.xxl else 0.dp
+    val rowPadding = if (isSubtask) Spacing.md else Spacing.lg
+    val titleStyle = if (isSubtask) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium
 
-    Card(onClick = onClick, modifier = Modifier.fillMaxWidth().padding(start = indent)) {
+    Card(
+        onClick = onClick,
+        colors = if (isSubtask) {
+            CardDefaults.cardColors()
+        } else {
+            CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+        },
+        modifier = Modifier.fillMaxWidth().padding(start = indent)
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(Spacing.lg),
+                .padding(rowPadding),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Spacing.lg)
         ) {
@@ -407,7 +421,7 @@ private fun JobRow(
             ) {
                 Text(
                     text = job.title,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = titleStyle,
                     textDecoration = if (!job.isPending()) TextDecoration.LineThrough else null
                 )
                 if (item.parentTitle != null) {
