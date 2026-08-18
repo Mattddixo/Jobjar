@@ -2,6 +2,7 @@ package com.mattdixon.jobjar.ui.jobdetail
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -10,6 +11,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Lock
@@ -37,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import com.mattdixon.jobjar.R
 import com.mattdixon.jobjar.data.JobRepository
 import com.mattdixon.jobjar.data.isPending
@@ -135,6 +138,20 @@ fun JobDetailScreen(
             ) {
                 Text(currentJob.title, style = MaterialTheme.typography.headlineMedium)
 
+                // Placed right under the title (rather than lower, among plain info text) and
+                // with a trailing chevron - the same "this leads somewhere" cue
+                // SubtasksSection's own rows already use - so it reads unmistakably as
+                // navigation to the parent, not just another label.
+                parent?.let { parentJob ->
+                    TextButton(
+                        onClick = { onOpenJob(parentJob.id) },
+                        contentPadding = PaddingValues(horizontal = Spacing.md, vertical = Spacing.xs)
+                    ) {
+                        Text(stringResource(R.string.label_part_of, parentJob.title))
+                        Icon(Icons.Filled.ChevronRight, contentDescription = null, modifier = Modifier.size(18.dp))
+                    }
+                }
+
                 Row(horizontalArrangement = Arrangement.spacedBy(Spacing.md)) {
                     if (currentJob.isInProgress) InfoBadge(text = stringResource(R.string.badge_in_progress))
                     TimeBucketBadge(minutes = displayMinutes)
@@ -161,12 +178,6 @@ fun JobDetailScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                }
-
-                parent?.let { parentJob ->
-                    TextButton(onClick = { onOpenJob(parentJob.id) }) {
-                        Text(stringResource(R.string.label_part_of, parentJob.title))
-                    }
                 }
 
                 val prerequisite = currentJob.dependsOnSubtaskId?.let { depId -> siblings.find { it.id == depId } }
