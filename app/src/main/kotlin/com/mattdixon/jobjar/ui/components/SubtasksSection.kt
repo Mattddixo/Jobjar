@@ -30,7 +30,6 @@ import com.mattdixon.jobjar.data.Job
 import com.mattdixon.jobjar.data.JobRepository
 import com.mattdixon.jobjar.data.LONG_JOB_MINUTES
 import com.mattdixon.jobjar.data.isUnblocked
-import com.mattdixon.jobjar.data.remainingMinutesOf
 import com.mattdixon.jobjar.data.unallocatedMinutesOf
 import com.mattdixon.jobjar.ui.theme.Spacing
 import com.mattdixon.jobjar.util.formatMinutes
@@ -48,19 +47,9 @@ import kotlinx.coroutines.launch
 fun SubtasksSection(
     repository: JobRepository,
     parentId: Long,
-    parentEstimatedMinutes: Int,
     onOpenSubtask: (Long) -> Unit,
     onAddSubtask: () -> Unit,
-    modifier: Modifier = Modifier,
-    /**
-     * The "remaining of total" line (unfinished work left) is only meaningful once a job's
-     * actually being worked - a freshly created subtask is never done, so it'd just sit at the
-     * full total the whole time a list is being built. The add/edit screen leaves this false and
-     * shows its own live [AllocationSummary] next to the duration picker instead (for both the
-     * job being edited and, while adding a subtask, the parent it belongs to) - not here, so the
-     * two don't compete for attention on the same screen. The detail screen leaves this true.
-     */
-    showRemainingSummary: Boolean = true
+    modifier: Modifier = Modifier
 ) {
     val subtasksFlow = remember(repository, parentId) { repository.subtasksOf(parentId) }
     val subtasks by subtasksFlow.collectAsState(initial = emptyList())
@@ -89,14 +78,6 @@ fun SubtasksSection(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         } else {
-            if (showRemainingSummary) {
-                val remaining = remainingMinutesOf(parentEstimatedMinutes, subtasks)
-                Text(
-                    stringResource(R.string.label_remaining_of_total, formatMinutes(remaining), formatMinutes(parentEstimatedMinutes)),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
             val siblingsById = subtasks.associateBy { it.id }
             Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
                 subtasks.forEach { subtask ->

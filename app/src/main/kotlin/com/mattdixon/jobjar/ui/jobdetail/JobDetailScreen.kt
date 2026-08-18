@@ -253,7 +253,6 @@ fun JobDetailScreen(
                     SubtasksSection(
                         repository = repository,
                         parentId = currentJob.id,
-                        parentEstimatedMinutes = currentJob.estimatedMinutes,
                         onOpenSubtask = onOpenJob,
                         onAddSubtask = onAddSubtask
                     )

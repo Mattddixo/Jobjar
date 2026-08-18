@@ -349,10 +349,8 @@ fun AddEditJobScreen(
                     SubtasksSection(
                         repository = repository,
                         parentId = savedId,
-                        parentEstimatedMinutes = state.estimatedMinutes,
                         onOpenSubtask = onOpenSubtask,
-                        onAddSubtask = { onAddSubtask(savedId) },
-                        showRemainingSummary = false
+                        onAddSubtask = { onAddSubtask(savedId) }
                     )
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {

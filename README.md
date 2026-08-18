@@ -147,13 +147,18 @@ and each remaining subtask, all as separate candidates in the jar.
 While a job's subtask list is still being built (on the add/edit screen,
 not the detail screen), an **allocation summary** shows right next to
 the duration picker itself - not above the subtask list further down,
-which on this screen shows no summary line at all
-(`SubtasksSection(showRemainingSummary = false)`) so the two don't
-compete for attention. It answers a different question from the detail
-screen's "remaining" line (which only counts unfinished work, so it
-can't tell you anything useful while every subtask you've just created
-is still undone): `estimatedMinutes − Σ(every subtask's minutes, done or
-not)` (`Job.kt#unallocatedMinutesOf`). "1h 30m left to allocate · 3h
+where `SubtasksSection` shows no summary line at all on this screen, so
+the two don't compete for attention (the detail screen's own copy of
+`SubtasksSection` doesn't either - it already shows this same "remaining"
+figure itself, right under the title, so repeating it again under
+"Subtasks" would just be the same number twice on one screen).
+`SubtasksSection` itself no longer has an opinion on any of this; the
+summary is entirely the calling screen's job now. The allocation summary
+answers a different question from that "remaining" line (which only
+counts unfinished work, so it can't tell you anything useful while every
+subtask you've just created is still undone): `estimatedMinutes −
+Σ(every subtask's minutes, done or not)`
+(`Job.kt#unallocatedMinutesOf`). "1h 30m left to allocate · 3h
 total" while under, "Fully allocated · 3h total" at exactly zero, "Over
 by 30m · 3h total" once subtasks add up to more than the typed total -
 the cue to either trim a subtask or bump the total yourself, since this
