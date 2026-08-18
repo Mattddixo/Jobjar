@@ -33,7 +33,12 @@ platform rather than transliterated line-by-line.
    option (inside the Time dropdown) flips the match from a ceiling to a
    floor — instead of "what fits," it explicitly draws from jobs needing
    4+ hours, always as a single job since there's no remaining budget left
-   to keep filling after an open-ended pick.
+   to keep filling after an open-ended pick. Time budget, "4+ hrs", category,
+   and how-many all persist across app restarts (`data/DrawPreferences.kt`,
+   the same SharedPreferences file `ThemePreferences` already uses) so this
+   panel comes back exactly as you left it instead of resetting to defaults
+   on every launch - only the actual drawn batch itself doesn't carry over,
+   since that's this session's output, not a setting to remember.
 
    Drawn jobs get their own subtle tonal treatment (a warm-toned taupe
    grey, the app's one reserved accent) so results are distinct from the

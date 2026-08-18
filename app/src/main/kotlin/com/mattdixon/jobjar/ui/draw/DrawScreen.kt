@@ -57,6 +57,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -93,7 +94,8 @@ fun DrawScreen(
     darkTheme: Boolean,
     onToggleTheme: () -> Unit
 ) {
-    val viewModel: DrawViewModel = viewModel(factory = DrawViewModel.Factory(repository))
+    val appContext = LocalContext.current.applicationContext
+    val viewModel: DrawViewModel = viewModel(factory = DrawViewModel.Factory(repository, appContext))
     val state by viewModel.uiState.collectAsState()
 
     Scaffold(

@@ -1,11 +1,14 @@
 package com.mattdixon.jobjar.ui.draw
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.mattdixon.jobjar.data.DrawPick
+import com.mattdixon.jobjar.data.DrawPreferences
 import com.mattdixon.jobjar.data.Job
 import com.mattdixon.jobjar.data.JobRepository
+import com.mattdixon.jobjar.data.SavedDrawSettings
 import com.mattdixon.jobjar.data.isAvailableToDraw
 import com.mattdixon.jobjar.data.remainingMinutes
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -78,12 +81,26 @@ data class DrawUiState(
     val inProgressCount: Int = 0
 )
 
-class DrawViewModel(private val repository: JobRepository) : ViewModel() {
+class DrawViewModel(
+    private val repository: JobRepository,
+    private val appContext: Context
+) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(DrawUiState())
-    val uiState: StateFlow<DrawUiState> = _uiState.asStateFlow()
+    private val _uiState: MutableStateFlow<DrawUiState>
+    val uiState: StateFlow<DrawUiState>
 
     init {
+        val saved = DrawPreferences.load(appContext)
+        _uiState = MutableStateFlow(
+            DrawUiState(
+                availableMinutes = saved.availableMinutes,
+                longJobsOnly = saved.longJobsOnly,
+                selectedCategory = saved.selectedCategory,
+                batchSize = DrawBatchSize.entries.find { it.name == saved.batchSizeName } ?: DrawBatchSize.ONE
+            )
+        )
+        uiState = _uiState.asStateFlow()
+
         viewModelScope.launch {
             combine(repository.categories, repository.allJobsFlat) { categories, allJobs ->
                 categories to allJobs
@@ -97,20 +114,40 @@ class DrawViewModel(private val repository: JobRepository) : ViewModel() {
         }
     }
 
+    /** Persists the control-panel settings a user sets on this screen (time budget, long-jobs
+     * toggle, category, batch size) so they're still there on the next launch instead of
+     * resetting to defaults every time. Deliberately excludes the actual draw result and
+     * exclusion list below - those are this session's output, not a setting to remember. */
+    private fun saveSettings(state: DrawUiState) {
+        DrawPreferences.save(
+            appContext,
+            SavedDrawSettings(
+                availableMinutes = state.availableMinutes,
+                longJobsOnly = state.longJobsOnly,
+                selectedCategory = state.selectedCategory,
+                batchSizeName = state.batchSize.name
+            )
+        )
+    }
+
     fun setAvailableMinutes(minutes: Int) {
         _uiState.value = _uiState.value.copy(availableMinutes = minutes, longJobsOnly = false)
+        saveSettings(_uiState.value)
     }
 
     fun setLongJobsOnly() {
         _uiState.value = _uiState.value.copy(longJobsOnly = true)
+        saveSettings(_uiState.value)
     }
 
     fun setCategory(category: String?) {
         _uiState.value = _uiState.value.copy(selectedCategory = category)
+        saveSettings(_uiState.value)
     }
 
     fun setBatchSize(size: DrawBatchSize) {
         _uiState.value = _uiState.value.copy(batchSize = size)
+        saveSettings(_uiState.value)
     }
 
     /**
@@ -199,10 +236,10 @@ class DrawViewModel(private val repository: JobRepository) : ViewModel() {
         }
     }
 
-    class Factory(private val repository: JobRepository) : ViewModelProvider.Factory {
+    class Factory(private val repository: JobRepository, private val appContext: Context) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return DrawViewModel(repository) as T
+            return DrawViewModel(repository, appContext) as T
         }
     }
 }
