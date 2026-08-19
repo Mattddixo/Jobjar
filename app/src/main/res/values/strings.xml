@@ -48,7 +48,7 @@
     <string name="draw_empty_prompt">Set your time and tap \"Draw a job\" to pick something from the jar.</string>
     <string name="draw_budget_summary">%1$d job(s) · %2$s left of %3$s</string>
     <string name="draw_redraw">Redraw</string>
-    <string name="draw_close_jar">Close jar</string>
+    <string name="draw_close_jar">I changed my mind</string>
     <string name="draw_subtasks_progress">%1$d/%2$d subtasks done · %3$s left</string>
 
     <!-- Jobs list screen -->
