@@ -152,7 +152,7 @@ fun DrawScreen(
             }
 
             // Keyed on "is there anything drawn" rather than the drawn-jobs list itself, so a
-            // change to the batch (e.g. "Skip all" redrawing it) doesn't cause a jarring
+            // change to the batch (e.g. "Redraw" replacing it) doesn't cause a jarring
             // full-list crossfade for no reason - only empty<->populated transitions animate.
             // The content lambda still reads state.drawnJobs live on every recomposition
             // regardless of whether the crossfade itself re-triggers.
@@ -170,7 +170,8 @@ fun DrawScreen(
                         isBusy = state.isDrawing,
                         onOpen = { jobId -> onOpenJob(jobId) },
                         onStart = { jobId -> viewModel.startJob(jobId) },
-                        onSkipAll = { viewModel.draw(excludeCurrent = true) }
+                        onRedraw = { viewModel.draw(excludeCurrent = true) },
+                        onCloseJar = { viewModel.clearDraw() }
                     )
                     state.noMatchFound -> EmptyStateText(
                         if (state.longJobsOnly) {
@@ -493,10 +494,13 @@ private fun EmptyStateText(text: String) {
  * The current draw's results: an optional "how much budget is left" summary (only worth
  * showing when more than one job was actually requested - for the default single-job draw it'd
  * just be noise), each card at its natural size (no inner scroll region or height cap of its
- * own - the whole screen is the one scroll owner, see [DrawScreen]), and one "Skip all" button
- * after the last card that redraws the whole batch. Each card is wrapped in `key(entry.job.id)`
- * so a card that gets replaced (e.g. after "Skip all" redraws the batch) is a genuinely fresh
- * composable instance rather than reusing whatever remembered state occupied that slot before.
+ * own - the whole screen is the one scroll owner, see [DrawScreen]), and two half-width buttons
+ * after the last card - "Redraw" (fresh picks excluding whatever's currently shown) and
+ * "Close jar" (just clears the batch back to the empty prompt; nothing was ever removed from the
+ * jar by drawing it in the first place, so there's nothing to "put back" beyond that). Each card
+ * is wrapped in `key(entry.job.id)` so a card that gets replaced (e.g. after "Redraw") is a
+ * genuinely fresh composable instance rather than reusing whatever remembered state occupied
+ * that slot before.
  */
 @Composable
 private fun DrawnJobsBatch(
@@ -507,7 +511,8 @@ private fun DrawnJobsBatch(
     isBusy: Boolean,
     onOpen: (Long) -> Unit,
     onStart: (Long) -> Unit,
-    onSkipAll: () -> Unit
+    onRedraw: () -> Unit,
+    onCloseJar: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
         if (showBudgetSummary) {
@@ -532,15 +537,27 @@ private fun DrawnJobsBatch(
                 )
             }
         }
-        OutlinedButton(
-            onClick = onSkipAll,
-            enabled = !isBusy,
-            shape = AppShapes.control,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(36.dp)
-        ) {
-            Text(stringResource(R.string.draw_skip_all), style = MaterialTheme.typography.labelMedium)
+        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.md)) {
+            OutlinedButton(
+                onClick = onRedraw,
+                enabled = !isBusy,
+                shape = AppShapes.control,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(36.dp)
+            ) {
+                Text(stringResource(R.string.draw_redraw), style = MaterialTheme.typography.labelMedium)
+            }
+            OutlinedButton(
+                onClick = onCloseJar,
+                enabled = !isBusy,
+                shape = AppShapes.control,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(36.dp)
+            ) {
+                Text(stringResource(R.string.draw_close_jar), style = MaterialTheme.typography.labelMedium)
+            }
         }
     }
 }
@@ -551,9 +568,9 @@ private fun DrawnJobsBatch(
  * panel. The whole card is tappable to open the job's detail page - a dedicated "View details"
  * button would just be redundant with that. The only action here is "Start" - a job being drawn
  * doesn't mean it's finished, just that you've picked it up, so completing it happens later from
- * its detail page or the Jobs list, once you actually are done. "Skip all" (below the list)
- * redraws the whole batch. Notes are deliberately left off (available on the detail page) so a
- * long description can't grow a card unpredictably.
+ * its detail page or the Jobs list, once you actually are done. "Redraw" (below the list) draws
+ * a fresh batch. Notes are deliberately left off (available on the detail page) so a long
+ * description can't grow a card unpredictably.
  */
 @Composable
 private fun BatchJobCard(

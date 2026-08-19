@@ -50,8 +50,13 @@ platform rather than transliterated line-by-line.
    Drawing a job doesn't mean finishing it right away, so that's the only
    action a card offers; a started job drops out of the batch (and out of
    the jar's draw pool - see below) and is tracked from there via the Jobs
-   list or its own detail page, where you actually mark it done. Tap
-   **Skip all** below the list to redraw the whole batch fresh instead.
+   list or its own detail page, where you actually mark it done. Below the
+   list, two half-width buttons: **Redraw** for a fresh batch (excluding
+   whatever's currently shown, so it can't just reshow the same jobs by
+   chance) and **Close jar** to drop the current batch back to the empty
+   prompt without redrawing - nothing was ever removed from the jar by
+   drawing it in the first place, so there's nothing to actually "put
+   back" beyond that.
 3. **In progress**: any job can be started - from a drawn card, from its
    row's overflow menu on the Jobs list, or from its detail page - without
    drawing it first. An in-progress job is excluded from the jar's random
