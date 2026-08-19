@@ -45,8 +45,12 @@ fun StatsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.stats_screen_title)) },
-                navigationIcon = { TodayDateButton() },
+                title = {
+                    Column {
+                        TodayDateButton()
+                        Text(stringResource(R.string.stats_screen_title))
+                    }
+                },
                 actions = {
                     TextButton(onClick = onToggleTheme) {
                         Text(stringResource(if (darkTheme) R.string.theme_toggle_light else R.string.theme_toggle_dark))

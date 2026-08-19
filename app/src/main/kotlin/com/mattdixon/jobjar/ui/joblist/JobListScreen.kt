@@ -125,8 +125,12 @@ fun JobListScreen(
                 )
             } else {
                 TopAppBar(
-                    title = { Text(stringResource(R.string.jobs_screen_title)) },
-                    navigationIcon = { TodayDateButton() },
+                    title = {
+                        Column {
+                            TodayDateButton()
+                            Text(stringResource(R.string.jobs_screen_title))
+                        }
+                    },
                     actions = {
                         IconButton(onClick = { searchActive = true }) {
                             Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.cd_search_jobs))
