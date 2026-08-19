@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -15,6 +16,8 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.EventBusy
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Undo
@@ -47,6 +50,7 @@ import com.mattdixon.jobjar.data.isPending
 import com.mattdixon.jobjar.data.remainingMinutes
 import com.mattdixon.jobjar.ui.components.CategoryBadge
 import com.mattdixon.jobjar.ui.components.InfoBadge
+import com.mattdixon.jobjar.ui.components.SchedulePickerDialog
 import com.mattdixon.jobjar.ui.components.SubtasksSection
 import com.mattdixon.jobjar.ui.components.TimeBucketBadge
 import com.mattdixon.jobjar.ui.theme.AppShapes
@@ -54,6 +58,7 @@ import com.mattdixon.jobjar.ui.theme.Spacing
 import com.mattdixon.jobjar.util.formatDueStatus
 import com.mattdixon.jobjar.util.formatMinutes
 import com.mattdixon.jobjar.util.formatRecurrenceInterval
+import com.mattdixon.jobjar.util.formatScheduledDateTime
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
@@ -78,6 +83,7 @@ fun JobDetailScreen(
     val scope = rememberCoroutineScope()
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showForceCompleteDialog by remember { mutableStateOf(false) }
+    var showSchedulePicker by remember { mutableStateOf(false) }
 
     val currentJob = job
     val parentFlow = remember(currentJob?.parentId) {
@@ -181,6 +187,24 @@ fun JobDetailScreen(
                     )
                 }
 
+                if (currentJob.scheduledDate != null) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+                    ) {
+                        Icon(
+                            Icons.Filled.Event,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            stringResource(R.string.badge_scheduled, formatScheduledDateTime(currentJob.scheduledDate)),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
                 val prerequisite = currentJob.dependsOnSubtaskId?.let { depId -> siblings.find { it.id == depId } }
                 if (prerequisite != null && !prerequisite.isDone) {
                     Row(
@@ -214,16 +238,54 @@ fun JobDetailScreen(
                 // no guard dialog the way completing does: nothing gets silently left behind by
                 // picking a job up, so it's a plain toggle either way.
                 if (currentJob.isPending()) {
-                    OutlinedButton(
-                        onClick = { scope.launch { repository.toggleInProgress(currentJob) } },
-                        shape = AppShapes.control,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(
-                            if (currentJob.isInProgress) Icons.Filled.Undo else Icons.Filled.PlayArrow,
-                            contentDescription = null
-                        )
-                        Text(stringResource(if (currentJob.isInProgress) R.string.action_move_to_jar else R.string.action_start))
+                    // Scheduling is out of scope for repeating jobs (see SchedulePickerDialog's
+                    // doc comment) - those keep the original full-width Start/Move-to-jar button.
+                    if (currentJob.recurrenceDays == null) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.md)
+                        ) {
+                            OutlinedButton(
+                                onClick = { scope.launch { repository.toggleInProgress(currentJob) } },
+                                shape = AppShapes.control,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    if (currentJob.isInProgress) Icons.Filled.Undo else Icons.Filled.PlayArrow,
+                                    contentDescription = null
+                                )
+                                Text(stringResource(if (currentJob.isInProgress) R.string.action_move_to_jar else R.string.action_start))
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    if (currentJob.scheduledDate != null) {
+                                        scope.launch { repository.unscheduleJob(currentJob) }
+                                    } else {
+                                        showSchedulePicker = true
+                                    }
+                                },
+                                shape = AppShapes.control,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    if (currentJob.scheduledDate != null) Icons.Filled.EventBusy else Icons.Filled.Event,
+                                    contentDescription = null
+                                )
+                                Text(stringResource(if (currentJob.scheduledDate != null) R.string.action_unschedule else R.string.action_schedule))
+                            }
+                        }
+                    } else {
+                        OutlinedButton(
+                            onClick = { scope.launch { repository.toggleInProgress(currentJob) } },
+                            shape = AppShapes.control,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(
+                                if (currentJob.isInProgress) Icons.Filled.Undo else Icons.Filled.PlayArrow,
+                                contentDescription = null
+                            )
+                            Text(stringResource(if (currentJob.isInProgress) R.string.action_move_to_jar else R.string.action_start))
+                        }
                     }
                 }
 
@@ -300,6 +362,16 @@ fun JobDetailScreen(
                     },
                     dismissButton = {
                         TextButton(onClick = { showForceCompleteDialog = false }) { Text(stringResource(R.string.action_cancel)) }
+                    }
+                )
+            }
+
+            if (showSchedulePicker) {
+                SchedulePickerDialog(
+                    onDismiss = { showSchedulePicker = false },
+                    onConfirm = { dateTimeMillis ->
+                        scope.launch { repository.scheduleJob(currentJob, dateTimeMillis) }
+                        showSchedulePicker = false
                     }
                 )
             }

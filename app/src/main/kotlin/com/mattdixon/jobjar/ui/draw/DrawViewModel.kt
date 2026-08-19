@@ -250,6 +250,22 @@ class DrawViewModel(
         }
     }
 
+    /**
+     * Same shape as [startJob], for the batch card's "Schedule" button: sets [dateTimeMillis] as
+     * the job's scheduled date (writing the calendar event) and drops it from the visible batch.
+     * A drawn job can never already be scheduled - scheduling excludes a job from the draw pool
+     * - so there's no unschedule counterpart needed here.
+     */
+    fun scheduleJob(jobId: Long, dateTimeMillis: Long) {
+        val entry = _uiState.value.drawnJobs.find { it.job.id == jobId } ?: return
+        viewModelScope.launch {
+            repository.scheduleJob(entry.job, dateTimeMillis)
+            _uiState.value = _uiState.value.copy(
+                drawnJobs = _uiState.value.drawnJobs.filterNot { it.job.id == jobId }
+            )
+        }
+    }
+
     class Factory(private val repository: JobRepository, private val appContext: Context) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {

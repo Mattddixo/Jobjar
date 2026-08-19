@@ -1,11 +1,15 @@
 package com.mattdixon.jobjar.data
 
+import android.content.Context
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 
 private const val DAY_MILLIS = 24L * 60 * 60 * 1000
+private const val MINUTE_MILLIS = 60L * 1000
 
-class JobRepository(private val dao: JobDao) {
+class JobRepository(private val dao: JobDao, appContext: Context) {
+
+    private val calendarScheduler = CalendarScheduler(appContext)
 
     /** All rows, parents and subtasks. The single source of truth for stats, the draw candidate pool, and the Jobs list. */
     val allJobsFlat: Flow<List<Job>> = dao.getAllJobsFlow()
@@ -49,16 +53,22 @@ class JobRepository(private val dao: JobDao) {
     /**
      * Deleting a parent takes its subtasks with it - there's no meaningful orphan state for
      * them. Deleting a single subtask instead clears [Job.dependsOnSubtaskId] on any sibling
-     * that pointed at it, so nothing is left depending on a subtask that no longer exists.
+     * that pointed at it, so nothing is left depending on a subtask that no longer exists. A
+     * deleted job's calendar event (if it had one) is deleted too - nothing should linger on the
+     * user's calendar for a job that no longer exists in the app.
      */
     suspend fun deleteJob(job: Job) {
         if (job.parentId == null) {
-            dao.getSubtasksSnapshot(job.id).forEach { dao.delete(it) }
+            dao.getSubtasksSnapshot(job.id).forEach {
+                it.calendarEventId?.let { eventId -> calendarScheduler.deleteEvent(eventId) }
+                dao.delete(it)
+            }
         } else {
             dao.getSubtasksSnapshot(job.parentId)
                 .filter { it.dependsOnSubtaskId == job.id }
                 .forEach { dao.update(it.copy(dependsOnSubtaskId = null)) }
         }
+        job.calendarEventId?.let { calendarScheduler.deleteEvent(it) }
         dao.delete(job)
     }
 
@@ -66,7 +76,9 @@ class JobRepository(private val dao: JobDao) {
      * A repeating job never persists isDone = true: "completing" it instead cycles it forward
      * via [cycleRepeatingJob]. If it's currently resting (not due yet) - shown as "done" in the
      * Jobs list - tapping it again means "make it available right now" instead, via
-     * [wakeRepeatingJob]. A one-off job keeps the plain isDone flip.
+     * [wakeRepeatingJob]. A one-off job keeps the plain isDone flip; completing a scheduled one
+     * clears its schedule first (see [unscheduleJob]) - a finished job has nothing left to keep
+     * booked on the calendar for.
      */
     suspend fun toggleDone(job: Job) {
         if (job.recurrenceDays != null) {
@@ -79,6 +91,7 @@ class JobRepository(private val dao: JobDao) {
                 reopenParentIfDone(job.parentId)
             }
         } else {
+            if (job.scheduledDate != null) unscheduleJob(job)
             dao.markDone(job.id, System.currentTimeMillis())
             if (job.parentId != null) {
                 autoCompleteParentIfFinished(job.parentId)
@@ -142,15 +155,47 @@ class JobRepository(private val dao: JobDao) {
     /**
      * Flips a job's in-progress flag. Starting (false -> true) doesn't touch [Job.isDone] - a
      * job you're actively working on obviously isn't done yet - and is the only place that sets
-     * it true. Reverting (true -> false) just puts it back in the jar's draw pool, same as
-     * pausing; nothing else about the job changes.
+     * it true; starting a scheduled job clears its schedule first (see [unscheduleJob]), since
+     * you're now actually working it rather than planning to later. Reverting (true -> false)
+     * just puts it back in the jar's draw pool, same as pausing; nothing else about the job
+     * changes.
      */
     suspend fun toggleInProgress(job: Job) {
         if (job.isInProgress) {
             dao.markNotInProgress(job.id)
         } else {
+            if (job.scheduledDate != null) unscheduleJob(job)
             dao.markInProgress(job.id)
         }
+    }
+
+    /**
+     * Books [job] for [dateTimeMillis], with a duration matching its own [Job.estimatedMinutes] -
+     * excluding it from the random draw immediately (see [Job.isAvailableToDraw]), not just once
+     * that date arrives, since committing it to a day is itself the reason to stop handing it out
+     * at random. Also writes a matching event to the device's Calendar Provider (see
+     * [CalendarScheduler]), which the OS's own account sync pushes to the user's real calendar
+     * with no further action from this app. Rescheduling an already-scheduled job updates that
+     * same calendar event in place rather than creating a second one; if the update fails (e.g.
+     * the event was deleted on the calendar side), this falls back to inserting a fresh one so
+     * the job still ends up booked either way.
+     */
+    suspend fun scheduleJob(job: Job, dateTimeMillis: Long) {
+        val endMillis = dateTimeMillis + job.estimatedMinutes * MINUTE_MILLIS
+        val existingEventId = job.calendarEventId
+        val eventId = if (existingEventId != null && calendarScheduler.updateEvent(existingEventId, job.title, dateTimeMillis, endMillis)) {
+            existingEventId
+        } else {
+            calendarScheduler.insertEvent(job.title, dateTimeMillis, endMillis)
+        }
+        dao.update(job.copy(scheduledDate = dateTimeMillis, calendarEventId = eventId))
+    }
+
+    /** Drops [job]'s schedule and deletes its calendar event, if it had one - back to a plain
+     * pending job, eligible for the random draw again. */
+    suspend fun unscheduleJob(job: Job) {
+        job.calendarEventId?.let { calendarScheduler.deleteEvent(it) }
+        dao.update(job.copy(scheduledDate = null, calendarEventId = null))
     }
 
     /**

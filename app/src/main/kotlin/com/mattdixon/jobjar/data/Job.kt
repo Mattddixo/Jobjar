@@ -45,7 +45,25 @@ data class Job(
     val nextDueAt: Long? = null,
     val completionCount: Int = 0,
     /** Only meaningful when this is itself a subtask: the sibling subtask (same [parentId]) that must be done first, if any. */
-    val dependsOnSubtaskId: Long? = null
+    val dependsOnSubtaskId: Long? = null,
+    /**
+     * When non-null, this job is booked for a specific date/time (see [JobRepository.scheduleJob])
+     * and excluded from the random draw - you've already committed it to a day, so the jar
+     * shouldn't also hand it to you before then. Deliberately a separate concept from
+     * [isInProgress]: scheduling is a planning action, starting is a "working on it right now"
+     * one, and only the latter is meant to ever flip automatically (scheduling never does, and
+     * starting or completing a scheduled job clears the schedule - see [JobRepository]). Only
+     * ever set for a one-off job or a subtask; a repeating job's own [nextDueAt] cycling already
+     * covers "when," so scheduling isn't offered for one.
+     */
+    val scheduledDate: Long? = null,
+    /** The device Calendar Provider event id [scheduledDate] was written to, so a later
+     * reschedule/unschedule/delete updates or removes that exact event instead of leaving
+     * orphaned duplicates on the user's calendar. Null if scheduling ever failed to actually
+     * write an event (e.g. permission denied, no writable calendar) - [scheduledDate] can still
+     * be set in that case, since the in-app "scheduled" state shouldn't depend on the calendar
+     * write having succeeded. */
+    val calendarEventId: Long? = null
 )
 
 /**
@@ -61,14 +79,15 @@ fun Job.isPending(now: Long = System.currentTimeMillis()): Boolean =
 
 /**
  * Whether this job could actually be pulled from the jar right now: [isPending] (not done, and
- * due if it's a repeating job) but also not already [isInProgress]. Kept separate from
- * [isPending] itself rather than folding the in-progress check into it, because the two mean
- * different things to different callers - the Jobs list's Active/Completed split wants the
- * broader "not done" sense of pending (an in-progress job is still "Active"), while the draw
- * pool and the jar's headline count want this narrower "genuinely available" sense.
+ * due if it's a repeating job) but also not already [isInProgress] or [scheduledDate]-booked.
+ * Kept separate from [isPending] itself rather than folding the in-progress/scheduled checks
+ * into it, because the two mean different things to different callers - the Jobs list's
+ * Active/Completed split wants the broader "not done" sense of pending (an in-progress or
+ * scheduled job is still "Active"), while the draw pool and the jar's headline count want this
+ * narrower "genuinely available" sense.
  */
 fun Job.isAvailableToDraw(now: Long = System.currentTimeMillis()): Boolean =
-    isPending(now) && !isInProgress
+    isPending(now) && !isInProgress && scheduledDate == null
 
 /**
  * A blocked subtask (prerequisite not yet done) is only excluded from the random draw pool -

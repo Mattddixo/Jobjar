@@ -24,6 +24,14 @@
     <string name="action_move_to_jar">Move back to jar</string>
     <string name="badge_in_progress">In progress</string>
     <string name="filter_in_progress">In Progress</string>
+    <string name="action_ok">OK</string>
+    <string name="action_next">Next</string>
+    <string name="action_schedule">Schedule</string>
+    <string name="action_unschedule">Unschedule</string>
+    <string name="dialog_calendar_permission_title">Calendar permission needed</string>
+    <string name="dialog_calendar_permission_body">Job Jar needs calendar access to schedule a job - it writes one event to your device\'s calendar, which then syncs to your account the same way any other calendar event does. Nothing is read back, and no data leaves your device.</string>
+    <string name="dialog_pick_time_title">Pick a time</string>
+    <string name="badge_scheduled">Scheduled: %1$s</string>
 
     <!-- Draw (Jar) screen -->
     <string name="draw_screen_title">The Job Jar</string>
@@ -50,6 +58,7 @@
     <string name="cd_add_job">Add job</string>
     <string name="filter_active">Active</string>
     <string name="filter_completed">Completed</string>
+    <string name="filter_scheduled">Scheduled</string>
     <string name="filter_repeating">Repeating</string>
     <string name="filter_category_default">Category</string>
     <string name="cd_more_options">More options</string>
@@ -68,6 +77,7 @@
     <string name="empty_no_search_match">No jobs match \"%1$s\".</string>
     <string name="empty_no_filter_match">No jobs match these filters.</string>
     <string name="empty_no_completed">No completed jobs yet.</string>
+    <string name="empty_no_scheduled">No scheduled jobs. Schedule one from the Jar tab or a job\'s own menu.</string>
     <string name="empty_no_jobs">No jobs yet. Tap + to add one.</string>
 
     <!-- Add/Edit job screen -->

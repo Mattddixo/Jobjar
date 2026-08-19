@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- For CalendarScheduler: writing a scheduled job to the device's own Calendar Provider,
+         which the OS's own account sync then pushes to the user's real Google Calendar. Both
+         requested together, at runtime, only when Schedule is first tapped - never up front. -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
+
     <application
         android:name=".JobJarApplication"
         android:allowBackup="true"

@@ -239,9 +239,68 @@ parent's can - their `isDone` state doesn't survive the reset - so Stats
 credits a repeating job's totals from `completionCount` instead, once per
 cycle, whether or not it has subtasks.
 
-## Architecture
+### Scheduling
 
-Standard modern-Android stack, no unnecessary abstraction:
+Any non-repeating job — top-level or subtask — can be booked for a specific
+date and time from three places: the "Schedule" button beside a drawn job's
+"Start" button on the Jar tab, the overflow menu on a Jobs list row, or the
+half-width "Schedule" button next to "Start" on a job's own detail page.
+Repeating jobs don't get this option at all: a scheduled event describing a
+one-off occurrence doesn't make sense for something that's already got its
+own recurring cadence via `nextDueAt`.
+
+Scheduling is deliberately **device Calendar Provider integration, not a
+Google Calendar API/OAuth integration**. Tapping "Schedule" walks through a
+date picker and a time picker (`ui/components/SchedulePickerDialog.kt`,
+Material3's `DatePicker`/`TimePicker`), requesting `READ_CALENDAR`/
+`WRITE_CALENDAR` runtime permission the first time it's used, then writes one
+event directly via `android.provider.CalendarContract`
+(`data/CalendarScheduler.kt`). From there it's the device's own account sync
+adapter — not this app — that pushes the event to the user's real Google
+Calendar (or whichever calendar app owns their primary account). That means
+no sign-in flow, no API key, and no network call anywhere in this feature;
+the tradeoff is that it's one-directional — Job Jar writes events but never
+reads calendar-side edits back, so deleting or moving the event in Google
+Calendar directly doesn't reflect back into the app (rescheduling from the
+app afterward still works, it just falls back to inserting a fresh event
+since the old one is gone).
+
+A scheduled job is tracked with two new `Job` fields: `scheduledDate` (the
+picked instant) and `calendarEventId` (the Calendar Provider row id, kept so
+a reschedule updates the same event in place instead of leaving orphaned
+duplicates behind). Scheduling a job immediately excludes it from the Jar's
+random draw — `Job.isAvailableToDraw()` checks `scheduledDate == null`
+alongside its existing pending/not-in-progress checks — the moment it's
+booked, not just once the date arrives, since committing it to a day is
+itself the reason to stop handing it out at random. There's no background
+scheduler anywhere in this: nothing auto-transitions a scheduled job to "in
+progress" when its date arrives, mirroring the same "live comparison at read
+time, no `WorkManager`" philosophy already used for `nextDueAt`. Instead,
+`scheduledDate` is kept deliberately separate from `isInProgress`/`isDone`,
+and the two are held mutually exclusive by explicit cleanup at every
+transition rather than a combined status field: starting a scheduled job
+unschedules it first (`JobRepository.toggleInProgress`), and so does marking
+one done (`JobRepository.toggleDone`) — a job that's actually being worked
+or is already finished has nothing left to keep booked on the calendar for.
+Unscheduling (from the same three entry points, or automatically via those
+transitions) deletes the calendar event and clears both fields, returning
+the job to the ordinary pending/draw-eligible state.
+
+The Jobs tab surfaces this with a three-way **Active / Completed /
+Scheduled** view (`JobListViewModel.JobsView`, replacing the previous
+two-way Active/Completed toggle) rather than folding a "scheduled" badge
+into the Active list alone — Scheduled is its own filter
+(`scheduledDate != null`), independent of the pending/done split the other
+two views use, so a scheduled job is easy to find as a group rather than
+just visually flagged wherever it happens to sort. A scheduled job also
+still shows a "Scheduled: <date>" badge inline in Active (list row, drawn
+card is moot since scheduling removes it from the batch, and the detail
+page), since being in the Scheduled view and being excluded from Active
+are two different things — the Active view still shows it, since neither
+`isInProgress` nor `isDone` changed to actually remove it from "active,"
+it's just also excluded from the draw itself.
+
+
 
 - **Kotlin + Jetpack Compose** for the entire UI (single-Activity, Material
   3). Theming is deliberately monochrome (`ui/theme/Color.kt` / `Theme.kt`)
@@ -293,15 +352,20 @@ Standard modern-Android stack, no unnecessary abstraction:
   jar, not a shared backend) makes doing it in Kotlin both simpler and
   plenty fast. Completion logic (auto-completing a parent once all its
   subtasks are done, cascading deletes from parent to subtasks) lives here
-  too, rather than spread across ViewModels.
+  too, rather than spread across ViewModels. It's also the only class that
+  needs a platform `Context` (the Application context, passed once from
+  `JobJarApplication`) — solely to own a `CalendarScheduler` internally, so
+  every call site can schedule/unschedule a job through a plain
+  `repository.scheduleJob(...)` call without needing its own Context-aware
+  calendar plumbing (see Scheduling above).
 
 ```
 app/src/main/kotlin/com/mattdixon/jobjar/
-├── data/              Job entity, DAO, Room database, Converters, JobRepository
-├── util/               Duration + recurrence formatting
+├── data/              Job entity, DAO, Room database, Converters, JobRepository, CalendarScheduler
+├── util/               Duration + recurrence + scheduled-date formatting
 └── ui/
     ├── theme/          Material 3 color/type/theme
-    ├── components/     Shared badges (duration / category) and the SubtasksSection
+    ├── components/     Shared badges (duration / category), SubtasksSection, SchedulePickerDialog
     ├── draw/            The Jar tab: time budget → random draw → act on it
     ├── joblist/         Full job list: filter, sort, complete, delete
     ├── addedit/          Add/edit form
@@ -329,7 +393,9 @@ data class Job(
     val recurrenceDays: Int? = null,             // null = one-off; set = repeats every N days
     val nextDueAt: Long? = null,                 // repeating only: null/past = due now
     val completionCount: Int = 0,                // repeating only: how many cycles completed
-    val dependsOnSubtaskId: Long? = null         // subtask only: sibling subtask that must be done first
+    val dependsOnSubtaskId: Long? = null,        // subtask only: sibling subtask that must be done first
+    val scheduledDate: Long? = null,             // set = booked for this instant; excluded from the draw pool
+    val calendarEventId: Long? = null            // device Calendar Provider row id backing scheduledDate, if any
 )
 ```
 

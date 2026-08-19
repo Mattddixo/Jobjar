@@ -73,6 +73,7 @@ import com.mattdixon.jobjar.data.JobRepository
 import com.mattdixon.jobjar.data.LONG_JOB_MINUTES
 import com.mattdixon.jobjar.ui.components.CategoryBadge
 import com.mattdixon.jobjar.ui.components.InfoBadge
+import com.mattdixon.jobjar.ui.components.SchedulePickerDialog
 import com.mattdixon.jobjar.ui.components.TimeBucketBadge
 import com.mattdixon.jobjar.ui.theme.AppShapes
 import com.mattdixon.jobjar.ui.theme.Spacing
@@ -99,6 +100,7 @@ fun DrawScreen(
     val appContext = LocalContext.current.applicationContext
     val viewModel: DrawViewModel = viewModel(factory = DrawViewModel.Factory(repository, appContext))
     val state by viewModel.uiState.collectAsState()
+    var jobIdPendingSchedule by remember { mutableStateOf<Long?>(null) }
 
     Scaffold(
         topBar = {
@@ -170,6 +172,7 @@ fun DrawScreen(
                         isBusy = state.isDrawing,
                         onOpen = { jobId -> onOpenJob(jobId) },
                         onStart = { jobId -> viewModel.startJob(jobId) },
+                        onScheduleRequest = { jobId -> jobIdPendingSchedule = jobId },
                         onRedraw = { viewModel.draw(excludeCurrent = true) },
                         onCloseJar = { viewModel.clearDraw() }
                     )
@@ -184,6 +187,16 @@ fun DrawScreen(
                 }
             }
         }
+    }
+
+    jobIdPendingSchedule?.let { jobId ->
+        SchedulePickerDialog(
+            onDismiss = { jobIdPendingSchedule = null },
+            onConfirm = { dateTimeMillis ->
+                viewModel.scheduleJob(jobId, dateTimeMillis)
+                jobIdPendingSchedule = null
+            }
+        )
     }
 }
 
@@ -511,6 +524,7 @@ private fun DrawnJobsBatch(
     isBusy: Boolean,
     onOpen: (Long) -> Unit,
     onStart: (Long) -> Unit,
+    onScheduleRequest: (Long) -> Unit,
     onRedraw: () -> Unit,
     onCloseJar: () -> Unit
 ) {
@@ -533,7 +547,8 @@ private fun DrawnJobsBatch(
                     entry = entry,
                     isBusy = isBusy,
                     onOpen = { onOpen(entry.job.id) },
-                    onStart = { onStart(entry.job.id) }
+                    onStart = { onStart(entry.job.id) },
+                    onScheduleRequest = { onScheduleRequest(entry.job.id) }
                 )
             }
         }
@@ -577,7 +592,8 @@ private fun BatchJobCard(
     entry: DrawnJobEntry,
     isBusy: Boolean,
     onOpen: () -> Unit,
-    onStart: () -> Unit
+    onStart: () -> Unit,
+    onScheduleRequest: () -> Unit
 ) {
     val job = entry.job
     val context = entry.context
@@ -630,19 +646,50 @@ private fun BatchJobCard(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            Button(
-                onClick = onStart,
-                enabled = !isBusy,
-                shape = AppShapes.control,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.tertiary,
-                    contentColor = MaterialTheme.colorScheme.onTertiary
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(34.dp)
-            ) {
-                Text(stringResource(R.string.action_start), style = MaterialTheme.typography.labelMedium)
+            // Repeating jobs don't get a "Schedule" button - the same scope decision as
+            // everywhere else this feature appears - so they keep the original full-width Start.
+            if (job.recurrenceDays == null) {
+                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                    Button(
+                        onClick = onStart,
+                        enabled = !isBusy,
+                        shape = AppShapes.control,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.tertiary,
+                            contentColor = MaterialTheme.colorScheme.onTertiary
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(34.dp)
+                    ) {
+                        Text(stringResource(R.string.action_start), style = MaterialTheme.typography.labelMedium)
+                    }
+                    OutlinedButton(
+                        onClick = onScheduleRequest,
+                        enabled = !isBusy,
+                        shape = AppShapes.control,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(34.dp)
+                    ) {
+                        Text(stringResource(R.string.action_schedule), style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+            } else {
+                Button(
+                    onClick = onStart,
+                    enabled = !isBusy,
+                    shape = AppShapes.control,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.tertiary,
+                        contentColor = MaterialTheme.colorScheme.onTertiary
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(34.dp)
+                ) {
+                    Text(stringResource(R.string.action_start), style = MaterialTheme.typography.labelMedium)
+                }
             }
         }
     }

@@ -25,6 +25,8 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.EventBusy
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Lock
@@ -81,8 +83,10 @@ import com.mattdixon.jobjar.data.JobRepository
 import com.mattdixon.jobjar.data.isPending
 import com.mattdixon.jobjar.ui.components.CategoryBadge
 import com.mattdixon.jobjar.ui.components.InfoBadge
+import com.mattdixon.jobjar.ui.components.SchedulePickerDialog
 import com.mattdixon.jobjar.ui.components.TimeBucketBadge
 import com.mattdixon.jobjar.ui.theme.Spacing
+import com.mattdixon.jobjar.util.formatScheduledDateTime
 
 /** Consistent horizontal inset for every row on this screen. */
 private val ScreenHPadding = Spacing.xl
@@ -105,6 +109,7 @@ fun JobListScreen(
     var searchActive by remember { mutableStateOf(false) }
     var manageCategoriesOpen by remember { mutableStateOf(false) }
     var categoryPendingRemoval by remember { mutableStateOf<String?>(null) }
+    var itemPendingSchedule by remember { mutableStateOf<JobListItem?>(null) }
 
     Scaffold(
         topBar = {
@@ -164,17 +169,26 @@ fun JobListScreen(
                     .padding(horizontal = ScreenHPadding, vertical = Spacing.lg)
             ) {
                 SegmentedButton(
-                    selected = !state.showCompleted,
-                    onClick = { viewModel.setShowCompleted(false) },
+                    selected = state.view == JobsView.ACTIVE,
+                    onClick = { viewModel.setView(JobsView.ACTIVE) },
                     enabled = !state.showRepeatingOnly,
-                    shape = SegmentedButtonDefaults.itemShape(0, 2)
+                    shape = SegmentedButtonDefaults.itemShape(0, 3)
                 ) { Text(stringResource(R.string.filter_active)) }
                 SegmentedButton(
-                    selected = state.showCompleted,
-                    onClick = { viewModel.setShowCompleted(true) },
+                    selected = state.view == JobsView.COMPLETED,
+                    onClick = { viewModel.setView(JobsView.COMPLETED) },
                     enabled = !state.showRepeatingOnly,
-                    shape = SegmentedButtonDefaults.itemShape(1, 2)
+                    shape = SegmentedButtonDefaults.itemShape(1, 3)
                 ) { Text(stringResource(R.string.filter_completed)) }
+                SegmentedButton(
+                    selected = state.view == JobsView.SCHEDULED,
+                    onClick = { viewModel.setView(JobsView.SCHEDULED) },
+                    // Repeating and Scheduled are mutually exclusive by design (see
+                    // JobsView.SCHEDULED's filter), so this tab stays enabled regardless of the
+                    // Repeating toggle instead of following Active/Completed's own disable rule -
+                    // there's no bypass relationship between the two to protect against here.
+                    shape = SegmentedButtonDefaults.itemShape(2, 3)
+                ) { Text(stringResource(R.string.filter_scheduled)) }
             }
 
             // Every filter - current and future - lives in this one horizontally-scrollable
@@ -294,7 +308,9 @@ fun JobListScreen(
                             },
                             onToggleInProgress = { viewModel.toggleInProgress(item.job) },
                             onDeleteRequest = { itemPendingDelete = item },
-                            onToggleExpanded = { viewModel.toggleExpanded(item.job.id) }
+                            onToggleExpanded = { viewModel.toggleExpanded(item.job.id) },
+                            onScheduleRequest = { itemPendingSchedule = item },
+                            onUnschedule = { viewModel.unscheduleJob(item.job) }
                         )
                     }
                 }
@@ -372,6 +388,16 @@ fun JobListScreen(
             }
         )
     }
+
+    itemPendingSchedule?.let { item ->
+        SchedulePickerDialog(
+            onDismiss = { itemPendingSchedule = null },
+            onConfirm = { dateTimeMillis ->
+                viewModel.scheduleJob(item.job, dateTimeMillis)
+                itemPendingSchedule = null
+            }
+        )
+    }
 }
 
 /**
@@ -422,7 +448,8 @@ private fun ManageCategoriesDialog(
 private fun emptyStateText(state: JobListUiState): String = when {
     state.searchQuery.isNotBlank() -> stringResource(R.string.empty_no_search_match, state.searchQuery)
     state.hasActiveFilters -> stringResource(R.string.empty_no_filter_match)
-    state.showCompleted -> stringResource(R.string.empty_no_completed)
+    state.view == JobsView.SCHEDULED -> stringResource(R.string.empty_no_scheduled)
+    state.view == JobsView.COMPLETED -> stringResource(R.string.empty_no_completed)
     else -> stringResource(R.string.empty_no_jobs)
 }
 
@@ -483,7 +510,9 @@ private fun JobRow(
     onToggleDone: () -> Unit,
     onToggleInProgress: () -> Unit,
     onDeleteRequest: () -> Unit,
-    onToggleExpanded: () -> Unit
+    onToggleExpanded: () -> Unit,
+    onScheduleRequest: () -> Unit,
+    onUnschedule: () -> Unit
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     val job = item.job
@@ -550,6 +579,9 @@ private fun JobRow(
                     if (job.category.isNotBlank()) CategoryBadge(category = job.category)
                     if (item.subtaskTotal > 0) InfoBadge(text = stringResource(R.string.subtasks_done_count, item.subtaskDone, item.subtaskTotal))
                     if (item.recurrenceLabel != null) InfoBadge(text = item.recurrenceLabel)
+                    if (item.scheduledDate != null) {
+                        InfoBadge(text = stringResource(R.string.badge_scheduled, formatScheduledDateTime(item.scheduledDate)))
+                    }
                 }
                 if (item.waitingOnTitle != null) {
                     Row(
@@ -628,6 +660,24 @@ private fun JobRow(
                             leadingIcon = { Icon(Icons.Filled.PlayArrow, contentDescription = null) },
                             onClick = { menuExpanded = false; onToggleInProgress() }
                         )
+                    }
+                    // Scheduling a repeating job would leave a calendar event describing a
+                    // one-off occurrence of something that keeps coming back - out of scope for
+                    // this feature, so the menu simply doesn't offer it for those jobs.
+                    if (job.recurrenceDays == null) {
+                        if (job.scheduledDate != null) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.action_unschedule)) },
+                                leadingIcon = { Icon(Icons.Filled.EventBusy, contentDescription = null) },
+                                onClick = { menuExpanded = false; onUnschedule() }
+                            )
+                        } else {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.action_schedule)) },
+                                leadingIcon = { Icon(Icons.Filled.Event, contentDescription = null) },
+                                onClick = { menuExpanded = false; onScheduleRequest() }
+                            )
+                        }
                     }
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.action_delete)) },
