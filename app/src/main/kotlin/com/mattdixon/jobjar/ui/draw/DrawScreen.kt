@@ -75,6 +75,7 @@ import com.mattdixon.jobjar.ui.components.CategoryBadge
 import com.mattdixon.jobjar.ui.components.InfoBadge
 import com.mattdixon.jobjar.ui.components.SchedulePickerDialog
 import com.mattdixon.jobjar.ui.components.TimeBucketBadge
+import com.mattdixon.jobjar.ui.components.TodayDateButton
 import com.mattdixon.jobjar.ui.theme.AppShapes
 import com.mattdixon.jobjar.ui.theme.Spacing
 import com.mattdixon.jobjar.util.formatMinutes
@@ -106,6 +107,7 @@ fun DrawScreen(
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.draw_screen_title)) },
+                navigationIcon = { TodayDateButton() },
                 actions = {
                     TextButton(onClick = onToggleTheme) {
                         Text(stringResource(if (darkTheme) R.string.theme_toggle_light else R.string.theme_toggle_dark))

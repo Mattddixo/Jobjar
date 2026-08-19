@@ -300,7 +300,16 @@ are two different things — the Active view still shows it, since neither
 `isInProgress` nor `isDone` changed to actually remove it from "active,"
 it's just also excluded from the draw itself.
 
+Each main tab's top bar also shows today's date in the top-left corner
+(`ui/components/TodayDateButton.kt`) as a plain way *in* to the device's
+Calendar app, complementing the "Schedule" buttons as the way out to it —
+tapping it launches the same real Calendar app via an implicit
+`ACTION_VIEW` intent on `CalendarContract.CONTENT_URI`, opened to today,
+rather than this app building any calendar UI of its own.
 
+## Architecture
+
+Standard modern-Android stack, no unnecessary abstraction:
 
 - **Kotlin + Jetpack Compose** for the entire UI (single-Activity, Material
   3). Theming is deliberately monochrome (`ui/theme/Color.kt` / `Theme.kt`)

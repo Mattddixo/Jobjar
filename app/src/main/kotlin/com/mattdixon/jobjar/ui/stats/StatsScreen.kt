@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mattdixon.jobjar.R
 import com.mattdixon.jobjar.data.JobRepository
+import com.mattdixon.jobjar.ui.components.TodayDateButton
 import com.mattdixon.jobjar.ui.theme.AppShapes
 import com.mattdixon.jobjar.ui.theme.Spacing
 import com.mattdixon.jobjar.util.formatMinutes
@@ -45,6 +46,7 @@ fun StatsScreen(
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.stats_screen_title)) },
+                navigationIcon = { TodayDateButton() },
                 actions = {
                     TextButton(onClick = onToggleTheme) {
                         Text(stringResource(if (darkTheme) R.string.theme_toggle_light else R.string.theme_toggle_dark))
