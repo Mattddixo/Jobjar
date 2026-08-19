@@ -178,7 +178,10 @@ class JobRepository(private val dao: JobDao, appContext: Context) {
      * with no further action from this app. Rescheduling an already-scheduled job updates that
      * same calendar event in place rather than creating a second one; if the update fails (e.g.
      * the event was deleted on the calendar side), this falls back to inserting a fresh one so
-     * the job still ends up booked either way.
+     * the job still ends up booked either way. Scheduling a job that's currently in progress
+     * clears that flag - the mirror image of [toggleInProgress] clearing a schedule when a job is
+     * started - since booking it for later is itself saying you're not working it right now; done
+     * silently, without a confirmation dialog, same as that other direction.
      */
     suspend fun scheduleJob(job: Job, dateTimeMillis: Long) {
         val endMillis = dateTimeMillis + job.estimatedMinutes * MINUTE_MILLIS
@@ -188,7 +191,7 @@ class JobRepository(private val dao: JobDao, appContext: Context) {
         } else {
             calendarScheduler.insertEvent(job.title, dateTimeMillis, endMillis)
         }
-        dao.update(job.copy(scheduledDate = dateTimeMillis, calendarEventId = eventId))
+        dao.update(job.copy(scheduledDate = dateTimeMillis, calendarEventId = eventId, isInProgress = false))
     }
 
     /** Drops [job]'s schedule and deletes its calendar event, if it had one - back to a plain
