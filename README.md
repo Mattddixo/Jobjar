@@ -427,7 +427,11 @@ custom URI scheme each app declares - the standard same-device mechanism for two
 (no server, no shared account) to exchange data. `DeepLink.kt` parses the incoming Uri;
 `MainActivity` calls `navController.navigate(...)` explicitly for both a cold start and an
 already-running instance (`onNewIntent`), rather than relying on Navigation-Compose's declarative
-deep-link auto-matching.
+deep-link auto-matching. Every one of those `navigate(...)` calls passes `launchSingleTop = true`
+- repeatedly bouncing back and forth via "Open in..." always re-navigates to the exact same
+destination this app's own back stack was already sitting on (nothing pops it while this app is
+merely backgrounded, not finished), so without this each round trip would push another duplicate
+copy on top, and Back would have to be pressed once per bounce before it did anything visible.
 
 A link is established one of two ways, both reachable from a job's detail screen:
 

@@ -73,8 +73,14 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun navigateTo(navController: NavHostController, link: IncomingDeepLink) {
+        // launchSingleTop matters a lot more here than in an ordinary in-app navigate() call:
+        // bouncing back and forth with Home Jobs Tracker via the "Open in..." button always
+        // re-navigates to the exact same destination this app's own back stack was already
+        // sitting on (nothing popped it while this app was merely backgrounded, not finished) —
+        // without this, every round trip pushed a fresh duplicate copy on top, so Back had to be
+        // pressed once per bounce before it would actually leave the screen.
         when (link) {
-            is IncomingDeepLink.ViewJob -> navController.navigate("job/${link.jobId}")
+            is IncomingDeepLink.ViewJob -> navController.navigate("job/${link.jobId}") { launchSingleTop = true }
             is IncomingDeepLink.CreateJob -> {
                 val params = buildList {
                     link.title?.let { add("title=${Uri.encode(it)}") }
@@ -84,13 +90,13 @@ class MainActivity : ComponentActivity() {
                     link.scheduledDate?.let { add("scheduledDate=${Uri.encode(it)}") }
                 }
                 val route = if (params.isEmpty()) "job/new" else "job/new?" + params.joinToString("&")
-                navController.navigate(route)
+                navController.navigate(route) { launchSingleTop = true }
             }
-            is IncomingDeepLink.PickJob -> navController.navigate("jobPicker?returnJobId=${link.returnJobId}")
+            is IncomingDeepLink.PickJob -> navController.navigate("jobPicker?returnJobId=${link.returnJobId}") { launchSingleTop = true }
             is IncomingDeepLink.Linked -> {
                 lifecycleScope.launch {
                     repository.setLinkedTrackerJobId(link.jobId, link.otherId)
-                    navController.navigate("job/${link.jobId}")
+                    navController.navigate("job/${link.jobId}") { launchSingleTop = true }
                 }
             }
         }
