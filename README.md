@@ -450,9 +450,13 @@ Either path ends the same way: whichever side just created or picked the counter
 return callback - `jobjar://linked?jobId=<myId>&otherId=<theirId>` (Tracker calls back into this
 scheme the same way, in reverse) - so **both** jobs end up remembering each other's id
 (`Job.linkedTrackerJobId` here, `JobEntity.linkedJobJarId` on the Tracker side). From then on the
-detail screen's Send/Link buttons are replaced by a single **Open in Job Tracker** button
-(`hometracker://job/{id}`) - true two-way navigation, working the same regardless of which app the
-link originated from.
+detail screen's Send/Link buttons are replaced by two side-by-side, half-width buttons: **Open in
+Job Tracker** (`hometracker://job/{id}`) - true two-way navigation, working the same regardless of
+which app the link originated from - and **Unlink**, behind a confirmation dialog since it reaches
+into the other app too: it clears this job's own `linkedTrackerJobId` and fires
+`hometracker://unlinked?jobId=<theirId>` so Tracker clears its half in the same stroke. That's the
+deliberate way out of a mistaken or outdated link - pick the wrong job, or need to point this one
+at a different Tracker job later - since without it a link, once made, could never be changed.
 
 Because the link lives on the `linkedTrackerJobId` field of the `Job` row itself, and that field
 is gated purely on whether a link already exists (not on `parentId`), a **subtask** gets this same

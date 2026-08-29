@@ -99,6 +99,12 @@ class MainActivity : ComponentActivity() {
                     navController.navigate("job/${link.jobId}") { launchSingleTop = true }
                 }
             }
+            is IncomingDeepLink.Unlinked -> {
+                lifecycleScope.launch {
+                    repository.setLinkedTrackerJobId(link.jobId, null)
+                    navController.navigate("job/${link.jobId}") { launchSingleTop = true }
+                }
+            }
         }
     }
 }

@@ -116,6 +116,9 @@
     <string name="action_send_to_tracker">Send to Job Tracker</string>
     <string name="action_link_to_tracker">Link to existing Job Tracker job</string>
     <string name="action_open_in_tracker">Open in Job Tracker</string>
+    <string name="action_unlink_tracker">Unlink</string>
+    <string name="dialog_unlink_tracker_title">Unlink this job?</string>
+    <string name="dialog_unlink_tracker_body">This job and its Job Tracker job will no longer be linked. You can send or link it to a different job afterward.</string>
     <string name="toast_tracker_not_installed">Job Tracker isn\'t installed</string>
 
     <!-- Job picker screen (Link to existing Job Tracker job) -->

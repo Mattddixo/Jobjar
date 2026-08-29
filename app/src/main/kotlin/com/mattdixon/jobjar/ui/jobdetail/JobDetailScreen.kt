@@ -319,7 +319,7 @@ fun JobDetailScreen(
                 }
 
                 HorizontalDivider()
-                TrackerLinkActions(currentJob)
+                TrackerLinkActions(currentJob, onUnlink = { scope.launch { repository.setLinkedTrackerJobId(currentJob.id, null) } })
 
                 if (currentJob.parentId == null) {
                     HorizontalDivider()
@@ -396,16 +396,20 @@ fun JobDetailScreen(
  * scheme - the standard way for two local-only Android apps on the same device to talk to each
  * other without a shared backend. Once [Job.linkedTrackerJobId] is set - whether by sending a fresh
  * copy over or by linking to an existing Tracker job via the picker - the Send/Link actions are
- * replaced by a single "Open in Job Tracker" bounce button, so a job can never end up linked
- * twice. Deliberately not gated on this job being a top-level one: a subtask gets these same
- * actions on its own detail screen, since it may carry its own separate Tracker job with its own
- * cost, independent of whatever its parent is linked to.
+ * replaced by "Open in Job Tracker" plus a smaller "Unlink", so a job can never end up linked
+ * twice, but a mistaken or outdated link can always be broken and redone. Deliberately not gated
+ * on this job being a top-level one: a subtask gets these same actions on its own detail screen,
+ * since it may carry its own separate Tracker job with its own cost, independent of whatever its
+ * parent is linked to.
  */
 @Composable
-private fun TrackerLinkActions(job: Job) {
+private fun TrackerLinkActions(job: Job, onUnlink: () -> Unit) {
     val context = LocalContext.current
+    var showUnlinkConfirm by remember { mutableStateOf(false) }
+    val linkedTrackerJobId = job.linkedTrackerJobId
+
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
-        if (job.linkedTrackerJobId == null) {
+        if (linkedTrackerJobId == null) {
             OutlinedButton(
                 onClick = { openInJobTracker(context, sendToTrackerUri(job)) },
                 modifier = Modifier.fillMaxWidth()
@@ -419,14 +423,50 @@ private fun TrackerLinkActions(job: Job) {
                 Text(stringResource(R.string.action_link_to_tracker))
             }
         } else {
-            OutlinedButton(
-                onClick = { openInJobTracker(context, Uri.parse("hometracker://job/${job.linkedTrackerJobId}")) },
-                modifier = Modifier.fillMaxWidth()
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.md)
             ) {
-                Text(stringResource(R.string.action_open_in_tracker))
+                OutlinedButton(
+                    onClick = { openInJobTracker(context, Uri.parse("hometracker://job/$linkedTrackerJobId")) },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(stringResource(R.string.action_open_in_tracker))
+                }
+                OutlinedButton(
+                    onClick = { showUnlinkConfirm = true },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(stringResource(R.string.action_unlink_tracker))
+                }
             }
         }
     }
+
+    if (showUnlinkConfirm && linkedTrackerJobId != null) {
+        AlertDialog(
+            onDismissRequest = { showUnlinkConfirm = false },
+            title = { Text(stringResource(R.string.dialog_unlink_tracker_title)) },
+            text = { Text(stringResource(R.string.dialog_unlink_tracker_body)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    fireUnlinkedToTracker(context, trackerJobId = linkedTrackerJobId)
+                    onUnlink()
+                    showUnlinkConfirm = false
+                }) { Text(stringResource(R.string.action_unlink_tracker)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUnlinkConfirm = false }) { Text(stringResource(R.string.action_cancel)) }
+            }
+        )
+    }
+}
+
+private fun fireUnlinkedToTracker(context: Context, trackerJobId: Long) {
+    val uri = Uri.parse("hometracker://unlinked").buildUpon()
+        .appendQueryParameter("jobId", trackerJobId.toString())
+        .build()
+    openInJobTracker(context, uri)
 }
 
 private fun sendToTrackerUri(job: Job): Uri {

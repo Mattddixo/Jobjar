@@ -30,6 +30,11 @@ sealed interface IncomingDeepLink {
     /** `jobjar://linked?jobId=...&otherId=...` - the return trip: [jobId] (one of our own jobs) is
      * now linked to Tracker job [otherId]; persist that and show the job. */
     data class Linked(val jobId: Long, val otherId: Long) : IncomingDeepLink
+
+    /** `jobjar://unlinked?jobId=...` - the other half of an explicit Unlink action taken on the
+     * Tracker side: this app's own job [jobId] should forget whatever Tracker job it was linked
+     * to, since Tracker just forgot its half too. */
+    data class Unlinked(val jobId: Long) : IncomingDeepLink
 }
 
 fun parseIncomingDeepLink(uri: Uri): IncomingDeepLink? = when (uri.host) {
@@ -47,5 +52,6 @@ fun parseIncomingDeepLink(uri: Uri): IncomingDeepLink? = when (uri.host) {
         val otherId = uri.getQueryParameter("otherId")?.toLongOrNull()
         if (jobId != null && otherId != null) IncomingDeepLink.Linked(jobId, otherId) else null
     }
+    "unlinked" -> uri.getQueryParameter("jobId")?.toLongOrNull()?.let { IncomingDeepLink.Unlinked(it) }
     else -> null
 }
