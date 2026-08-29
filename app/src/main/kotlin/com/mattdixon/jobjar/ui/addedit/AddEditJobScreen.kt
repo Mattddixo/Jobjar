@@ -1,5 +1,10 @@
 package com.mattdixon.jobjar.ui.addedit
 
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -37,6 +42,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -111,8 +117,15 @@ fun AddEditJobScreen(
     }
     val ownSubtasks by ownSubtasksFlow.collectAsState(initial = emptyList())
 
+    val context = LocalContext.current
     LaunchedEffect(state.isSaved) {
-        if (state.isSaved) onDone()
+        if (state.isSaved) {
+            val trackerJobId = state.linkedTrackerJobId
+            if (state.wasJustCreated && trackerJobId != null && savedId != null) {
+                fireLinkedToTracker(context, trackerJobId = trackerJobId, jobJarId = savedId)
+            }
+            onDone()
+        }
     }
 
     val titleRes = when {
@@ -382,5 +395,23 @@ fun AddEditJobScreen(
                 }
             }
         }
+    }
+}
+
+/**
+ * The return trip for a job created via a `jobjar://newjob?...&sourceId=<trackerJobId>` deep
+ * link: tells Tracker which Job Jar job it should now remember as linked, so a second "Send" from
+ * that same Tracker job can't create a duplicate. Only fired once, right after the create that
+ * established the link (see [AddEditFormState.wasJustCreated]) - never on a later edit-save.
+ */
+private fun fireLinkedToTracker(context: Context, trackerJobId: Long, jobJarId: Long) {
+    val uri = Uri.parse("hometracker://linked").buildUpon()
+        .appendQueryParameter("jobId", trackerJobId.toString())
+        .appendQueryParameter("otherId", jobJarId.toString())
+        .build()
+    try {
+        context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+    } catch (e: ActivityNotFoundException) {
+        Toast.makeText(context, context.getString(R.string.toast_tracker_not_installed), Toast.LENGTH_SHORT).show()
     }
 }

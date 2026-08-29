@@ -24,6 +24,11 @@ class JobRepository(private val dao: JobDao, appContext: Context) {
     fun jobById(id: Long): Flow<Job?> = dao.getJobById(id)
     fun subtasksOf(parentId: Long): Flow<List<Job>> = dao.getSubtasks(parentId)
 
+    /** Targeted update for establishing (or clearing) a cross-app link, without touching any
+     * other column - used by the "Link to existing" picker flow and the `linked` deep-link
+     * return trip. See the "Interop with Home Jobs Tracker" README section. */
+    suspend fun setLinkedTrackerJobId(id: Long, linkedTrackerJobId: Long?) = dao.setLinkedTrackerJobId(id, linkedTrackerJobId)
+
     suspend fun addJob(job: Job): Long {
         val id = dao.insert(job)
         if (job.parentId != null) growParentToFitSubtasks(job.parentId)

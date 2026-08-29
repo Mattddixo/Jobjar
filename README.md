@@ -379,6 +379,7 @@ app/src/main/kotlin/com/mattdixon/jobjar/
     ├── joblist/         Full job list: filter, sort, complete, delete
     ├── addedit/          Add/edit form
     ├── jobdetail/        Single job view
+    ├── jobpicker/        "Link to existing Job Tracker job" picker
     └── stats/            Completion + time-invested stats
     JobJarApp.kt          Nav host + bottom navigation
 ```
@@ -405,7 +406,7 @@ data class Job(
     val dependsOnSubtaskId: Long? = null,        // subtask only: sibling subtask that must be done first
     val scheduledDate: Long? = null,             // set = booked for this instant; excluded from the draw pool
     val calendarEventId: Long? = null,           // device Calendar Provider row id backing scheduledDate, if any
-    val spawnedFromTrackerJobId: Long? = null     // set only if created via a Home Jobs Tracker handoff
+    val linkedTrackerJobId: Long? = null     // this job's Home Jobs Tracker counterpart, if linked
 )
 ```
 
@@ -419,29 +420,44 @@ above for why.
 
 ## Interop with Home Jobs Tracker
 
-A job here can be sent to [Home Jobs Tracker](https://github.com/Mattddixo/job-tracker) (a
-separate, unrelated app for tracking a job's vendor/cost/payment details) and back, via implicit
-`ACTION_VIEW` intents against a custom URI scheme each app declares - the standard same-device
-mechanism for two local-only apps (no server, no shared account) to exchange data. `DeepLink.kt`
-parses the incoming Uri; `MainActivity` calls `navController.navigate(...)` explicitly for both a
-cold start and an already-running instance (`onNewIntent`), rather than relying on
-Navigation-Compose's declarative deep-link auto-matching.
+A job here can be **linked** - one-to-one, two-way - to a job in
+[Home Jobs Tracker](https://github.com/Mattddixo/job-tracker) (a separate, unrelated app for
+tracking a job's vendor/cost/payment details), via implicit `ACTION_VIEW` intents against a
+custom URI scheme each app declares - the standard same-device mechanism for two local-only apps
+(no server, no shared account) to exchange data. `DeepLink.kt` parses the incoming Uri;
+`MainActivity` calls `navController.navigate(...)` explicitly for both a cold start and an
+already-running instance (`onNewIntent`), rather than relying on Navigation-Compose's declarative
+deep-link auto-matching.
 
-- `jobjar://newjob?title=...&category=...&sourceId=...` - pre-fills a new job's title and
-  category (the only two fields both apps' domain models actually share) and remembers which
-  Tracker job it came from, via `Job.spawnedFromTrackerJobId`. Nothing is auto-saved - it lands
-  on the normal Add Job form, reviewed and saved like any other job.
-- `jobjar://job/{jobId}` - opens an existing job directly (what a Tracker job's own "View
-  originating task" button targets).
-- The job detail screen's "Send to Job Tracker" button (always shown) builds the mirror-image
-  `hometracker://newjob?...` intent; "View originating quote in Job Tracker" only appears when
-  `spawnedFromTrackerJobId` is set. Either button shows a "Job Tracker isn't installed" toast
-  instead of crashing if the target app isn't present.
-- **Scope decision**: each side only remembers its own single origin - there's no list of
-  "everything this job spawned in Job Tracker." Sending the same job to Tracker multiple times
-  still works fine; what you don't get is a single place that lists every job spawned from one
-  task. That'd need a real one-to-many join and a filtered browse view here - a bigger feature,
-  left for later if it turns out to matter.
+A link is established one of two ways, both reachable from a job's detail screen:
+
+- **Send to Job Tracker** - creates a brand-new Tracker job pre-filled from this one's title and
+  category (the only two fields both apps' domain models actually share) via
+  `hometracker://newjob?title=...&category=...&sourceId=<thisJobId>`. Nothing is auto-saved on
+  the Tracker side - it lands on Tracker's own Add Job form, reviewed and saved like any other
+  job there.
+- **Link to existing Job Tracker job** - opens a picker (`hometracker://pickjob?returnJobId=<thisJobId>`)
+  listing Tracker's own unlinked jobs, so this job can be tied to one that already exists instead
+  of always spawning a new one.
+
+Either path ends the same way: whichever side just created or picked the counterpart fires a
+return callback - `jobjar://linked?jobId=<myId>&otherId=<theirId>` (Tracker calls back into this
+scheme the same way, in reverse) - so **both** jobs end up remembering each other's id
+(`Job.linkedTrackerJobId` here, `JobEntity.linkedJobJarId` on the Tracker side). From then on the
+detail screen's Send/Link buttons are replaced by a single **Open in Job Tracker** button
+(`hometracker://job/{id}`) - true two-way navigation, working the same regardless of which app the
+link originated from.
+
+Because the link lives on the `linkedTrackerJobId` field of the `Job` row itself, and that field
+is gated purely on whether a link already exists (not on `parentId`), a **subtask** gets this same
+Send/Link/Open UI on its own detail screen, independent of whatever its parent job is linked to -
+useful when a subtask carries its own separate cost worth tracking on its own Tracker entry.
+
+**Duplicate-proof by construction**: once `linkedTrackerJobId` is set, the Send/Link buttons are
+gone from the UI entirely - there's no code path left that could create a second link. The picker
+itself also excludes any Tracker job that's already linked to something, so a job can't be
+double-linked from that side either. Any button shows a "Job Tracker isn't installed" toast
+instead of crashing if the target app isn't present.
 
 ## Building
 

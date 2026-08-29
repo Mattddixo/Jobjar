@@ -67,7 +67,7 @@ data class Job(
     /** Opaque id of the Home Jobs Tracker job this was created from, if it arrived via that
      * app's "Send to Job Jar" deep link - not a foreign key, since it points into a different
      * app's database entirely. */
-    val spawnedFromTrackerJobId: Long? = null
+    val linkedTrackerJobId: Long? = null
 )
 
 /**

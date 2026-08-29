@@ -8,7 +8,7 @@ import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [Job::class], version = 7, exportSchema = true)
+@Database(entities = [Job::class], version = 8, exportSchema = true)
 @TypeConverters(Converters::class)
 abstract class JobDatabase : RoomDatabase() {
 
@@ -54,7 +54,17 @@ abstract class JobDatabase : RoomDatabase() {
 
         val MIGRATION_6_7 = object : Migration(6, 7) {
             override fun migrate(db: SupportSQLiteDatabase) {
+                // Column name here must stay as originally shipped - MIGRATION_7_8 renames it.
                 db.execSQL("ALTER TABLE jobs ADD COLUMN spawnedFromTrackerJobId INTEGER DEFAULT NULL")
+            }
+        }
+
+        /** Generalizes the one-way "spawned from" field into a symmetric link, set by whichever
+         * side (Tracker or Job Jar) established it - see the "Interop with Home Jobs Tracker"
+         * section of the README. */
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE jobs RENAME COLUMN spawnedFromTrackerJobId TO linkedTrackerJobId")
             }
         }
 
@@ -65,7 +75,8 @@ abstract class JobDatabase : RoomDatabase() {
                     JobDatabase::class.java,
                     "jobjar.db"
                 ).addMigrations(
-                    MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7
+                    MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
+                    MIGRATION_7_8
                 ).build().also { INSTANCE = it }
             }
     }

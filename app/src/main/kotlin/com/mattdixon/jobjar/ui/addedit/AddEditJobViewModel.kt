@@ -27,8 +27,12 @@ data class AddEditFormState(
     val dependsOnSubtaskId: Long? = null,
     /** Set only for a new job opened via a jobjar://newjob deep link (e.g. Home Jobs Tracker's
      * "Send to Job Jar" button) - the Tracker job it should remember as its origin once saved. */
-    val spawnedFromTrackerJobId: Long? = null,
+    val linkedTrackerJobId: Long? = null,
     val isSaved: Boolean = false,
+    /** True only when [isSaved] resulted from this save creating a brand-new job, never from
+     * editing an already-existing one - gates firing the `hometracker://linked` return callback
+     * so it only ever fires once, at actual link-establishment time. */
+    val wasJustCreated: Boolean = false,
     /** True once we're sure [parentId] reflects reality - false only while an existing job is still loading. */
     val isLoaded: Boolean = false
 ) {
@@ -51,7 +55,7 @@ class AddEditJobViewModel(
             parentId = parentId,
             title = if (jobId == null) prefillTitle.orEmpty() else "",
             category = if (jobId == null) prefillCategory.orEmpty() else "",
-            spawnedFromTrackerJobId = if (jobId == null) sourceTrackerJobId else null,
+            linkedTrackerJobId = if (jobId == null) sourceTrackerJobId else null,
             isLoaded = jobId == null
         )
     )
@@ -72,7 +76,7 @@ class AddEditJobViewModel(
                         priority = job.priority,
                         recurrenceDays = job.recurrenceDays,
                         dependsOnSubtaskId = job.dependsOnSubtaskId,
-                        spawnedFromTrackerJobId = job.spawnedFromTrackerJobId,
+                        linkedTrackerJobId = job.linkedTrackerJobId,
                         isLoaded = true
                     )
                 } else {
@@ -109,9 +113,10 @@ class AddEditJobViewModel(
 
     fun save() {
         if (!_formState.value.isValid) return
+        val wasCreate = _formState.value.id == null
         viewModelScope.launch {
             persist()
-            _formState.value = _formState.value.copy(isSaved = true)
+            _formState.value = _formState.value.copy(isSaved = true, wasJustCreated = wasCreate)
         }
     }
 
@@ -146,7 +151,7 @@ class AddEditJobViewModel(
                     parentId = parentId,
                     recurrenceDays = state.recurrenceDays,
                     dependsOnSubtaskId = state.dependsOnSubtaskId,
-                    spawnedFromTrackerJobId = state.spawnedFromTrackerJobId
+                    linkedTrackerJobId = state.linkedTrackerJobId
                 )
             )
             _formState.value = _formState.value.copy(id = newId)

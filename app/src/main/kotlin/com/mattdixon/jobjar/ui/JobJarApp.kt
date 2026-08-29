@@ -28,6 +28,7 @@ import com.mattdixon.jobjar.ui.addedit.AddEditJobScreen
 import com.mattdixon.jobjar.ui.draw.DrawScreen
 import com.mattdixon.jobjar.ui.jobdetail.JobDetailScreen
 import com.mattdixon.jobjar.ui.joblist.JobListScreen
+import com.mattdixon.jobjar.ui.jobpicker.JobPickerScreen
 import com.mattdixon.jobjar.ui.stats.StatsScreen
 
 private sealed class TopLevelDestination(val route: String, val label: String, val icon: ImageVector) {
@@ -148,6 +149,17 @@ fun JobJarApp(
                     jobId = null,
                     parentId = parentId,
                     onDone = { navController.popBackStack() }
+                )
+            }
+            composable(
+                route = "jobPicker?returnJobId={returnJobId}",
+                arguments = listOf(navArgument("returnJobId") { type = NavType.LongType })
+            ) { backStackEntry ->
+                val returnJobId = backStackEntry.arguments?.getLong("returnJobId") ?: return@composable
+                JobPickerScreen(
+                    repository = repository,
+                    returnJobId = returnJobId,
+                    onBack = { navController.popBackStack() }
                 )
             }
         }

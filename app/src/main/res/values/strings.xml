@@ -112,8 +112,13 @@
     <string name="action_make_available_now">Make available now</string>
     <string name="action_mark_as_not_done">Mark as not done</string>
     <string name="action_send_to_tracker">Send to Job Tracker</string>
-    <string name="action_view_origin_in_tracker">View originating quote in Job Tracker</string>
+    <string name="action_link_to_tracker">Link to existing Job Tracker job</string>
+    <string name="action_open_in_tracker">Open in Job Tracker</string>
     <string name="toast_tracker_not_installed">Job Tracker isn\'t installed</string>
+
+    <!-- Job picker screen (Link to existing Job Tracker job) -->
+    <string name="jobpicker_title">Select a job to link</string>
+    <string name="jobpicker_empty">No unlinked jobs available to pick.</string>
 
     <!-- Subtasks section (shared component) -->
     <string name="subtasks_done_count">%1$d/%2$d done</string>

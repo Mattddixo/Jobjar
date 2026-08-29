@@ -60,4 +60,7 @@ interface JobDao {
     /** Full reset for a repeating job's fresh cycle: not done, not in progress, no completion timestamp. */
     @Query("UPDATE jobs SET isDone = 0, completedAt = NULL, isInProgress = 0 WHERE id = :id")
     suspend fun resetForNewCycle(id: Long)
+
+    @Query("UPDATE jobs SET linkedTrackerJobId = :linkedTrackerJobId WHERE id = :id")
+    suspend fun setLinkedTrackerJobId(id: Long, linkedTrackerJobId: Long?)
 }

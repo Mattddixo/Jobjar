@@ -13,23 +13,27 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
+import com.mattdixon.jobjar.data.JobRepository
 import com.mattdixon.jobjar.data.ThemePreferences
 import com.mattdixon.jobjar.ui.JobJarApp
 import com.mattdixon.jobjar.ui.theme.JobJarTheme
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
     // Set once, on the first composition, so onNewIntent (which runs outside any composable) can
     // still reach the same NavController the graph is using.
     private lateinit var navController: NavHostController
+    private lateinit var repository: JobRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        val repository = (application as JobJarApplication).repository
+        repository = (application as JobJarApplication).repository
 
         setContent {
             val navController = rememberNavController()
@@ -79,6 +83,13 @@ class MainActivity : ComponentActivity() {
                 }
                 val route = if (params.isEmpty()) "job/new" else "job/new?" + params.joinToString("&")
                 navController.navigate(route)
+            }
+            is IncomingDeepLink.PickJob -> navController.navigate("jobPicker?returnJobId=${link.returnJobId}")
+            is IncomingDeepLink.Linked -> {
+                lifecycleScope.launch {
+                    repository.setLinkedTrackerJobId(link.jobId, link.otherId)
+                    navController.navigate("job/${link.jobId}")
+                }
             }
         }
     }

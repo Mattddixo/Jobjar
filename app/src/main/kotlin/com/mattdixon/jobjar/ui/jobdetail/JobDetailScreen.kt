@@ -316,7 +316,7 @@ fun JobDetailScreen(
                 }
 
                 HorizontalDivider()
-                TrackerLinkActions(currentJob.id, currentJob.title, currentJob.category, currentJob.spawnedFromTrackerJobId)
+                TrackerLinkActions(currentJob.id, currentJob.title, currentJob.category, currentJob.linkedTrackerJobId)
 
                 if (currentJob.parentId == null) {
                     HorizontalDivider()
@@ -391,25 +391,36 @@ fun JobDetailScreen(
  * Hands this job off to Home Jobs Tracker (a separate, unrelated app for tracking a job's
  * vendor/cost/payment details) via an implicit `ACTION_VIEW` intent against its own custom URI
  * scheme - the standard way for two local-only Android apps on the same device to talk to each
- * other without a shared backend. Tracker lands on its own create form pre-filled from the query
- * string; nothing is saved on either side until the user reviews and confirms it there.
+ * other without a shared backend. Once [linkedTrackerJobId] is set - whether by sending a fresh
+ * copy over or by linking to an existing Tracker job via the picker - the Send/Link actions are
+ * replaced by a single "Open in Job Tracker" bounce button, so a job can never end up linked
+ * twice. Deliberately not gated on this job being a top-level one: a subtask gets these same
+ * actions on its own detail screen, since it may carry its own separate Tracker job with its own
+ * cost, independent of whatever its parent is linked to.
  */
 @Composable
-private fun TrackerLinkActions(jobId: Long, title: String, category: String, spawnedFromTrackerJobId: Long?) {
+private fun TrackerLinkActions(jobId: Long, title: String, category: String, linkedTrackerJobId: Long?) {
     val context = LocalContext.current
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
-        OutlinedButton(
-            onClick = { openInJobTracker(context, sendToTrackerUri(jobId, title, category)) },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(stringResource(R.string.action_send_to_tracker))
-        }
-        spawnedFromTrackerJobId?.let { trackerJobId ->
+        if (linkedTrackerJobId == null) {
             OutlinedButton(
-                onClick = { openInJobTracker(context, Uri.parse("hometracker://job/$trackerJobId")) },
+                onClick = { openInJobTracker(context, sendToTrackerUri(jobId, title, category)) },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(stringResource(R.string.action_view_origin_in_tracker))
+                Text(stringResource(R.string.action_send_to_tracker))
+            }
+            OutlinedButton(
+                onClick = { openInJobTracker(context, Uri.parse("hometracker://pickjob?returnJobId=$jobId")) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(stringResource(R.string.action_link_to_tracker))
+            }
+        } else {
+            OutlinedButton(
+                onClick = { openInJobTracker(context, Uri.parse("hometracker://job/$linkedTrackerJobId")) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(stringResource(R.string.action_open_in_tracker))
             }
         }
     }
