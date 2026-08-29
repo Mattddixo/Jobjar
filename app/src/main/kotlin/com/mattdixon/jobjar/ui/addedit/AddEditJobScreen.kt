@@ -20,6 +20,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Event
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -56,6 +58,7 @@ import com.mattdixon.jobjar.ui.components.SubtasksSection
 import com.mattdixon.jobjar.ui.theme.Spacing
 import com.mattdixon.jobjar.util.formatMinutes
 import com.mattdixon.jobjar.util.formatRecurrenceInterval
+import com.mattdixon.jobjar.util.formatScheduledDateTime
 import kotlinx.coroutines.flow.flowOf
 
 private val QUICK_DURATIONS = listOf(5, 15, 30, 45, 60, 90, 120, 180)
@@ -76,7 +79,9 @@ fun AddEditJobScreen(
     onAddSubtask: (Long) -> Unit = {},
     prefillTitle: String? = null,
     prefillCategory: String? = null,
-    sourceTrackerJobId: Long? = null
+    sourceTrackerJobId: Long? = null,
+    prefillEstimatedMinutes: Int? = null,
+    prefillScheduledDate: String? = null
 ) {
     val viewModel: AddEditJobViewModel = viewModel(
         factory = AddEditJobViewModel.Factory(
@@ -85,7 +90,9 @@ fun AddEditJobScreen(
             parentId,
             prefillTitle,
             prefillCategory,
-            sourceTrackerJobId
+            sourceTrackerJobId,
+            prefillEstimatedMinutes,
+            prefillScheduledDate
         )
     )
     val state by viewModel.formState.collectAsState()
@@ -243,6 +250,38 @@ fun AddEditJobScreen(
                         estimatedMinutes = state.estimatedMinutes,
                         subtasksTotalMinutes = ownSubtasks.sumOf { it.estimatedMinutes }
                     )
+                }
+
+                // Only present on a brand-new job opened via a jobjar://newjob deep link that
+                // carried a Tracker scheduledDate - not a full scheduling picker, just a visible,
+                // removable preview of what Save will apply (see
+                // AddEditJobViewModel.persist/clearPrefillSchedule). Actually scheduling this job
+                // (with a real calendar event) still only happens once Save is pressed.
+                state.scheduledDateMillis?.let { millis ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+                        ) {
+                            Icon(
+                                Icons.Filled.Event,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                stringResource(R.string.label_scheduled_from_tracker, formatScheduledDateTime(millis)),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        IconButton(onClick = { viewModel.clearPrefillSchedule() }) {
+                            Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.cd_clear_schedule_prefill))
+                        }
+                    }
                 }
             }
 

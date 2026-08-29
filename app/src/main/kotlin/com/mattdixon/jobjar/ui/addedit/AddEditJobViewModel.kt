@@ -11,6 +11,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeParseException
 
 data class AddEditFormState(
     val id: Long? = null,
@@ -28,6 +31,12 @@ data class AddEditFormState(
     /** Set only for a new job opened via a jobjar://newjob deep link (e.g. Home Jobs Tracker's
      * "Send to Job Jar" button) - the Tracker job it should remember as its origin once saved. */
     val linkedTrackerJobId: Long? = null,
+    /** Set only for a new job opened via a jobjar://newjob deep link that carried a Tracker
+     * scheduledDate - defaults to 9 AM local time on that date, since Tracker only tracks a date,
+     * not a time. Shown as a removable prefill row rather than a full scheduling UI (see
+     * AddEditJobScreen); clearing it here just drops the prefill, it never touches an existing
+     * schedule the way [JobRepository.unscheduleJob] does, since there's nothing saved yet. */
+    val scheduledDateMillis: Long? = null,
     val isSaved: Boolean = false,
     /** True only when [isSaved] resulted from this save creating a brand-new job, never from
      * editing an already-existing one - gates firing the `hometracker://linked` return callback
@@ -46,7 +55,9 @@ class AddEditJobViewModel(
     private val parentId: Long?,
     prefillTitle: String? = null,
     prefillCategory: String? = null,
-    sourceTrackerJobId: Long? = null
+    sourceTrackerJobId: Long? = null,
+    prefillEstimatedMinutes: Int? = null,
+    prefillScheduledDate: String? = null
 ) : ViewModel() {
 
     private val _formState = MutableStateFlow(
@@ -54,8 +65,10 @@ class AddEditJobViewModel(
             id = jobId,
             parentId = parentId,
             title = if (jobId == null) prefillTitle.orEmpty() else "",
+            estimatedMinutes = if (jobId == null) prefillEstimatedMinutes ?: 15 else 15,
             category = if (jobId == null) prefillCategory.orEmpty() else "",
             linkedTrackerJobId = if (jobId == null) sourceTrackerJobId else null,
+            scheduledDateMillis = if (jobId == null) prefillScheduledDate?.toStartOfDayNineAm() else null,
             isLoaded = jobId == null
         )
     )
@@ -111,6 +124,10 @@ class AddEditJobViewModel(
 
     fun setDependsOn(id: Long?) { _formState.value = _formState.value.copy(dependsOnSubtaskId = id) }
 
+    /** Drops the incoming Tracker scheduledDate prefill without saving anything - there's no
+     * schedule to unschedule yet, this job doesn't even exist in the database. */
+    fun clearPrefillSchedule() { _formState.value = _formState.value.copy(scheduledDateMillis = null) }
+
     fun save() {
         if (!_formState.value.isValid) return
         val wasCreate = _formState.value.id == null
@@ -154,6 +171,12 @@ class AddEditJobViewModel(
                     linkedTrackerJobId = state.linkedTrackerJobId
                 )
             )
+            // Routed through the same repository.scheduleJob a manual Schedule action uses
+            // (rather than just setting Job.scheduledDate directly), so a job created from a
+            // Tracker date prefill gets a real calendar event too, not just the in-app flag.
+            state.scheduledDateMillis?.let { millis ->
+                repository.jobById(newId).first()?.let { created -> repository.scheduleJob(created, millis) }
+            }
             _formState.value = _formState.value.copy(id = newId)
             return newId
         }
@@ -183,11 +206,26 @@ class AddEditJobViewModel(
         private val parentId: Long? = null,
         private val prefillTitle: String? = null,
         private val prefillCategory: String? = null,
-        private val sourceTrackerJobId: Long? = null
+        private val sourceTrackerJobId: Long? = null,
+        private val prefillEstimatedMinutes: Int? = null,
+        private val prefillScheduledDate: String? = null
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return AddEditJobViewModel(repository, jobId, parentId, prefillTitle, prefillCategory, sourceTrackerJobId) as T
+            return AddEditJobViewModel(
+                repository, jobId, parentId, prefillTitle, prefillCategory, sourceTrackerJobId,
+                prefillEstimatedMinutes, prefillScheduledDate
+            ) as T
         }
     }
+}
+
+/** Parses an ISO "yyyy-MM-dd" date (Tracker's scheduledDate format, which has no time
+ * component) into an epoch-millis instant at 9 AM local time - a reasonable default work-start
+ * time for a job that only specified a date, not a time. Malformed input is treated as absent
+ * rather than crashing the screen. */
+private fun String.toStartOfDayNineAm(): Long? = try {
+    LocalDate.parse(this).atTime(9, 0).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+} catch (e: DateTimeParseException) {
+    null
 }

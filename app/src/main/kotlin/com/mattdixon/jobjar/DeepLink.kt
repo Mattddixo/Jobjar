@@ -10,8 +10,16 @@ import android.net.Uri
  * itself, for both cold start and an already-running instance ([android.app.Activity.onNewIntent]).
  */
 sealed interface IncomingDeepLink {
-    /** `jobjar://newjob?title=...&category=...&sourceId=...` */
-    data class CreateJob(val title: String?, val category: String?, val sourceTrackerJobId: Long?) : IncomingDeepLink
+    /** `jobjar://newjob?title=...&category=...&sourceId=...&estimatedMinutes=...&scheduledDate=...` -
+     * [estimatedMinutes] and [scheduledDate] (an ISO "yyyy-MM-dd" string) are both optional,
+     * carried over only when Tracker had them set on the job being sent. */
+    data class CreateJob(
+        val title: String?,
+        val category: String?,
+        val sourceTrackerJobId: Long?,
+        val estimatedMinutes: Int?,
+        val scheduledDate: String?,
+    ) : IncomingDeepLink
 
     /** `jobjar://job/{jobId}` */
     data class ViewJob(val jobId: Long) : IncomingDeepLink
@@ -28,7 +36,9 @@ fun parseIncomingDeepLink(uri: Uri): IncomingDeepLink? = when (uri.host) {
     "newjob" -> IncomingDeepLink.CreateJob(
         title = uri.getQueryParameter("title"),
         category = uri.getQueryParameter("category"),
-        sourceTrackerJobId = uri.getQueryParameter("sourceId")?.toLongOrNull()
+        sourceTrackerJobId = uri.getQueryParameter("sourceId")?.toLongOrNull(),
+        estimatedMinutes = uri.getQueryParameter("estimatedMinutes")?.toIntOrNull(),
+        scheduledDate = uri.getQueryParameter("scheduledDate")
     )
     "job" -> uri.pathSegments.firstOrNull()?.toLongOrNull()?.let { IncomingDeepLink.ViewJob(it) }
     "pickjob" -> uri.getQueryParameter("returnJobId")?.toLongOrNull()?.let { IncomingDeepLink.PickJob(it) }

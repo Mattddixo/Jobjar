@@ -66,6 +66,8 @@ import com.mattdixon.jobjar.util.formatRecurrenceInterval
 import com.mattdixon.jobjar.util.formatScheduledDateTime
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.ZoneId
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -316,7 +318,7 @@ fun JobDetailScreen(
                 }
 
                 HorizontalDivider()
-                TrackerLinkActions(currentJob.id, currentJob.title, currentJob.category, currentJob.linkedTrackerJobId)
+                TrackerLinkActions(currentJob)
 
                 if (currentJob.parentId == null) {
                     HorizontalDivider()
@@ -391,7 +393,7 @@ fun JobDetailScreen(
  * Hands this job off to Home Jobs Tracker (a separate, unrelated app for tracking a job's
  * vendor/cost/payment details) via an implicit `ACTION_VIEW` intent against its own custom URI
  * scheme - the standard way for two local-only Android apps on the same device to talk to each
- * other without a shared backend. Once [linkedTrackerJobId] is set - whether by sending a fresh
+ * other without a shared backend. Once [Job.linkedTrackerJobId] is set - whether by sending a fresh
  * copy over or by linking to an existing Tracker job via the picker - the Send/Link actions are
  * replaced by a single "Open in Job Tracker" bounce button, so a job can never end up linked
  * twice. Deliberately not gated on this job being a top-level one: a subtask gets these same
@@ -399,25 +401,25 @@ fun JobDetailScreen(
  * cost, independent of whatever its parent is linked to.
  */
 @Composable
-private fun TrackerLinkActions(jobId: Long, title: String, category: String, linkedTrackerJobId: Long?) {
+private fun TrackerLinkActions(job: Job) {
     val context = LocalContext.current
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
-        if (linkedTrackerJobId == null) {
+        if (job.linkedTrackerJobId == null) {
             OutlinedButton(
-                onClick = { openInJobTracker(context, sendToTrackerUri(jobId, title, category)) },
+                onClick = { openInJobTracker(context, sendToTrackerUri(job)) },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(stringResource(R.string.action_send_to_tracker))
             }
             OutlinedButton(
-                onClick = { openInJobTracker(context, Uri.parse("hometracker://pickjob?returnJobId=$jobId")) },
+                onClick = { openInJobTracker(context, Uri.parse("hometracker://pickjob?returnJobId=${job.id}")) },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(stringResource(R.string.action_link_to_tracker))
             }
         } else {
             OutlinedButton(
-                onClick = { openInJobTracker(context, Uri.parse("hometracker://job/$linkedTrackerJobId")) },
+                onClick = { openInJobTracker(context, Uri.parse("hometracker://job/${job.linkedTrackerJobId}")) },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(stringResource(R.string.action_open_in_tracker))
@@ -426,11 +428,18 @@ private fun TrackerLinkActions(jobId: Long, title: String, category: String, lin
     }
 }
 
-private fun sendToTrackerUri(jobId: Long, title: String, category: String): Uri {
+private fun sendToTrackerUri(job: Job): Uri {
     val builder = Uri.parse("hometracker://newjob").buildUpon()
-        .appendQueryParameter("title", title)
-        .appendQueryParameter("sourceId", jobId.toString())
-    if (category.isNotBlank()) builder.appendQueryParameter("category", category)
+        .appendQueryParameter("title", job.title)
+        .appendQueryParameter("sourceId", job.id.toString())
+        .appendQueryParameter("estimatedMinutes", job.estimatedMinutes.toString())
+    if (job.category.isNotBlank()) builder.appendQueryParameter("category", job.category)
+    // Tracker's scheduledDate is a plain ISO date with no time component, so the time-of-day this
+    // job may be scheduled for is dropped here - only the date survives the trip.
+    job.scheduledDate?.let { millis ->
+        val date = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate()
+        builder.appendQueryParameter("scheduledDate", date.toString())
+    }
     return builder.build()
 }
 

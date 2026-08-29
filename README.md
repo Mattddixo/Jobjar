@@ -431,11 +431,13 @@ deep-link auto-matching.
 
 A link is established one of two ways, both reachable from a job's detail screen:
 
-- **Send to Job Tracker** - creates a brand-new Tracker job pre-filled from this one's title and
-  category (the only two fields both apps' domain models actually share) via
-  `hometracker://newjob?title=...&category=...&sourceId=<thisJobId>`. Nothing is auto-saved on
-  the Tracker side - it lands on Tracker's own Add Job form, reviewed and saved like any other
-  job there.
+- **Send to Job Tracker** - creates a brand-new Tracker job pre-filled from this one's title,
+  category, estimated time, and (if set) scheduled date via
+  `hometracker://newjob?title=...&category=...&sourceId=<thisJobId>&estimatedMinutes=<minutes>&scheduledDate=<yyyy-MM-dd>`.
+  `estimatedMinutes` becomes Tracker's `predictedHours` (a straight minutes ÷ 60 conversion);
+  `scheduledDate` is dropped if this job isn't scheduled - Tracker's own field is date-only, so
+  any time-of-day is lost in the trip. Nothing is auto-saved on the Tracker side - it lands on
+  Tracker's own Add Job form, reviewed and saved like any other job there.
 - **Link to existing Job Tracker job** - opens a picker (`hometracker://pickjob?returnJobId=<thisJobId>`)
   listing Tracker's own unlinked jobs, so this job can be tied to one that already exists instead
   of always spawning a new one.
@@ -458,6 +460,17 @@ gone from the UI entirely - there's no code path left that could create a second
 itself also excludes any Tracker job that's already linked to something, so a job can't be
 double-linked from that side either. Any button shows a "Job Tracker isn't installed" toast
 instead of crashing if the target app isn't present.
+
+**Time and schedule carry over on Send, one-way, only at creation.** The reverse direction works
+the same way: a job sent *from* Tracker with a predicted-hours value or a scheduled date arrives
+here with both pre-filled - `predictedHours` converts to `estimatedMinutes`, and an incoming
+`scheduledDate` shows as a small removable "Scheduled: ... (from Job Tracker)" row on the create
+form (there's no full scheduling UI on this form otherwise). Since Tracker's date has no
+time-of-day, this defaults to 9 AM local time. Accepting it on Save routes through the same
+`JobRepository.scheduleJob` a manual Schedule action uses, so the new job gets a real calendar
+event, not just the in-app flag. None of this ever happens on the **Link** path or overwrites an
+existing job - it's strictly a one-time snapshot at the moment a new job is created via Send, the
+same "review before you save" flow every other prefilled field already gets.
 
 ## Building
 

@@ -94,11 +94,14 @@ fun JobJarApp(
                 StatsScreen(repository = repository, darkTheme = darkTheme, onToggleTheme = onToggleTheme)
             }
             composable(
-                route = "job/new?title={title}&category={category}&sourceTrackerJobId={sourceTrackerJobId}",
+                route = "job/new?title={title}&category={category}&sourceTrackerJobId={sourceTrackerJobId}" +
+                    "&estimatedMinutes={estimatedMinutes}&scheduledDate={scheduledDate}",
                 arguments = listOf(
                     navArgument("title") { type = NavType.StringType; nullable = true },
                     navArgument("category") { type = NavType.StringType; nullable = true },
-                    navArgument("sourceTrackerJobId") { type = NavType.StringType; nullable = true }
+                    navArgument("sourceTrackerJobId") { type = NavType.StringType; nullable = true },
+                    navArgument("estimatedMinutes") { type = NavType.StringType; nullable = true },
+                    navArgument("scheduledDate") { type = NavType.StringType; nullable = true }
                 )
             ) { backStackEntry ->
                 AddEditJobScreen(
@@ -109,7 +112,9 @@ fun JobJarApp(
                     onAddSubtask = { newParentId -> navController.navigate("job/$newParentId/subtask/new") },
                     prefillTitle = backStackEntry.arguments?.getString("title"),
                     prefillCategory = backStackEntry.arguments?.getString("category"),
-                    sourceTrackerJobId = backStackEntry.arguments?.getString("sourceTrackerJobId")?.toLongOrNull()
+                    sourceTrackerJobId = backStackEntry.arguments?.getString("sourceTrackerJobId")?.toLongOrNull(),
+                    prefillEstimatedMinutes = backStackEntry.arguments?.getString("estimatedMinutes")?.toIntOrNull(),
+                    prefillScheduledDate = backStackEntry.arguments?.getString("scheduledDate")
                 )
             }
             composable(

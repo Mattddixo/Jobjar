@@ -80,6 +80,8 @@ class MainActivity : ComponentActivity() {
                     link.title?.let { add("title=${Uri.encode(it)}") }
                     link.category?.let { add("category=${Uri.encode(it)}") }
                     link.sourceTrackerJobId?.let { add("sourceTrackerJobId=$it") }
+                    link.estimatedMinutes?.let { add("estimatedMinutes=$it") }
+                    link.scheduledDate?.let { add("scheduledDate=${Uri.encode(it)}") }
                 }
                 val route = if (params.isEmpty()) "job/new" else "job/new?" + params.joinToString("&")
                 navController.navigate(route)
