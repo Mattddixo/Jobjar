@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -41,10 +42,9 @@ private val topLevelDestinations = listOf(TopLevelDestination.Draw, TopLevelDest
 fun JobJarApp(
     repository: JobRepository,
     darkTheme: Boolean,
-    onToggleTheme: () -> Unit
+    onToggleTheme: () -> Unit,
+    navController: NavHostController = rememberNavController()
 ) {
-    val navController = rememberNavController()
-
     Scaffold(
         bottomBar = {
             val backStackEntry by navController.currentBackStackEntryAsState()
@@ -92,13 +92,23 @@ fun JobJarApp(
             composable(TopLevelDestination.Stats.route) {
                 StatsScreen(repository = repository, darkTheme = darkTheme, onToggleTheme = onToggleTheme)
             }
-            composable("job/new") {
+            composable(
+                route = "job/new?title={title}&category={category}&sourceTrackerJobId={sourceTrackerJobId}",
+                arguments = listOf(
+                    navArgument("title") { type = NavType.StringType; nullable = true },
+                    navArgument("category") { type = NavType.StringType; nullable = true },
+                    navArgument("sourceTrackerJobId") { type = NavType.StringType; nullable = true }
+                )
+            ) { backStackEntry ->
                 AddEditJobScreen(
                     repository = repository,
                     jobId = null,
                     onDone = { navController.popBackStack() },
                     onOpenSubtask = { openId -> navController.navigate("job/$openId") },
-                    onAddSubtask = { newParentId -> navController.navigate("job/$newParentId/subtask/new") }
+                    onAddSubtask = { newParentId -> navController.navigate("job/$newParentId/subtask/new") },
+                    prefillTitle = backStackEntry.arguments?.getString("title"),
+                    prefillCategory = backStackEntry.arguments?.getString("category"),
+                    sourceTrackerJobId = backStackEntry.arguments?.getString("sourceTrackerJobId")?.toLongOrNull()
                 )
             }
             composable(

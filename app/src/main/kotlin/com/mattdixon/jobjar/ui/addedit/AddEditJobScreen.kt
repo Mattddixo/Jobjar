@@ -67,10 +67,20 @@ fun AddEditJobScreen(
     onDone: () -> Unit,
     parentId: Long? = null,
     onOpenSubtask: (Long) -> Unit = {},
-    onAddSubtask: (Long) -> Unit = {}
+    onAddSubtask: (Long) -> Unit = {},
+    prefillTitle: String? = null,
+    prefillCategory: String? = null,
+    sourceTrackerJobId: Long? = null
 ) {
     val viewModel: AddEditJobViewModel = viewModel(
-        factory = AddEditJobViewModel.Factory(repository, jobId, parentId)
+        factory = AddEditJobViewModel.Factory(
+            repository,
+            jobId,
+            parentId,
+            prefillTitle,
+            prefillCategory,
+            sourceTrackerJobId
+        )
     )
     val state by viewModel.formState.collectAsState()
     val categories by repository.categories.collectAsState(initial = emptyList())

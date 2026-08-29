@@ -25,6 +25,9 @@ data class AddEditFormState(
     val recurrenceDays: Int? = null,
     /** Only meaningful when [parentId] != null: the sibling subtask that must be done first, if any. */
     val dependsOnSubtaskId: Long? = null,
+    /** Set only for a new job opened via a jobjar://newjob deep link (e.g. Home Jobs Tracker's
+     * "Send to Job Jar" button) - the Tracker job it should remember as its origin once saved. */
+    val spawnedFromTrackerJobId: Long? = null,
     val isSaved: Boolean = false,
     /** True once we're sure [parentId] reflects reality - false only while an existing job is still loading. */
     val isLoaded: Boolean = false
@@ -36,11 +39,21 @@ data class AddEditFormState(
 class AddEditJobViewModel(
     private val repository: JobRepository,
     private val jobId: Long?,
-    private val parentId: Long?
+    private val parentId: Long?,
+    prefillTitle: String? = null,
+    prefillCategory: String? = null,
+    sourceTrackerJobId: Long? = null
 ) : ViewModel() {
 
     private val _formState = MutableStateFlow(
-        AddEditFormState(id = jobId, parentId = parentId, isLoaded = jobId == null)
+        AddEditFormState(
+            id = jobId,
+            parentId = parentId,
+            title = if (jobId == null) prefillTitle.orEmpty() else "",
+            category = if (jobId == null) prefillCategory.orEmpty() else "",
+            spawnedFromTrackerJobId = if (jobId == null) sourceTrackerJobId else null,
+            isLoaded = jobId == null
+        )
     )
     val formState: StateFlow<AddEditFormState> = _formState.asStateFlow()
 
@@ -59,6 +72,7 @@ class AddEditJobViewModel(
                         priority = job.priority,
                         recurrenceDays = job.recurrenceDays,
                         dependsOnSubtaskId = job.dependsOnSubtaskId,
+                        spawnedFromTrackerJobId = job.spawnedFromTrackerJobId,
                         isLoaded = true
                     )
                 } else {
@@ -131,7 +145,8 @@ class AddEditJobViewModel(
                     priority = state.priority,
                     parentId = parentId,
                     recurrenceDays = state.recurrenceDays,
-                    dependsOnSubtaskId = state.dependsOnSubtaskId
+                    dependsOnSubtaskId = state.dependsOnSubtaskId,
+                    spawnedFromTrackerJobId = state.spawnedFromTrackerJobId
                 )
             )
             _formState.value = _formState.value.copy(id = newId)
@@ -160,11 +175,14 @@ class AddEditJobViewModel(
     class Factory(
         private val repository: JobRepository,
         private val jobId: Long?,
-        private val parentId: Long? = null
+        private val parentId: Long? = null,
+        private val prefillTitle: String? = null,
+        private val prefillCategory: String? = null,
+        private val sourceTrackerJobId: Long? = null
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return AddEditJobViewModel(repository, jobId, parentId) as T
+            return AddEditJobViewModel(repository, jobId, parentId, prefillTitle, prefillCategory, sourceTrackerJobId) as T
         }
     }
 }

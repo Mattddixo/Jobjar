@@ -1,5 +1,10 @@
 package com.mattdixon.jobjar.ui.jobdetail
 
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -41,6 +46,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.mattdixon.jobjar.R
@@ -309,6 +315,9 @@ fun JobDetailScreen(
                     )
                 }
 
+                HorizontalDivider()
+                TrackerLinkActions(currentJob.id, currentJob.title, currentJob.category, currentJob.spawnedFromTrackerJobId)
+
                 if (currentJob.parentId == null) {
                     HorizontalDivider()
                     SubtasksSection(
@@ -375,5 +384,49 @@ fun JobDetailScreen(
                 )
             }
         }
+    }
+}
+
+/**
+ * Hands this job off to Home Jobs Tracker (a separate, unrelated app for tracking a job's
+ * vendor/cost/payment details) via an implicit `ACTION_VIEW` intent against its own custom URI
+ * scheme - the standard way for two local-only Android apps on the same device to talk to each
+ * other without a shared backend. Tracker lands on its own create form pre-filled from the query
+ * string; nothing is saved on either side until the user reviews and confirms it there.
+ */
+@Composable
+private fun TrackerLinkActions(jobId: Long, title: String, category: String, spawnedFromTrackerJobId: Long?) {
+    val context = LocalContext.current
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
+        OutlinedButton(
+            onClick = { openInJobTracker(context, sendToTrackerUri(jobId, title, category)) },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(stringResource(R.string.action_send_to_tracker))
+        }
+        spawnedFromTrackerJobId?.let { trackerJobId ->
+            OutlinedButton(
+                onClick = { openInJobTracker(context, Uri.parse("hometracker://job/$trackerJobId")) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(stringResource(R.string.action_view_origin_in_tracker))
+            }
+        }
+    }
+}
+
+private fun sendToTrackerUri(jobId: Long, title: String, category: String): Uri {
+    val builder = Uri.parse("hometracker://newjob").buildUpon()
+        .appendQueryParameter("title", title)
+        .appendQueryParameter("sourceId", jobId.toString())
+    if (category.isNotBlank()) builder.appendQueryParameter("category", category)
+    return builder.build()
+}
+
+private fun openInJobTracker(context: Context, uri: Uri) {
+    try {
+        context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+    } catch (e: ActivityNotFoundException) {
+        Toast.makeText(context, context.getString(R.string.toast_tracker_not_installed), Toast.LENGTH_SHORT).show()
     }
 }
