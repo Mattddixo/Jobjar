@@ -120,7 +120,8 @@
 
     <!-- Job picker screen (Link to existing Job Tracker job) -->
     <string name="jobpicker_title">Select a job to link</string>
-    <string name="jobpicker_empty">No unlinked jobs available to pick.</string>
+    <string name="jobpicker_empty">No jobs available to pick.</string>
+    <string name="jobpicker_already_linked_warning">Already linked to a different job - picking this will re-point it here</string>
 
     <!-- Subtasks section (shared component) -->
     <string name="subtasks_done_count">%1$d/%2$d done</string>

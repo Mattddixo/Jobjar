@@ -94,6 +94,16 @@ fun JobPickerScreen(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
+                            // Not excluded from the list - see JobPickerViewModel.pickableJobs -
+                            // but flagged so picking it is an informed choice: it'll overwrite
+                            // whatever this job was linked to before.
+                            if (item.job.linkedTrackerJobId != null) {
+                                Text(
+                                    stringResource(R.string.jobpicker_already_linked_warning),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
                         }
                     }
                 }

@@ -439,8 +439,8 @@ A link is established one of two ways, both reachable from a job's detail screen
   any time-of-day is lost in the trip. Nothing is auto-saved on the Tracker side - it lands on
   Tracker's own Add Job form, reviewed and saved like any other job there.
 - **Link to existing Job Tracker job** - opens a picker (`hometracker://pickjob?returnJobId=<thisJobId>`)
-  listing Tracker's own unlinked jobs, so this job can be tied to one that already exists instead
-  of always spawning a new one.
+  listing every Tracker job, so this job can be tied to one that already exists instead of always
+  spawning a new one.
 
 Either path ends the same way: whichever side just created or picked the counterpart fires a
 return callback - `jobjar://linked?jobId=<myId>&otherId=<theirId>` (Tracker calls back into this
@@ -455,11 +455,16 @@ is gated purely on whether a link already exists (not on `parentId`), a **subtas
 Send/Link/Open UI on its own detail screen, independent of whatever its parent job is linked to -
 useful when a subtask carries its own separate cost worth tracking on its own Tracker entry.
 
-**Duplicate-proof by construction**: once `linkedTrackerJobId` is set, the Send/Link buttons are
-gone from the UI entirely - there's no code path left that could create a second link. The picker
-itself also excludes any Tracker job that's already linked to something, so a job can't be
-double-linked from that side either. Any button shows a "Job Tracker isn't installed" toast
-instead of crashing if the target app isn't present.
+**Duplicate-proof for a fresh link, repairable for a broken one**: once `linkedTrackerJobId` is
+set, the Send/Link buttons are gone from the UI entirely - there's no code path left that could
+*create* a second link from a job that's already linked. But the two sides of a link can still end
+up desynced - e.g. one side's own copy of the field got cleared by a bug, or a linked job on
+either side was deleted and its id later reused for something unrelated - and neither app has any
+way to detect that on its own. Because of that, the picker deliberately does **not** hard-exclude
+already-linked jobs: it lists every job, flags the ones that already point somewhere else, and
+lets picking one anyway overwrite that stale pointer - the only reliable way to re-establish a
+correct pairing once the two sides disagree. Any button shows a "Job Tracker isn't installed"
+toast instead of crashing if the target app isn't present.
 
 **Time and schedule carry over on Send, one-way, only at creation.** The reverse direction works
 the same way: a job sent *from* Tracker with a predicted-hours value or a scheduled date arrives

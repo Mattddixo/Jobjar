@@ -27,15 +27,21 @@ class JobPickerViewModel(
     val returnJobId: Long
 ) : ViewModel() {
 
-    /** Only jobs (parents or subtasks) not already linked to something - picking an
-     * already-linked job would silently orphan its existing link. Deliberately includes
-     * subtasks (each captioned with its parent's title), since a subtask may have its own
-     * separate cost worth tracking independently of its parent's link. */
+    /**
+     * Every job (parents and subtasks), not filtered down to only-unlinked. The two sides of a
+     * link can end up desynced - one side's own copy cleared by a bug, or a job on either side
+     * deleted and its id later reused - with no way for either app to detect that on its own, so
+     * the only reliable recovery is letting the user re-pick and re-establish the correct pairing
+     * directly rather than hard-blocking a job because ITS OWN possibly-stale record claims it's
+     * "already" linked. Picking any job here always overwrites its previous linkedTrackerJobId,
+     * whatever that was. Deliberately includes subtasks (each captioned with its parent's title),
+     * since a subtask may have its own separate cost worth tracking independently of its parent's
+     * link.
+     */
     val pickableJobs: StateFlow<List<JobPickerItem>> = repository.allJobsFlat
         .map { jobs ->
             val byId = jobs.associateBy { it.id }
-            jobs.filter { it.linkedTrackerJobId == null }
-                .sortedBy { it.title.lowercase() }
+            jobs.sortedBy { it.title.lowercase() }
                 .map { job -> JobPickerItem(job, parentTitle = job.parentId?.let { byId[it]?.title }) }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
