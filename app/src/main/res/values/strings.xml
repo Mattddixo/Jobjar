@@ -6,7 +6,7 @@
     <string name="action_delete">Delete</string>
     <string name="action_mark_done">Mark done</string>
     <string name="dialog_mark_as_done_title">Mark as done?</string>
-    <string name="dialog_force_complete_body">%1$d subtask(s) are still open. They\'ll stay open, but this job will be marked done.</string>
+    <string name="dialog_force_complete_body">%1$d subtask(s) are still open. Completing this job will mark them done too.</string>
     <string name="label_part_of">Part of: %1$s</string>
     <string name="label_waiting_on">Waiting on: %1$s</string>
     <string name="label_remaining_of_total">%1$s left of %2$s total</string>

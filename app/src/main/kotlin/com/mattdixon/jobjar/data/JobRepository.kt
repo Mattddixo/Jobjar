@@ -83,7 +83,10 @@ class JobRepository(private val dao: JobDao, appContext: Context) {
      * Jobs list - tapping it again means "make it available right now" instead, via
      * [wakeRepeatingJob]. A one-off job keeps the plain isDone flip; completing a scheduled one
      * clears its schedule first (see [unscheduleJob]) - a finished job has nothing left to keep
-     * booked on the calendar for.
+     * booked on the calendar for. Completing a top-level job also completes any of its own
+     * subtasks that aren't done yet (see [completeOpenSubtasks]) - otherwise force-completing one
+     * with open subtasks (the Jobs list's confirm dialog exists for exactly that) would leave it
+     * marked done while pieces underneath it were still open.
      */
     suspend fun toggleDone(job: Job) {
         if (job.recurrenceDays != null) {
@@ -100,8 +103,29 @@ class JobRepository(private val dao: JobDao, appContext: Context) {
             dao.markDone(job.id, System.currentTimeMillis())
             if (job.parentId != null) {
                 autoCompleteParentIfFinished(job.parentId)
+            } else {
+                completeOpenSubtasks(job.id)
             }
         }
+    }
+
+    /**
+     * Completes every one of [parentId]'s own subtasks that isn't done yet, same as completing
+     * each individually would (unscheduling first if it was booked). Subtasks can't themselves
+     * repeat or have subtasks of their own, so this never needs to recurse or worry about the
+     * repeating-job cycle. Goes through [dao] directly rather than [toggleDone] per subtask - that
+     * would also re-check whether *this* parent should auto-complete on every single one, which
+     * is redundant work for a parent this function is only ever called on right after it was
+     * already marked done.
+     */
+    private suspend fun completeOpenSubtasks(parentId: Long) {
+        val now = System.currentTimeMillis()
+        dao.getSubtasksSnapshot(parentId)
+            .filterNot { it.isDone }
+            .forEach { subtask ->
+                if (subtask.scheduledDate != null) unscheduleJob(subtask)
+                dao.markDone(subtask.id, now)
+            }
     }
 
     /** Clears a resting repeating job's schedule so it's immediately due again. Doesn't touch completionCount - the past completion still happened. */

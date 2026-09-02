@@ -183,8 +183,9 @@ custom-minutes field as they're used, updating before anything's saved.
 
 A parent auto-completes once every subtask is done; you can also mark it
 done manually at any point (a confirmation dialog warns if subtasks are
-still open, since they're left as-is, not force-completed). Deleting a
-parent cascades to its subtasks.
+still open) - either way, completing a parent completes every one of its
+own subtasks too, so a job never ends up marked done while pieces
+underneath it are still open. Deleting a parent cascades to its subtasks.
 
 A subtask can optionally **depend on** one sibling subtask (same parent,
 set via the "Depends on" picker on its own form — never itself, and never a
