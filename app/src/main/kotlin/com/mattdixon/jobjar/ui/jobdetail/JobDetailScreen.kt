@@ -34,6 +34,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -89,9 +93,33 @@ fun JobDetailScreen(
     val subtasks by subtasksFlow.collectAsState(initial = emptyList())
 
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showForceCompleteDialog by remember { mutableStateOf(false) }
     var showSchedulePicker by remember { mutableStateOf(false) }
+
+    // Whether completing [target] right now would actually mark it done - mirrors the same
+    // repeating-vs-plain branch JobRepository.toggleDone uses, so the little "want to update
+    // Job Tracker?" nudge below only ever fires on a real completion, never on re-opening a job
+    // or waking a resting repeating one back up.
+    fun completeJob(target: Job) {
+        val willComplete = if (target.recurrenceDays != null) target.isPending() else !target.isDone
+        scope.launch { repository.toggleDone(target) }
+        val linkedTrackerJobId = target.linkedTrackerJobId
+        if (willComplete && linkedTrackerJobId != null) {
+            scope.launch {
+                val result = snackbarHostState.showSnackbar(
+                    message = context.getString(R.string.snackbar_linked_tracker_job_may_need_update),
+                    actionLabel = context.getString(R.string.action_open),
+                    duration = SnackbarDuration.Short
+                )
+                if (result == SnackbarResult.ActionPerformed) {
+                    openInJobTracker(context, Uri.parse("hometracker://job/$linkedTrackerJobId"))
+                }
+            }
+        }
+    }
 
     val currentJob = job
     val parentFlow = remember(currentJob?.parentId) {
@@ -107,6 +135,7 @@ fun JobDetailScreen(
     val siblings by siblingsFlow.collectAsState(initial = emptyList())
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.jobdetail_title)) },
@@ -302,7 +331,7 @@ fun JobDetailScreen(
                         if (currentJob.isPending() && incompleteSubtaskCount > 0) {
                             showForceCompleteDialog = true
                         } else {
-                            scope.launch { repository.toggleDone(currentJob) }
+                            completeJob(currentJob)
                         }
                     },
                     modifier = Modifier.fillMaxWidth()
@@ -367,7 +396,7 @@ fun JobDetailScreen(
                     text = { Text(stringResource(R.string.dialog_force_complete_body, incompleteSubtaskCount)) },
                     confirmButton = {
                         TextButton(onClick = {
-                            scope.launch { repository.toggleDone(currentJob) }
+                            completeJob(currentJob)
                             showForceCompleteDialog = false
                         }) { Text(stringResource(R.string.action_mark_done)) }
                     },

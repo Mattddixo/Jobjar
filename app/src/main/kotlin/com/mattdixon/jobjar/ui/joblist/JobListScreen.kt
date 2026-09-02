@@ -1,5 +1,10 @@
 package com.mattdixon.jobjar.ui.joblist
 
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -56,6 +61,10 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -67,11 +76,13 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextDecoration
@@ -79,6 +90,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mattdixon.jobjar.R
+import com.mattdixon.jobjar.data.Job
 import com.mattdixon.jobjar.data.JobRepository
 import com.mattdixon.jobjar.data.isPending
 import com.mattdixon.jobjar.ui.components.CategoryBadge
@@ -88,6 +100,7 @@ import com.mattdixon.jobjar.ui.components.TimeBucketBadge
 import com.mattdixon.jobjar.ui.components.TodayDateButton
 import com.mattdixon.jobjar.ui.theme.Spacing
 import com.mattdixon.jobjar.util.formatScheduledDateTime
+import kotlinx.coroutines.launch
 
 /** Consistent horizontal inset for every row on this screen. */
 private val ScreenHPadding = Spacing.xl
@@ -112,7 +125,34 @@ fun JobListScreen(
     var categoryPendingRemoval by remember { mutableStateOf<String?>(null) }
     var itemPendingSchedule by remember { mutableStateOf<JobListItem?>(null) }
 
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+
+    // Whether completing [job] right now would actually mark it done - mirrors the same
+    // repeating-vs-plain branch JobRepository.toggleDone uses, so the little "want to update
+    // Job Tracker?" nudge below only ever fires on a real completion, never on re-opening a job
+    // or waking a resting repeating one back up.
+    fun completeJob(job: Job) {
+        val willComplete = if (job.recurrenceDays != null) job.isPending() else !job.isDone
+        viewModel.toggleDone(job)
+        val linkedTrackerJobId = job.linkedTrackerJobId
+        if (willComplete && linkedTrackerJobId != null) {
+            scope.launch {
+                val result = snackbarHostState.showSnackbar(
+                    message = context.getString(R.string.snackbar_linked_tracker_job_may_need_update),
+                    actionLabel = context.getString(R.string.action_open),
+                    duration = SnackbarDuration.Short
+                )
+                if (result == SnackbarResult.ActionPerformed) {
+                    openInJobTracker(context, Uri.parse("hometracker://job/$linkedTrackerJobId"))
+                }
+            }
+        }
+    }
+
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             if (searchActive) {
                 SearchTopBar(
@@ -309,7 +349,7 @@ fun JobListScreen(
                                 if (item.job.isPending() && hasOpenSubtasks) {
                                     itemPendingForceComplete = item
                                 } else {
-                                    viewModel.toggleDone(item.job)
+                                    completeJob(item.job)
                                 }
                             },
                             onToggleInProgress = { viewModel.toggleInProgress(item.job) },
@@ -357,7 +397,7 @@ fun JobListScreen(
             text = { Text(stringResource(R.string.dialog_force_complete_body, incompleteCount)) },
             confirmButton = {
                 TextButton(onClick = {
-                    viewModel.toggleDone(item.job)
+                    completeJob(item.job)
                     itemPendingForceComplete = null
                 }) { Text(stringResource(R.string.action_mark_done)) }
             },
@@ -693,5 +733,13 @@ private fun JobRow(
                 }
             }
         }
+    }
+}
+
+private fun openInJobTracker(context: Context, uri: Uri) {
+    try {
+        context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+    } catch (e: ActivityNotFoundException) {
+        Toast.makeText(context, context.getString(R.string.toast_tracker_not_installed), Toast.LENGTH_SHORT).show()
     }
 }

@@ -5,6 +5,8 @@
     <string name="action_cancel">Cancel</string>
     <string name="action_delete">Delete</string>
     <string name="action_mark_done">Mark done</string>
+    <string name="action_open">Open</string>
+    <string name="snackbar_linked_tracker_job_may_need_update">Want to update the linked Job Tracker job?</string>
     <string name="dialog_mark_as_done_title">Mark as done?</string>
     <string name="dialog_force_complete_body">%1$d subtask(s) are still open. Completing this job will mark them done too.</string>
     <string name="label_part_of">Part of: %1$s</string>

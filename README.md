@@ -475,6 +475,15 @@ lets picking one anyway overwrite that stale pointer - the only reliable way to 
 correct pairing once the two sides disagree. Any button shows a "Job Tracker isn't installed"
 toast instead of crashing if the target app isn't present.
 
+**Completing a linked job nudges you to update Job Tracker.** Marking a job done (or completing a
+repeating job's cycle) that carries a `linkedTrackerJobId` shows a small, dismissible Snackbar -
+"Want to update the linked Job Tracker job?" - with an **Open** action that jumps straight to it
+(`hometracker://job/{id}`), so recording the job's real cost/vendor/payment info over there is one
+tap away right when it's top of mind, without forcing an app switch you didn't ask for. It never
+fires for an unlinked job, for re-opening an already-done one, or for waking a resting repeating
+job back up - only for the moment a linked job actually becomes done. Home Jobs Tracker does the
+same in reverse when editing a linked job's status to Done.
+
 **Time and schedule carry over on Send, one-way, only at creation.** The reverse direction works
 the same way: a job sent *from* Tracker with a predicted-hours value or a scheduled date arrives
 here with both pre-filled - `predictedHours` converts to `estimatedMinutes`, and an incoming
