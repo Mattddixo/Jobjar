@@ -187,6 +187,16 @@ still open) - either way, completing a parent completes every one of its
 own subtasks too, so a job never ends up marked done while pieces
 underneath it are still open. Deleting a parent cascades to its subtasks.
 
+A **repeating** parent's subtasks get the same treatment, with one twist:
+completing its cycle (whether the last subtask just finished it or you
+force-completed the parent early) marks every subtask done and leaves them
+that way - it does **not** snap them back open the instant the cycle
+wraps up, which used to make finishing everything look like it had just
+undone itself. They only reset for the *next* cycle lazily, the moment
+something actually touches that job (or the Jar draws from it) once its
+`nextDueAt` has genuinely elapsed - never eagerly the moment the previous
+cycle's work finished (`JobRepository.catchUpRepeatingCycle`).
+
 A subtask can optionally **depend on** one sibling subtask (same parent,
 set via the "Depends on" picker on its own form — never itself, and never a
 subtask that would loop back to it). This is a **soft** block: a subtask

@@ -93,6 +93,14 @@ private data class ListFilters(
 
 class JobListViewModel(private val repository: JobRepository) : ViewModel() {
 
+    init {
+        // Self-heals a repeating parent's subtasks that are still marked done from a cycle
+        // whose nextDueAt has already passed - see JobRepository.catchUpRepeatingCycle - so the
+        // list reflects a fresh cycle on open rather than only once the user draws or touches
+        // that specific job.
+        viewModelScope.launch { repository.refreshDueRepeatingSubtasks() }
+    }
+
     private val view = MutableStateFlow(JobsView.ACTIVE)
     private val selectedCategories = MutableStateFlow<Set<String>>(emptySet())
     private val showRepeatingOnly = MutableStateFlow(false)

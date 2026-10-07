@@ -22,6 +22,13 @@ class JobRepository(private val dao: JobDao, appContext: Context) {
     suspend fun removeCategory(category: String) = dao.clearCategory(category)
 
     fun jobById(id: Long): Flow<Job?> = dao.getJobById(id)
+
+    /** Public entry point for [catchUpAllDueRepeatingCycles] - called once when the Jobs list
+     * loads, so a repeating parent's subtasks that are still marked done from a cycle whose
+     * nextDueAt has already passed show as fresh without requiring a draw or a direct tap on
+     * that specific job first. */
+    suspend fun refreshDueRepeatingSubtasks() = catchUpAllDueRepeatingCycles()
+
     fun subtasksOf(parentId: Long): Flow<List<Job>> = dao.getSubtasks(parentId)
 
     /** Targeted update for establishing (or clearing) a cross-app link, without touching any
@@ -86,14 +93,20 @@ class JobRepository(private val dao: JobDao, appContext: Context) {
      * booked on the calendar for. Completing a top-level job also completes any of its own
      * subtasks that aren't done yet (see [completeOpenSubtasks]) - otherwise force-completing one
      * with open subtasks (the Jobs list's confirm dialog exists for exactly that) would leave it
-     * marked done while pieces underneath it were still open.
+     * marked done while pieces underneath it were still open. Before any of that, [job] (or its
+     * parent, if [job] is itself a subtask) gets a chance to catch up on a repeating cycle that's
+     * already due - see [catchUpRepeatingCycle] - so a stale "done" left over from last cycle
+     * doesn't get misread as this cycle's completion.
      */
     suspend fun toggleDone(job: Job) {
+        val justReset = catchUpRepeatingCycle(job)
+
         if (job.recurrenceDays != null) {
             if (job.isPending()) cycleRepeatingJob(job) else wakeRepeatingJob(job)
             return
         }
-        if (job.isDone) {
+        val effectivelyDone = job.isDone && job.id !in justReset
+        if (effectivelyDone) {
             dao.markNotDone(job.id)
             if (job.parentId != null) {
                 reopenParentIfDone(job.parentId)
@@ -128,9 +141,65 @@ class JobRepository(private val dao: JobDao, appContext: Context) {
             }
     }
 
-    /** Clears a resting repeating job's schedule so it's immediately due again. Doesn't touch completionCount - the past completion still happened. */
+    /**
+     * A repeating parent's own subtasks finish the cycle the same way a one-off parent's would -
+     * completed, not silently left open or snapped back open the instant the cycle wraps up (see
+     * [cycleRepeatingJob]). Resetting them so the *next* cycle starts fresh is a separate, lazy
+     * step instead of something [cycleRepeatingJob] does eagerly: it only runs here, the moment
+     * something actually touches [job] or its repeating parent, and only once that parent's
+     * [Job.nextDueAt] has actually arrived - never the instant the previous cycle's work
+     * finished, which is what made completing the last subtask (or force-completing the parent)
+     * look like it had just undone itself.
+     *
+     * Deliberately keyed on [Job.nextDueAt] being a *past, non-null* timestamp, not just
+     * [Job.isPending] - `isPending` is also true for the entire stretch the user is still
+     * actively checking off this same cycle's subtasks one at a time (before the parent has
+     * cycled, `nextDueAt` is null, same as "never completed a cycle yet"), and treating that as
+     * "stale" would reset subtask 1 back open the moment subtask 2 was completed. Once a real
+     * elapsed `nextDueAt` is found, it's cleared back to null as part of the same cleanup -
+     * `isPending` reads null the same as "due," so the parent stays exactly as due as it was,
+     * but this cycle's own later subtask completions no longer look like next cycle's leftovers.
+     *
+     * Returns the ids of any subtask it reset, so a caller mid-toggle can tell its own
+     * just-reset target apart from one genuinely still done from earlier in this same cycle.
+     */
+    private suspend fun catchUpRepeatingCycle(job: Job): Set<Long> {
+        val parent = when {
+            job.recurrenceDays != null -> job
+            job.parentId != null -> dao.getJobById(job.parentId).first() ?: return emptySet()
+            else -> return emptySet()
+        }
+        if (parent.recurrenceDays == null) return emptySet()
+        val dueAt = parent.nextDueAt ?: return emptySet()
+        if (dueAt > System.currentTimeMillis()) return emptySet()
+
+        val stale = dao.getSubtasksSnapshot(parent.id).filter { it.isDone || it.isInProgress }
+        stale.forEach { dao.resetForNewCycle(it.id) }
+        dao.update(parent.copy(nextDueAt = null))
+        return stale.mapTo(mutableSetOf()) { it.id }
+    }
+
+    /** [catchUpRepeatingCycle] for every repeating parent that's currently due, not just the one
+     * job being directly interacted with - used by [drawJob] so the draw pool reflects a fresh
+     * cycle's subtasks even for a job nobody has touched yet this cycle. */
+    private suspend fun catchUpAllDueRepeatingCycles() {
+        allJobsFlat.first()
+            .filter { it.recurrenceDays != null && it.isPending() }
+            .forEach { catchUpRepeatingCycle(it) }
+    }
+
+    /** Clears a resting repeating job's schedule so it's immediately due again, resetting its own
+     * subtasks for this fresh cycle the same way the lazy catch-up would once nextDueAt elapsed
+     * naturally (see [catchUpRepeatingCycle]) - waking it early by hand is the same "a new cycle
+     * starts now" event, just user-triggered instead of time-triggered, and [catchUpRepeatingCycle]
+     * itself can't catch this one: it runs *before* this function, while nextDueAt is still in
+     * the future, so it correctly sees nothing stale yet. Doesn't touch completionCount - the
+     * past completion still happened. */
     private suspend fun wakeRepeatingJob(job: Job) {
         dao.update(job.copy(nextDueAt = null))
+        dao.getSubtasksSnapshot(job.id)
+            .filter { it.isDone || it.isInProgress }
+            .forEach { dao.resetForNewCycle(it.id) }
     }
 
     /**
@@ -139,7 +208,10 @@ class JobRepository(private val dao: JobDao, appContext: Context) {
      * now (not from any fixed calendar date - completing late just shifts the next one later
      * too). isDone is left false throughout, since the job isn't "finished," it's cycling.
      * isInProgress is cleared too - the fresh cycle hasn't been started yet, regardless of
-     * whether this occurrence was. Its own subtasks (if any) get the same fresh-cycle reset.
+     * whether this occurrence was. Its own subtasks get the same "parent completed" treatment a
+     * one-off parent's would (see [completeOpenSubtasks]) - finished, not left open and not
+     * reset back open either. They only reset for the *next* cycle lazily, once it's actually
+     * due (see [catchUpRepeatingCycle]).
      */
     private suspend fun cycleRepeatingJob(job: Job) {
         val now = System.currentTimeMillis()
@@ -151,9 +223,7 @@ class JobRepository(private val dao: JobDao, appContext: Context) {
                 isInProgress = false
             )
         )
-        dao.getSubtasksSnapshot(job.id)
-            .filter { it.isDone || it.isInProgress }
-            .forEach { dao.resetForNewCycle(it.id) }
+        completeOpenSubtasks(job.id)
     }
 
     private suspend fun autoCompleteParentIfFinished(parentId: Long) {
@@ -256,6 +326,7 @@ class JobRepository(private val dao: JobDao, appContext: Context) {
      * running budget between picks without duplicating the parent-vs-subtask minutes logic.
      */
     suspend fun drawJob(maxMinutes: Int, categories: Set<String>, excludeIds: List<Long>, longOnly: Boolean = false): DrawPick? {
+        catchUpAllDueRepeatingCycles()
         val all = allJobsFlat.first()
         val allById = all.associateBy { it.id }
         val subtasksByParent = all.filter { it.parentId != null }.groupBy { it.parentId }
