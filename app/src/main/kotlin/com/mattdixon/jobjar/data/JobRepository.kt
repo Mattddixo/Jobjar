@@ -93,7 +93,8 @@ class JobRepository(private val dao: JobDao, appContext: Context) {
      * booked on the calendar for. Completing a top-level job also completes any of its own
      * subtasks that aren't done yet (see [completeOpenSubtasks]) - otherwise force-completing one
      * with open subtasks (the Jobs list's confirm dialog exists for exactly that) would leave it
-     * marked done while pieces underneath it were still open. Before any of that, [job] (or its
+     * marked done while pieces underneath it were still open; reopening that one-off parent
+     * undoes exactly that sweep (see [reopenSubtasksCompletedWith]). Before any of that, [job] (or its
      * parent, if [job] is itself a subtask) gets a chance to catch up on a repeating cycle that's
      * already due - see [catchUpRepeatingCycle] - so a stale "done" left over from last cycle
      * doesn't get misread as this cycle's completion.
@@ -107,17 +108,21 @@ class JobRepository(private val dao: JobDao, appContext: Context) {
         }
         val effectivelyDone = job.isDone && job.id !in justReset
         if (effectivelyDone) {
+            val completedAt = dao.getJobById(job.id).first()?.completedAt
             dao.markNotDone(job.id)
             if (job.parentId != null) {
                 reopenParentIfDone(job.parentId)
+            } else if (completedAt != null) {
+                reopenSubtasksCompletedWith(job.id, completedAt)
             }
         } else {
             if (job.scheduledDate != null) unscheduleJob(job)
-            dao.markDone(job.id, System.currentTimeMillis())
+            val now = System.currentTimeMillis()
+            dao.markDone(job.id, now)
             if (job.parentId != null) {
                 autoCompleteParentIfFinished(job.parentId)
             } else {
-                completeOpenSubtasks(job.id)
+                completeOpenSubtasks(job.id, now)
             }
         }
     }
@@ -130,15 +135,32 @@ class JobRepository(private val dao: JobDao, appContext: Context) {
      * would also re-check whether *this* parent should auto-complete on every single one, which
      * is redundant work for a parent this function is only ever called on right after it was
      * already marked done.
+     *
+     * Each swept subtask is stamped with the parent's own [completedAt], exactly. That shared
+     * timestamp is how [reopenSubtasksCompletedWith] later tells "closed by this sweep" apart
+     * from "finished by hand" without needing a column of its own.
      */
-    private suspend fun completeOpenSubtasks(parentId: Long) {
-        val now = System.currentTimeMillis()
+    private suspend fun completeOpenSubtasks(parentId: Long, completedAt: Long) {
         dao.getSubtasksSnapshot(parentId)
             .filterNot { it.isDone }
             .forEach { subtask ->
                 if (subtask.scheduledDate != null) unscheduleJob(subtask)
-                dao.markDone(subtask.id, now)
+                dao.markDone(subtask.id, completedAt)
             }
+    }
+
+    /**
+     * Undoes [completeOpenSubtasks] when a one-off parent is reopened: only subtasks carrying
+     * the parent's exact [completedAt] were closed by that sweep and go back to open. Ones
+     * finished by hand keep their own (earlier) timestamp and stay done - that work really
+     * happened. A parent that auto-completed from its last subtask (see
+     * [autoCompleteParentIfFinished]) never shares a timestamp with any of them, so reopening it
+     * leaves every subtask done.
+     */
+    private suspend fun reopenSubtasksCompletedWith(parentId: Long, completedAt: Long) {
+        dao.getSubtasksSnapshot(parentId)
+            .filter { it.isDone && it.completedAt == completedAt }
+            .forEach { dao.markNotDone(it.id) }
     }
 
     /**
@@ -223,7 +245,7 @@ class JobRepository(private val dao: JobDao, appContext: Context) {
                 isInProgress = false
             )
         )
-        completeOpenSubtasks(job.id)
+        completeOpenSubtasks(job.id, now)
     }
 
     private suspend fun autoCompleteParentIfFinished(parentId: Long) {
@@ -234,7 +256,11 @@ class JobRepository(private val dao: JobDao, appContext: Context) {
         if (parent.recurrenceDays != null) {
             cycleRepeatingJob(parent)
         } else {
-            dao.markDone(parentId, System.currentTimeMillis())
+            // Strictly later than every subtask's own completion, even within the same
+            // millisecond as the one just ticked - otherwise reopenSubtasksCompletedWith would
+            // mistake that hand-finished subtask for one the parent's completion swept closed.
+            val latestSubtask = siblings.maxOf { it.completedAt ?: 0L }
+            dao.markDone(parentId, maxOf(System.currentTimeMillis(), latestSubtask + 1))
         }
     }
 

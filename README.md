@@ -185,7 +185,10 @@ A parent auto-completes once every subtask is done; you can also mark it
 done manually at any point (a confirmation dialog warns if subtasks are
 still open) - either way, completing a parent completes every one of its
 own subtasks too, so a job never ends up marked done while pieces
-underneath it are still open. Deleting a parent cascades to its subtasks.
+underneath it are still open. Reopening a one-off parent undoes the
+sweep: the subtasks it closed (stamped with the parent's exact completion
+time) go back to open, while ones you'd already finished by hand stay done.
+Deleting a parent cascades to its subtasks.
 
 A **repeating** parent's subtasks get the same treatment, with one twist:
 completing its cycle (whether the last subtask just finished it or you
