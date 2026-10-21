@@ -10,7 +10,7 @@ const val LONG_JOB_MINUTES = 240
 /**
  * A job can optionally be a subtask of another job via [parentId]. Subtasks are one level
  * deep only - a job that already has a parent cannot itself have subtasks. Only a top-level
- * job (one that isn't itself a subtask) can repeat.
+ * job (one that isn't itself a subtask) can repeat, and a repeating job can't have subtasks.
  *
  * A repeating job (non-null [recurrenceDays]) never persists [isDone] = true - completing it
  * instead advances [nextDueAt] and bumps [completionCount] (see [JobRepository]), so the same
@@ -63,11 +63,7 @@ data class Job(
      * write an event (e.g. permission denied, no writable calendar) - [scheduledDate] can still
      * be set in that case, since the in-app "scheduled" state shouldn't depend on the calendar
      * write having succeeded. */
-    val calendarEventId: Long? = null,
-    /** Opaque id of the Home Jobs Tracker job this was created from, if it arrived via that
-     * app's "Send to Job Jar" deep link - not a foreign key, since it points into a different
-     * app's database entirely. */
-    val linkedTrackerJobId: Long? = null
+    val calendarEventId: Long? = null
 )
 
 /**

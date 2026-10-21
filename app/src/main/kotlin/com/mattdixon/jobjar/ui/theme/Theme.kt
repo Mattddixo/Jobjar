@@ -1,35 +1,44 @@
 package com.mattdixon.jobjar.ui.theme
 
 import android.os.Build
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.CardColors
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 
 private val LightColorScheme = lightColorScheme(
-    primary = InkPrimaryLight,
-    onPrimary = InkOnPrimaryLight,
-    primaryContainer = InkContainerLight,
-    onPrimaryContainer = InkOnContainerLight,
+    primary = TealPrimaryLight,
+    onPrimary = TealOnPrimaryLight,
+    primaryContainer = TealContainerLight,
+    onPrimaryContainer = TealOnContainerLight,
     secondary = SlateSecondaryLight,
     onSecondary = SlateOnSecondaryLight,
     secondaryContainer = SlateContainerLight,
     onSecondaryContainer = SlateOnContainerLight,
-    tertiary = TaupeTertiaryLight,
-    onTertiary = TaupeOnTertiaryLight,
-    tertiaryContainer = TaupeContainerLight,
-    onTertiaryContainer = TaupeOnContainerLight,
+    tertiary = HoneyTertiaryLight,
+    onTertiary = HoneyOnTertiaryLight,
+    tertiaryContainer = HoneyContainerLight,
+    onTertiaryContainer = HoneyOnContainerLight,
     background = NeutralBackgroundLight,
     onBackground = NeutralOnBackgroundLight,
     surface = NeutralBackgroundLight,
     onSurface = NeutralOnBackgroundLight,
     surfaceVariant = NeutralSurfaceVariantLight,
     onSurfaceVariant = NeutralOnSurfaceVariantLight,
-    surfaceContainerLowest = NeutralBackgroundLight,
+    surfaceContainerLowest = NeutralSurfaceContainerLowestLight,
     surfaceContainerLow = NeutralSurfaceContainerLowLight,
     surfaceContainer = NeutralSurfaceContainerLight,
     surfaceContainerHigh = NeutralSurfaceContainerHighLight,
@@ -43,18 +52,18 @@ private val LightColorScheme = lightColorScheme(
 )
 
 private val DarkColorScheme = darkColorScheme(
-    primary = InkPrimaryDark,
-    onPrimary = InkOnPrimaryDark,
-    primaryContainer = InkContainerDark,
-    onPrimaryContainer = InkOnContainerDark,
+    primary = TealPrimaryDark,
+    onPrimary = TealOnPrimaryDark,
+    primaryContainer = TealContainerDark,
+    onPrimaryContainer = TealOnContainerDark,
     secondary = SlateSecondaryDark,
     onSecondary = SlateOnSecondaryDark,
     secondaryContainer = SlateContainerDark,
     onSecondaryContainer = SlateOnContainerDark,
-    tertiary = TaupeTertiaryDark,
-    onTertiary = TaupeOnTertiaryDark,
-    tertiaryContainer = TaupeContainerDark,
-    onTertiaryContainer = TaupeOnContainerDark,
+    tertiary = HoneyTertiaryDark,
+    onTertiary = HoneyOnTertiaryDark,
+    tertiaryContainer = HoneyContainerDark,
+    onTertiaryContainer = HoneyOnContainerDark,
     background = NeutralBackgroundDark,
     onBackground = NeutralOnBackgroundDark,
     surface = NeutralBackgroundDark,
@@ -74,6 +83,27 @@ private val DarkColorScheme = darkColorScheme(
     onErrorContainer = OnErrorContainerDark
 )
 
+/**
+ * The few app-specific colors Material's scheme has no role for. Material's filled Card
+ * defaults to surfaceContainerHighest - the darkest grey in the light scheme - which is what
+ * made every list read as a stack of muddy grey slabs. Cards here are instead a clean surface
+ * (white in light mode) with a hairline border; use [appCardColors]/[appCardBorder].
+ */
+@Immutable
+data class AppColors(val card: Color, val cardBorder: Color)
+
+private val LightAppColors = AppColors(card = CardLight, cardBorder = CardBorderLight)
+private val DarkAppColors = AppColors(card = CardDark, cardBorder = CardBorderDark)
+
+val LocalAppColors = staticCompositionLocalOf { LightAppColors }
+
+@Composable
+@ReadOnlyComposable
+fun appCardBorder(): BorderStroke = BorderStroke(1.dp, LocalAppColors.current.cardBorder)
+
+@Composable
+fun appCardColors(): CardColors = CardDefaults.cardColors(containerColor = LocalAppColors.current.card)
+
 @Composable
 fun JobJarTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
@@ -92,9 +122,11 @@ fun JobJarTheme(
         else -> LightColorScheme
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        content = content
-    )
+    CompositionLocalProvider(LocalAppColors provides if (darkTheme) DarkAppColors else LightAppColors) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = Typography,
+            content = content
+        )
+    }
 }

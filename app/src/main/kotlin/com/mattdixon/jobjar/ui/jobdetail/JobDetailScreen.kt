@@ -1,10 +1,5 @@
 package com.mattdixon.jobjar.ui.jobdetail
 
-import android.content.ActivityNotFoundException
-import android.content.Context
-import android.content.Intent
-import android.net.Uri
-import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -34,10 +29,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -50,11 +41,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.mattdixon.jobjar.R
-import com.mattdixon.jobjar.data.Job
 import com.mattdixon.jobjar.data.JobRepository
 import com.mattdixon.jobjar.data.isPending
 import com.mattdixon.jobjar.data.remainingMinutes
@@ -71,8 +60,6 @@ import com.mattdixon.jobjar.util.formatRecurrenceInterval
 import com.mattdixon.jobjar.util.formatScheduledDateTime
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
-import java.time.Instant
-import java.time.ZoneId
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -93,33 +80,9 @@ fun JobDetailScreen(
     val subtasks by subtasksFlow.collectAsState(initial = emptyList())
 
     val scope = rememberCoroutineScope()
-    val context = LocalContext.current
-    val snackbarHostState = remember { SnackbarHostState() }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showForceCompleteDialog by remember { mutableStateOf(false) }
     var showSchedulePicker by remember { mutableStateOf(false) }
-
-    // Whether completing [target] right now would actually mark it done - mirrors the same
-    // repeating-vs-plain branch JobRepository.toggleDone uses, so the little "want to update
-    // Job Tracker?" nudge below only ever fires on a real completion, never on re-opening a job
-    // or waking a resting repeating one back up.
-    fun completeJob(target: Job) {
-        val willComplete = if (target.recurrenceDays != null) target.isPending() else !target.isDone
-        scope.launch { repository.toggleDone(target) }
-        val linkedTrackerJobId = target.linkedTrackerJobId
-        if (willComplete && linkedTrackerJobId != null) {
-            scope.launch {
-                val result = snackbarHostState.showSnackbar(
-                    message = context.getString(R.string.snackbar_linked_tracker_job_may_need_update),
-                    actionLabel = context.getString(R.string.action_open),
-                    duration = SnackbarDuration.Short
-                )
-                if (result == SnackbarResult.ActionPerformed) {
-                    openInJobTracker(context, Uri.parse("hometracker://job/$linkedTrackerJobId"))
-                }
-            }
-        }
-    }
 
     val currentJob = job
     val parentFlow = remember(currentJob?.parentId) {
@@ -135,7 +98,6 @@ fun JobDetailScreen(
     val siblings by siblingsFlow.collectAsState(initial = emptyList())
 
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.jobdetail_title)) },
@@ -331,7 +293,7 @@ fun JobDetailScreen(
                         if (currentJob.isPending() && incompleteSubtaskCount > 0) {
                             showForceCompleteDialog = true
                         } else {
-                            completeJob(currentJob)
+                            scope.launch { repository.toggleDone(currentJob) }
                         }
                     },
                     modifier = Modifier.fillMaxWidth()
@@ -347,10 +309,7 @@ fun JobDetailScreen(
                     )
                 }
 
-                HorizontalDivider()
-                TrackerLinkActions(currentJob, onUnlink = { scope.launch { repository.setLinkedTrackerJobId(currentJob.id, null) } })
-
-                if (currentJob.parentId == null) {
+                if (currentJob.parentId == null && currentJob.recurrenceDays == null) {
                     HorizontalDivider()
                     SubtasksSection(
                         repository = repository,
@@ -396,7 +355,7 @@ fun JobDetailScreen(
                     text = { Text(stringResource(R.string.dialog_force_complete_body, incompleteSubtaskCount)) },
                     confirmButton = {
                         TextButton(onClick = {
-                            completeJob(currentJob)
+                            scope.launch { repository.toggleDone(currentJob) }
                             showForceCompleteDialog = false
                         }) { Text(stringResource(R.string.action_mark_done)) }
                     },
@@ -416,107 +375,5 @@ fun JobDetailScreen(
                 )
             }
         }
-    }
-}
-
-/**
- * Hands this job off to Home Jobs Tracker (a separate, unrelated app for tracking a job's
- * vendor/cost/payment details) via an implicit `ACTION_VIEW` intent against its own custom URI
- * scheme - the standard way for two local-only Android apps on the same device to talk to each
- * other without a shared backend. Once [Job.linkedTrackerJobId] is set - whether by sending a fresh
- * copy over or by linking to an existing Tracker job via the picker - the Send/Link actions are
- * replaced by "Open in Job Tracker" plus a smaller "Unlink", so a job can never end up linked
- * twice, but a mistaken or outdated link can always be broken and redone. Deliberately not gated
- * on this job being a top-level one: a subtask gets these same actions on its own detail screen,
- * since it may carry its own separate Tracker job with its own cost, independent of whatever its
- * parent is linked to.
- */
-@Composable
-private fun TrackerLinkActions(job: Job, onUnlink: () -> Unit) {
-    val context = LocalContext.current
-    var showUnlinkConfirm by remember { mutableStateOf(false) }
-    val linkedTrackerJobId = job.linkedTrackerJobId
-
-    Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
-        if (linkedTrackerJobId == null) {
-            OutlinedButton(
-                onClick = { openInJobTracker(context, sendToTrackerUri(job)) },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(stringResource(R.string.action_send_to_tracker))
-            }
-            OutlinedButton(
-                onClick = { openInJobTracker(context, Uri.parse("hometracker://pickjob?returnJobId=${job.id}")) },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(stringResource(R.string.action_link_to_tracker))
-            }
-        } else {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(Spacing.md)
-            ) {
-                OutlinedButton(
-                    onClick = { openInJobTracker(context, Uri.parse("hometracker://job/$linkedTrackerJobId")) },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(stringResource(R.string.action_open_in_tracker))
-                }
-                OutlinedButton(
-                    onClick = { showUnlinkConfirm = true },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(stringResource(R.string.action_unlink_tracker))
-                }
-            }
-        }
-    }
-
-    if (showUnlinkConfirm && linkedTrackerJobId != null) {
-        AlertDialog(
-            onDismissRequest = { showUnlinkConfirm = false },
-            title = { Text(stringResource(R.string.dialog_unlink_tracker_title)) },
-            text = { Text(stringResource(R.string.dialog_unlink_tracker_body)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    fireUnlinkedToTracker(context, trackerJobId = linkedTrackerJobId)
-                    onUnlink()
-                    showUnlinkConfirm = false
-                }) { Text(stringResource(R.string.action_unlink_tracker)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showUnlinkConfirm = false }) { Text(stringResource(R.string.action_cancel)) }
-            }
-        )
-    }
-}
-
-private fun fireUnlinkedToTracker(context: Context, trackerJobId: Long) {
-    val uri = Uri.parse("hometracker://unlinked").buildUpon()
-        .appendQueryParameter("jobId", trackerJobId.toString())
-        .build()
-    openInJobTracker(context, uri)
-}
-
-private fun sendToTrackerUri(job: Job): Uri {
-    val builder = Uri.parse("hometracker://newjob").buildUpon()
-        .appendQueryParameter("title", job.title)
-        .appendQueryParameter("sourceId", job.id.toString())
-        .appendQueryParameter("estimatedMinutes", job.estimatedMinutes.toString())
-    if (job.category.isNotBlank()) builder.appendQueryParameter("category", job.category)
-    // Tracker's scheduledDate is a plain ISO date with no time component, so the time-of-day this
-    // job may be scheduled for is dropped here - only the date survives the trip.
-    job.scheduledDate?.let { millis ->
-        val date = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate()
-        builder.appendQueryParameter("scheduledDate", date.toString())
-    }
-    return builder.build()
-}
-
-private fun openInJobTracker(context: Context, uri: Uri) {
-    try {
-        context.startActivity(Intent(Intent.ACTION_VIEW, uri))
-    } catch (e: ActivityNotFoundException) {
-        Toast.makeText(context, context.getString(R.string.toast_tracker_not_installed), Toast.LENGTH_SHORT).show()
     }
 }

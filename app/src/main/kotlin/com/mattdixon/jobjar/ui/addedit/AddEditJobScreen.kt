@@ -1,10 +1,5 @@
 package com.mattdixon.jobjar.ui.addedit
 
-import android.content.ActivityNotFoundException
-import android.content.Context
-import android.content.Intent
-import android.net.Uri
-import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,8 +15,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Event
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -44,7 +37,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -58,7 +50,6 @@ import com.mattdixon.jobjar.ui.components.SubtasksSection
 import com.mattdixon.jobjar.ui.theme.Spacing
 import com.mattdixon.jobjar.util.formatMinutes
 import com.mattdixon.jobjar.util.formatRecurrenceInterval
-import com.mattdixon.jobjar.util.formatScheduledDateTime
 import kotlinx.coroutines.flow.flowOf
 
 private val QUICK_DURATIONS = listOf(5, 15, 30, 45, 60, 90, 120, 180)
@@ -76,24 +67,10 @@ fun AddEditJobScreen(
     onDone: () -> Unit,
     parentId: Long? = null,
     onOpenSubtask: (Long) -> Unit = {},
-    onAddSubtask: (Long) -> Unit = {},
-    prefillTitle: String? = null,
-    prefillCategory: String? = null,
-    sourceTrackerJobId: Long? = null,
-    prefillEstimatedMinutes: Int? = null,
-    prefillScheduledDate: String? = null
+    onAddSubtask: (Long) -> Unit = {}
 ) {
     val viewModel: AddEditJobViewModel = viewModel(
-        factory = AddEditJobViewModel.Factory(
-            repository,
-            jobId,
-            parentId,
-            prefillTitle,
-            prefillCategory,
-            sourceTrackerJobId,
-            prefillEstimatedMinutes,
-            prefillScheduledDate
-        )
+        factory = AddEditJobViewModel.Factory(repository, jobId, parentId)
     )
     val state by viewModel.formState.collectAsState()
     val categories by repository.categories.collectAsState(initial = emptyList())
@@ -124,15 +101,8 @@ fun AddEditJobScreen(
     }
     val ownSubtasks by ownSubtasksFlow.collectAsState(initial = emptyList())
 
-    val context = LocalContext.current
     LaunchedEffect(state.isSaved) {
-        if (state.isSaved) {
-            val trackerJobId = state.linkedTrackerJobId
-            if (state.wasJustCreated && trackerJobId != null && savedId != null) {
-                fireLinkedToTracker(context, trackerJobId = trackerJobId, jobJarId = savedId)
-            }
-            onDone()
-        }
+        if (state.isSaved) onDone()
     }
 
     val titleRes = when {
@@ -251,38 +221,6 @@ fun AddEditJobScreen(
                         subtasksTotalMinutes = ownSubtasks.sumOf { it.estimatedMinutes }
                     )
                 }
-
-                // Only present on a brand-new job opened via a jobjar://newjob deep link that
-                // carried a Tracker scheduledDate - not a full scheduling picker, just a visible,
-                // removable preview of what Save will apply (see
-                // AddEditJobViewModel.persist/clearPrefillSchedule). Actually scheduling this job
-                // (with a real calendar event) still only happens once Save is pressed.
-                state.scheduledDateMillis?.let { millis ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
-                        ) {
-                            Icon(
-                                Icons.Filled.Event,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                stringResource(R.string.label_scheduled_from_tracker, formatScheduledDateTime(millis)),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        IconButton(onClick = { viewModel.clearPrefillSchedule() }) {
-                            Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.cd_clear_schedule_prefill))
-                        }
-                    }
-                }
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
@@ -358,8 +296,11 @@ fun AddEditJobScreen(
 
             // Only a job that isn't itself a subtask can repeat or have subtasks (one level
             // deep). Gated on isLoaded so an existing subtask being edited never flashes either
-            // section before we know its real parentId.
+            // section before we know its real parentId. Repeating and having subtasks are also
+            // mutually exclusive (see JobRepository.addJob): the switch can't be turned on while
+            // this job has subtasks, and the subtask list is hidden while it repeats.
             if (state.isLoaded && state.parentId == null) {
+                val hasSubtasks = ownSubtasks.isNotEmpty()
                 HorizontalDivider()
 
                 Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
@@ -371,7 +312,8 @@ fun AddEditJobScreen(
                         Text(stringResource(R.string.repeat_label), style = MaterialTheme.typography.labelLarge)
                         Switch(
                             checked = state.recurrenceDays != null,
-                            onCheckedChange = { viewModel.setRecurring(it) }
+                            onCheckedChange = { viewModel.setRecurring(it) },
+                            enabled = state.recurrenceDays != null || !hasSubtasks
                         )
                     }
                     val recurrenceDays = state.recurrenceDays
@@ -398,7 +340,7 @@ fun AddEditJobScreen(
                         )
                     } else {
                         Text(
-                            stringResource(R.string.repeat_explainer),
+                            stringResource(if (hasSubtasks) R.string.repeat_blocked_by_subtasks else R.string.repeat_explainer),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -407,12 +349,21 @@ fun AddEditJobScreen(
 
                 HorizontalDivider()
 
-                if (savedId != null) {
+                if (state.recurrenceDays != null) {
+                    Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
+                        Text(stringResource(R.string.subtasks_title), style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            stringResource(R.string.subtasks_blocked_by_repeat),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                } else if (savedId != null) {
                     SubtasksSection(
                         repository = repository,
                         parentId = savedId,
                         onOpenSubtask = onOpenSubtask,
-                        onAddSubtask = { onAddSubtask(savedId) }
+                        onAddSubtask = { viewModel.ensurePersisted { id -> onAddSubtask(id) } }
                     )
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
@@ -434,23 +385,5 @@ fun AddEditJobScreen(
                 }
             }
         }
-    }
-}
-
-/**
- * The return trip for a job created via a `jobjar://newjob?...&sourceId=<trackerJobId>` deep
- * link: tells Tracker which Job Jar job it should now remember as linked, so a second "Send" from
- * that same Tracker job can't create a duplicate. Only fired once, right after the create that
- * established the link (see [AddEditFormState.wasJustCreated]) - never on a later edit-save.
- */
-private fun fireLinkedToTracker(context: Context, trackerJobId: Long, jobJarId: Long) {
-    val uri = Uri.parse("hometracker://linked").buildUpon()
-        .appendQueryParameter("jobId", trackerJobId.toString())
-        .appendQueryParameter("otherId", jobJarId.toString())
-        .build()
-    try {
-        context.startActivity(Intent(Intent.ACTION_VIEW, uri))
-    } catch (e: ActivityNotFoundException) {
-        Toast.makeText(context, context.getString(R.string.toast_tracker_not_installed), Toast.LENGTH_SHORT).show()
     }
 }

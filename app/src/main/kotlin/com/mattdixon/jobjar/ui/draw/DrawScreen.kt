@@ -78,6 +78,8 @@ import com.mattdixon.jobjar.ui.components.TimeBucketBadge
 import com.mattdixon.jobjar.ui.components.TodayDateButton
 import com.mattdixon.jobjar.ui.theme.AppShapes
 import com.mattdixon.jobjar.ui.theme.Spacing
+import com.mattdixon.jobjar.ui.theme.appCardBorder
+import com.mattdixon.jobjar.ui.theme.appCardColors
 import com.mattdixon.jobjar.util.formatMinutes
 import com.mattdixon.jobjar.util.formatRecurrenceInterval
 
@@ -325,7 +327,8 @@ private fun PickerPanel(
 
     Card(
         shape = AppShapes.panel,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        colors = appCardColors(),
+        border = appCardBorder(),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(

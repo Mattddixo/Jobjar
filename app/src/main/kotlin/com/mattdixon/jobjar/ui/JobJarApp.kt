@@ -16,7 +16,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
-import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -28,7 +27,6 @@ import com.mattdixon.jobjar.ui.addedit.AddEditJobScreen
 import com.mattdixon.jobjar.ui.draw.DrawScreen
 import com.mattdixon.jobjar.ui.jobdetail.JobDetailScreen
 import com.mattdixon.jobjar.ui.joblist.JobListScreen
-import com.mattdixon.jobjar.ui.jobpicker.JobPickerScreen
 import com.mattdixon.jobjar.ui.stats.StatsScreen
 
 private sealed class TopLevelDestination(val route: String, val label: String, val icon: ImageVector) {
@@ -43,9 +41,10 @@ private val topLevelDestinations = listOf(TopLevelDestination.Draw, TopLevelDest
 fun JobJarApp(
     repository: JobRepository,
     darkTheme: Boolean,
-    onToggleTheme: () -> Unit,
-    navController: NavHostController = rememberNavController()
+    onToggleTheme: () -> Unit
 ) {
+    val navController = rememberNavController()
+
     Scaffold(
         bottomBar = {
             val backStackEntry by navController.currentBackStackEntryAsState()
@@ -93,28 +92,13 @@ fun JobJarApp(
             composable(TopLevelDestination.Stats.route) {
                 StatsScreen(repository = repository, darkTheme = darkTheme, onToggleTheme = onToggleTheme)
             }
-            composable(
-                route = "job/new?title={title}&category={category}&sourceTrackerJobId={sourceTrackerJobId}" +
-                    "&estimatedMinutes={estimatedMinutes}&scheduledDate={scheduledDate}",
-                arguments = listOf(
-                    navArgument("title") { type = NavType.StringType; nullable = true },
-                    navArgument("category") { type = NavType.StringType; nullable = true },
-                    navArgument("sourceTrackerJobId") { type = NavType.StringType; nullable = true },
-                    navArgument("estimatedMinutes") { type = NavType.StringType; nullable = true },
-                    navArgument("scheduledDate") { type = NavType.StringType; nullable = true }
-                )
-            ) { backStackEntry ->
+            composable("job/new") {
                 AddEditJobScreen(
                     repository = repository,
                     jobId = null,
                     onDone = { navController.popBackStack() },
                     onOpenSubtask = { openId -> navController.navigate("job/$openId") },
-                    onAddSubtask = { newParentId -> navController.navigate("job/$newParentId/subtask/new") },
-                    prefillTitle = backStackEntry.arguments?.getString("title"),
-                    prefillCategory = backStackEntry.arguments?.getString("category"),
-                    sourceTrackerJobId = backStackEntry.arguments?.getString("sourceTrackerJobId")?.toLongOrNull(),
-                    prefillEstimatedMinutes = backStackEntry.arguments?.getString("estimatedMinutes")?.toIntOrNull(),
-                    prefillScheduledDate = backStackEntry.arguments?.getString("scheduledDate")
+                    onAddSubtask = { newParentId -> navController.navigate("job/$newParentId/subtask/new") }
                 )
             }
             composable(
@@ -154,17 +138,6 @@ fun JobJarApp(
                     jobId = null,
                     parentId = parentId,
                     onDone = { navController.popBackStack() }
-                )
-            }
-            composable(
-                route = "jobPicker?returnJobId={returnJobId}",
-                arguments = listOf(navArgument("returnJobId") { type = NavType.LongType })
-            ) { backStackEntry ->
-                val returnJobId = backStackEntry.arguments?.getLong("returnJobId") ?: return@composable
-                JobPickerScreen(
-                    repository = repository,
-                    returnJobId = returnJobId,
-                    onBack = { navController.popBackStack() }
                 )
             }
         }

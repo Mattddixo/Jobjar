@@ -43,9 +43,9 @@ platform rather than transliterated line-by-line.
    on every launch - only the actual drawn batch itself doesn't carry over,
    since that's this session's output, not a setting to remember.
 
-   Drawn jobs get their own subtle tonal treatment (a warm-toned taupe
-   grey, the app's one reserved accent) so results are distinct from the
-   neutral controls above them without introducing actual color — tap a
+   Drawn jobs get their own warm honey-toned card (the app's one reserved
+   warm accent) so results stand apart from the neutral controls above
+   them — tap a
    card to open its detail page, or tap **Start** to mark it in progress.
    Drawing a job doesn't mean finishing it right away, so that's the only
    action a card offers; a started job drops out of the batch (and out of
@@ -187,16 +187,6 @@ still open) - either way, completing a parent completes every one of its
 own subtasks too, so a job never ends up marked done while pieces
 underneath it are still open. Deleting a parent cascades to its subtasks.
 
-A **repeating** parent's subtasks get the same treatment, with one twist:
-completing its cycle (whether the last subtask just finished it or you
-force-completed the parent early) marks every subtask done and leaves them
-that way - it does **not** snap them back open the instant the cycle
-wraps up, which used to make finishing everything look like it had just
-undone itself. They only reset for the *next* cycle lazily, the moment
-something actually touches that job (or the Jar draws from it) once its
-`nextDueAt` has genuinely elapsed - never eagerly the moment the previous
-cycle's work finished (`JobRepository.catchUpRepeatingCycle`).
-
 A subtask can optionally **depend on** one sibling subtask (same parent,
 set via the "Depends on" picker on its own form — never itself, and never a
 subtask that would loop back to it). This is a **soft** block: a subtask
@@ -209,7 +199,7 @@ left waiting on a subtask that no longer exists.
 
 ### Repeating jobs
 
-Any top-level job (not a subtask) can repeat, set from the same job form
+Any top-level job without subtasks can repeat, set from the same job form
 via a **Repeat** switch and an interval — Daily/Weekly/Biweekly/Monthly
 presets, or a custom "every N days." Completing one doesn't leave it done
 for good: it silently reopens once the interval passes, so it comes back
@@ -241,14 +231,17 @@ where they are in their cycle: turning it on bypasses the Active/Completed
 split entirely (which is why that toggle is disabled while it's on) and
 lists every repeating job together, due or resting alike.
 
-If a repeating job has subtasks, its own cycle carries them: completing it
-(directly, or automatically once every subtask is done) resets its subtasks
-back to not-done for the fresh cycle too, rather than leaving them
-permanently checked off. That in turn means a repeating parent's subtask
-completions can't be individually tallied in Stats the way a one-off
-parent's can - their `isDone` state doesn't survive the reset - so Stats
-credits a repeating job's totals from `completionCount` instead, once per
-cycle, whether or not it has subtasks.
+**Repeating jobs can't have subtasks.** A subtask is completed on its own
+timeline while its parent cycles on another, and the two never lined up
+cleanly (a subtask finished mid-cycle, a parent cycled with half its
+subtasks done, and so on). So the two options are mutually exclusive: the
+Repeat switch is disabled on a job that has subtasks, and the Subtasks
+section is replaced by a short note on a job that repeats (turn Repeat off
+to break it down). `JobRepository` backs this up at write time. Upgrading
+from a build that allowed the combination (database migration to v9)
+keeps any such subtasks - they're just detached into ordinary top-level
+jobs. Stats credits a repeating job's totals from `completionCount`, once
+per cycle.
 
 ### Scheduling
 
@@ -323,18 +316,17 @@ rather than this app building any calendar UI of its own.
 Standard modern-Android stack, no unnecessary abstraction:
 
 - **Kotlin + Jetpack Compose** for the entire UI (single-Activity, Material
-  3). Theming is deliberately monochrome (`ui/theme/Color.kt` / `Theme.kt`)
+  3). Theming is a clean, light palette (`ui/theme/Color.kt` / `Theme.kt`)
   rather than Android 12+'s dynamic/Material You color, which pulls its
   palette from the phone's wallpaper and would silently override anything
   defined here - `dynamicColor` defaults to `false` for exactly that
-  reason. Two earlier attempts at a colorful palette both read as too
-  busy for what's meant to be a clean, production-feeling app, so color
-  is mostly absent by design: ink (near-black/near-white, primary) for
-  every main action and control, a cool-neutral slate (secondary) for
-  badges/tags, and a warm-toned taupe (tertiary) reserved solely for a
-  drawn job's card on the Jar tab - the one deliberate exception, a subtle
-  grey-on-grey tonal shift rather than an actual color, so that one
-  moment is distinct without competing for attention. Light and dark
+  reason. Color is used sparingly: a soft cool off-white page with white,
+  hairline-bordered cards (`appCardColors()`/`appCardBorder()`, instead of
+  Material's default filled card, which is a heavy grey slab), one calm
+  teal accent (primary) for main actions and controls, a cool slate
+  (secondary) for badges/tags, and a warm honey (tertiary) reserved for a
+  drawn job's card on the Jar tab. Dark mode is a soft blue-grey charcoal
+  rather than near-black, with surfaces stepping visibly lighter. Light and dark
   themes are both fully designed (not just a dark-mode auto-invert), and
   the top-right toggle on each tab (labelled with whichever mode tapping
   it would switch *to*) lets you override the system setting directly;
@@ -390,7 +382,6 @@ app/src/main/kotlin/com/mattdixon/jobjar/
     ├── joblist/         Full job list: filter, sort, complete, delete
     ├── addedit/          Add/edit form
     ├── jobdetail/        Single job view
-    ├── jobpicker/        "Link to existing Job Tracker job" picker
     └── stats/            Completion + time-invested stats
     JobJarApp.kt          Nav host + bottom navigation
 ```
@@ -416,8 +407,7 @@ data class Job(
     val completionCount: Int = 0,                // repeating only: how many cycles completed
     val dependsOnSubtaskId: Long? = null,        // subtask only: sibling subtask that must be done first
     val scheduledDate: Long? = null,             // set = booked for this instant; excluded from the draw pool
-    val calendarEventId: Long? = null,           // device Calendar Provider row id backing scheduledDate, if any
-    val linkedTrackerJobId: Long? = null     // this job's Home Jobs Tracker counterpart, if linked
+    val calendarEventId: Long? = null            // device Calendar Provider row id backing scheduledDate, if any
 )
 ```
 
@@ -428,82 +418,6 @@ deleted. `JobRepository` enforces one write-time invariant on top of that:
 a parent's `estimatedMinutes` can never be less than what its subtasks add
 up to (it grows to match, never auto-shrinks) — see the Subtasks section
 above for why.
-
-## Interop with Home Jobs Tracker
-
-A job here can be **linked** - one-to-one, two-way - to a job in
-[Home Jobs Tracker](https://github.com/Mattddixo/job-tracker) (a separate, unrelated app for
-tracking a job's vendor/cost/payment details), via implicit `ACTION_VIEW` intents against a
-custom URI scheme each app declares - the standard same-device mechanism for two local-only apps
-(no server, no shared account) to exchange data. `DeepLink.kt` parses the incoming Uri;
-`MainActivity` calls `navController.navigate(...)` explicitly for both a cold start and an
-already-running instance (`onNewIntent`), rather than relying on Navigation-Compose's declarative
-deep-link auto-matching. Every one of those `navigate(...)` calls passes `launchSingleTop = true`
-- repeatedly bouncing back and forth via "Open in..." always re-navigates to the exact same
-destination this app's own back stack was already sitting on (nothing pops it while this app is
-merely backgrounded, not finished), so without this each round trip would push another duplicate
-copy on top, and Back would have to be pressed once per bounce before it did anything visible.
-
-A link is established one of two ways, both reachable from a job's detail screen:
-
-- **Send to Job Tracker** - creates a brand-new Tracker job pre-filled from this one's title,
-  category, estimated time, and (if set) scheduled date via
-  `hometracker://newjob?title=...&category=...&sourceId=<thisJobId>&estimatedMinutes=<minutes>&scheduledDate=<yyyy-MM-dd>`.
-  `estimatedMinutes` becomes Tracker's `predictedHours` (a straight minutes ÷ 60 conversion);
-  `scheduledDate` is dropped if this job isn't scheduled - Tracker's own field is date-only, so
-  any time-of-day is lost in the trip. Nothing is auto-saved on the Tracker side - it lands on
-  Tracker's own Add Job form, reviewed and saved like any other job there.
-- **Link to existing Job Tracker job** - opens a picker (`hometracker://pickjob?returnJobId=<thisJobId>`)
-  listing every Tracker job, so this job can be tied to one that already exists instead of always
-  spawning a new one.
-
-Either path ends the same way: whichever side just created or picked the counterpart fires a
-return callback - `jobjar://linked?jobId=<myId>&otherId=<theirId>` (Tracker calls back into this
-scheme the same way, in reverse) - so **both** jobs end up remembering each other's id
-(`Job.linkedTrackerJobId` here, `JobEntity.linkedJobJarId` on the Tracker side). From then on the
-detail screen's Send/Link buttons are replaced by two side-by-side, half-width buttons: **Open in
-Job Tracker** (`hometracker://job/{id}`) - true two-way navigation, working the same regardless of
-which app the link originated from - and **Unlink**, behind a confirmation dialog since it reaches
-into the other app too: it clears this job's own `linkedTrackerJobId` and fires
-`hometracker://unlinked?jobId=<theirId>` so Tracker clears its half in the same stroke. That's the
-deliberate way out of a mistaken or outdated link - pick the wrong job, or need to point this one
-at a different Tracker job later - since without it a link, once made, could never be changed.
-
-Because the link lives on the `linkedTrackerJobId` field of the `Job` row itself, and that field
-is gated purely on whether a link already exists (not on `parentId`), a **subtask** gets this same
-Send/Link/Open UI on its own detail screen, independent of whatever its parent job is linked to -
-useful when a subtask carries its own separate cost worth tracking on its own Tracker entry.
-
-**Duplicate-proof for a fresh link, repairable for a broken one**: once `linkedTrackerJobId` is
-set, the Send/Link buttons are gone from the UI entirely - there's no code path left that could
-*create* a second link from a job that's already linked. But the two sides of a link can still end
-up desynced - e.g. one side's own copy of the field got cleared by a bug, or a linked job on
-either side was deleted and its id later reused for something unrelated - and neither app has any
-way to detect that on its own. Because of that, the picker deliberately does **not** hard-exclude
-already-linked jobs: it lists every job, flags the ones that already point somewhere else, and
-lets picking one anyway overwrite that stale pointer - the only reliable way to re-establish a
-correct pairing once the two sides disagree. Any button shows a "Job Tracker isn't installed"
-toast instead of crashing if the target app isn't present.
-
-**Completing a linked job nudges you to update Job Tracker.** Marking a job done (or completing a
-repeating job's cycle) that carries a `linkedTrackerJobId` shows a small, dismissible Snackbar -
-"Want to update the linked Job Tracker job?" - with an **Open** action that jumps straight to it
-(`hometracker://job/{id}`), so recording the job's real cost/vendor/payment info over there is one
-tap away right when it's top of mind, without forcing an app switch you didn't ask for. It never
-fires for an unlinked job, for re-opening an already-done one, or for waking a resting repeating
-job back up - only for the moment a linked job actually becomes done. Home Jobs Tracker does the
-same in reverse when editing a linked job's status to Done.
-
-**Time and schedule carry over on Send, one-way, only at creation.** The reverse direction works
-the same way: a job sent *from* Tracker with a predicted-hours value or a scheduled date arrives
-here with both pre-filled - `predictedHours` converts to `estimatedMinutes`, and an incoming
-`scheduledDate` shows as a small removable "Scheduled: ... (from Job Tracker)" row on the create
-form (there's no full scheduling UI on this form otherwise). Since Tracker's date has no
-time-of-day, this defaults to 9 AM local time. Accepting it on Save routes through the same
-`JobRepository.scheduleJob` a manual Schedule action uses, so the new job gets a real calendar
-event, not just the in-app flag. None of this ever happens on the **Link** path or overwrites an
-existing job - it's strictly a one-time snapshot at the moment a new job is created via Send, the
-same "review before you save" flow every other prefilled field already gets.
 
 ## Building
 

@@ -32,6 +32,8 @@ import com.mattdixon.jobjar.data.LONG_JOB_MINUTES
 import com.mattdixon.jobjar.data.isUnblocked
 import com.mattdixon.jobjar.data.unallocatedMinutesOf
 import com.mattdixon.jobjar.ui.theme.Spacing
+import com.mattdixon.jobjar.ui.theme.appCardBorder
+import com.mattdixon.jobjar.ui.theme.appCardColors
 import com.mattdixon.jobjar.util.formatMinutes
 import kotlinx.coroutines.launch
 
@@ -141,7 +143,7 @@ private fun SubtaskRow(
 ) {
     val blocked = waitingOnTitle != null
     val contentColor = if (blocked) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
-    Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+    Card(onClick = onClick, colors = appCardColors(), border = appCardBorder(), modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()

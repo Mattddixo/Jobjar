@@ -5,8 +5,6 @@
     <string name="action_cancel">Cancel</string>
     <string name="action_delete">Delete</string>
     <string name="action_mark_done">Mark done</string>
-    <string name="action_open">Open</string>
-    <string name="snackbar_linked_tracker_job_may_need_update">Want to update the linked Job Tracker job?</string>
     <string name="dialog_mark_as_done_title">Mark as done?</string>
     <string name="dialog_force_complete_body">%1$d subtask(s) are still open. Completing this job will mark them done too.</string>
     <string name="label_part_of">Part of: %1$s</string>
@@ -16,8 +14,6 @@
     <string name="theme_toggle_light">Light</string>
     <string name="theme_toggle_dark">Dark</string>
     <string name="cd_add_subtask">Add subtask</string>
-    <string name="label_scheduled_from_tracker">Scheduled: %1$s (from Job Tracker)</string>
-    <string name="cd_clear_schedule_prefill">Don\'t schedule this job</string>
     <string name="cd_expand_subtasks">Show subtasks</string>
     <string name="cd_collapse_subtasks">Hide subtasks</string>
     <string name="cd_mark_done">Mark done</string>
@@ -103,6 +99,8 @@
     <string name="depends_on_none">None</string>
     <string name="repeat_label">Repeat</string>
     <string name="field_custom_recurrence">Custom: every N days</string>
+    <string name="repeat_blocked_by_subtasks">Jobs with subtasks can\'t repeat. Remove its subtasks first if you want this one to repeat.</string>
+    <string name="subtasks_blocked_by_repeat">Repeating jobs can\'t have subtasks. Turn off Repeat to break this job down.</string>
     <string name="repeat_explainer">Completing a repeating job reopens it automatically after the interval, instead of leaving it done for good.</string>
     <string name="subtasks_title">Subtasks</string>
     <string name="subtasks_save_first_hint">Adding a subtask saves this job first, using what you\'ve filled in so far.</string>
@@ -115,18 +113,6 @@
     <string name="action_mark_as_done">Mark as done</string>
     <string name="action_make_available_now">Make available now</string>
     <string name="action_mark_as_not_done">Mark as not done</string>
-    <string name="action_send_to_tracker">Send to Job Tracker</string>
-    <string name="action_link_to_tracker">Link to existing Job Tracker job</string>
-    <string name="action_open_in_tracker">Open in Job Tracker</string>
-    <string name="action_unlink_tracker">Unlink</string>
-    <string name="dialog_unlink_tracker_title">Unlink this job?</string>
-    <string name="dialog_unlink_tracker_body">This job and its Job Tracker job will no longer be linked. You can send or link it to a different job afterward.</string>
-    <string name="toast_tracker_not_installed">Job Tracker isn\'t installed</string>
-
-    <!-- Job picker screen (Link to existing Job Tracker job) -->
-    <string name="jobpicker_title">Select a job to link</string>
-    <string name="jobpicker_empty">No jobs available to pick.</string>
-    <string name="jobpicker_already_linked_warning">Already linked to a different job - picking this will re-point it here</string>
 
     <!-- Subtasks section (shared component) -->
     <string name="subtasks_done_count">%1$d/%2$d done</string>

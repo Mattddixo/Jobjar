@@ -30,6 +30,8 @@ import com.mattdixon.jobjar.data.JobRepository
 import com.mattdixon.jobjar.ui.components.TodayDateButton
 import com.mattdixon.jobjar.ui.theme.AppShapes
 import com.mattdixon.jobjar.ui.theme.Spacing
+import com.mattdixon.jobjar.ui.theme.appCardBorder
+import com.mattdixon.jobjar.ui.theme.appCardColors
 import com.mattdixon.jobjar.util.formatMinutes
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -98,7 +100,7 @@ fun StatsScreen(
                 val maxMinutes = state.categoryStats.first().totalMinutes.coerceAtLeast(1)
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
                     items(state.categoryStats, key = { it.category }) { stat ->
-                        Card(modifier = Modifier.fillMaxWidth()) {
+                        Card(colors = appCardColors(), border = appCardBorder(), modifier = Modifier.fillMaxWidth()) {
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -133,7 +135,7 @@ fun StatsScreen(
 
 @Composable
 private fun StatCard(label: String, value: String, modifier: Modifier = Modifier) {
-    Card(modifier = modifier) {
+    Card(colors = appCardColors(), border = appCardBorder(), modifier = modifier) {
         Column(
             modifier = Modifier.padding(Spacing.xl),
             verticalArrangement = Arrangement.spacedBy(Spacing.xs)
