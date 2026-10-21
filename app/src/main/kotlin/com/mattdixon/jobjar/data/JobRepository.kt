@@ -99,7 +99,8 @@ class JobRepository(private val dao: JobDao, appContext: Context) {
      * booked on the calendar for. Completing a top-level job also completes any of its own
      * subtasks that aren't done yet (see [completeOpenSubtasks]) - otherwise force-completing one
      * with open subtasks (the Jobs list's confirm dialog exists for exactly that) would leave it
-     * marked done while pieces underneath it were still open.
+     * marked done while pieces underneath it were still open. Reopening that top-level job
+     * undoes exactly that sweep (see [reopenSubtasksCompletedWith]), so a mis-tap is reversible.
      */
     suspend fun toggleDone(job: Job) {
         if (job.recurrenceDays != null) {
@@ -107,17 +108,21 @@ class JobRepository(private val dao: JobDao, appContext: Context) {
             return
         }
         if (job.isDone) {
+            val completedAt = dao.getJobById(job.id).first()?.completedAt
             dao.markNotDone(job.id)
             if (job.parentId != null) {
                 reopenParentIfDone(job.parentId)
+            } else if (completedAt != null) {
+                reopenSubtasksCompletedWith(job.id, completedAt)
             }
         } else {
             if (job.scheduledDate != null) unscheduleJob(job)
-            dao.markDone(job.id, System.currentTimeMillis())
+            val now = System.currentTimeMillis()
+            dao.markDone(job.id, now)
             if (job.parentId != null) {
                 autoCompleteParentIfFinished(job.parentId)
             } else {
-                completeOpenSubtasks(job.id)
+                completeOpenSubtasks(job.id, now)
             }
         }
     }
@@ -129,15 +134,31 @@ class JobRepository(private val dao: JobDao, appContext: Context) {
      * directly rather than [toggleDone] per subtask - that would also re-check whether *this*
      * parent should auto-complete on every single one, which is redundant for a parent that was
      * just marked done.
+     *
+     * Each swept subtask is stamped with the parent's own [completedAt], exactly. That shared
+     * timestamp is how [reopenSubtasksCompletedWith] later tells "closed by this sweep" apart
+     * from "finished by hand" without needing a column of its own.
      */
-    private suspend fun completeOpenSubtasks(parentId: Long) {
-        val now = System.currentTimeMillis()
+    private suspend fun completeOpenSubtasks(parentId: Long, completedAt: Long) {
         dao.getSubtasksSnapshot(parentId)
             .filterNot { it.isDone }
             .forEach { subtask ->
                 if (subtask.scheduledDate != null) unscheduleJob(subtask)
-                dao.markDone(subtask.id, now)
+                dao.markDone(subtask.id, completedAt)
             }
+    }
+
+    /**
+     * Undoes [completeOpenSubtasks] when its parent is reopened: only subtasks carrying the
+     * parent's exact [completedAt] were closed by that sweep and go back to open. Ones finished
+     * by hand keep their own (earlier) timestamp and stay done - that work really happened. A
+     * parent that auto-completed from its last subtask (see [autoCompleteParentIfFinished])
+     * never shares a timestamp with any of them, so reopening it leaves every subtask done.
+     */
+    private suspend fun reopenSubtasksCompletedWith(parentId: Long, completedAt: Long) {
+        dao.getSubtasksSnapshot(parentId)
+            .filter { it.isDone && it.completedAt == completedAt }
+            .forEach { dao.markNotDone(it.id) }
     }
 
     /** Clears a resting repeating job's schedule so it's immediately due again. Doesn't touch completionCount - the past completion still happened. */
@@ -170,7 +191,11 @@ class JobRepository(private val dao: JobDao, appContext: Context) {
         val siblings = dao.getSubtasksSnapshot(parentId)
         if (siblings.isEmpty() || !siblings.all { it.isDone }) return
 
-        dao.markDone(parentId, System.currentTimeMillis())
+        // Strictly later than every subtask's own completion, even within the same millisecond
+        // as the one just ticked - otherwise reopenSubtasksCompletedWith would mistake that
+        // hand-finished subtask for one the parent's completion swept closed.
+        val latestSubtask = siblings.maxOf { it.completedAt ?: 0L }
+        dao.markDone(parentId, maxOf(System.currentTimeMillis(), latestSubtask + 1))
     }
 
     /**
