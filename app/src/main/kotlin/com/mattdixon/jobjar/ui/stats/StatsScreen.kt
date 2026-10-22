@@ -15,7 +15,10 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -38,8 +41,7 @@ import com.mattdixon.jobjar.util.formatMinutes
 @Composable
 fun StatsScreen(
     repository: JobRepository,
-    darkTheme: Boolean,
-    onToggleTheme: () -> Unit
+    onOpenSettings: () -> Unit
 ) {
     val viewModel: StatsViewModel = viewModel(factory = StatsViewModel.Factory(repository))
     val state by viewModel.uiState.collectAsState()
@@ -54,8 +56,8 @@ fun StatsScreen(
                     }
                 },
                 actions = {
-                    TextButton(onClick = onToggleTheme) {
-                        Text(stringResource(if (darkTheme) R.string.theme_toggle_light else R.string.theme_toggle_dark))
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.cd_settings))
                     }
                 }
             )

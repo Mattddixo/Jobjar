@@ -6,14 +6,50 @@
     <string name="action_delete">Delete</string>
     <string name="action_mark_done">Mark done</string>
     <string name="dialog_mark_as_done_title">Mark as done?</string>
-    <string name="dialog_force_complete_body">%1$d subtask(s) are still open. Completing this job will mark them done too.</string>
     <string name="label_part_of">Part of: %1$s</string>
     <string name="label_waiting_on">Waiting on: %1$s</string>
     <string name="label_remaining_of_total">%1$s left of %2$s total</string>
     <string name="long_job_chip_label">4+ hrs</string>
-    <string name="theme_toggle_light">Light</string>
-    <string name="theme_toggle_dark">Dark</string>
     <string name="cd_add_subtask">Add subtask</string>
+    <string name="action_undo">Undo</string>
+    <string name="action_import">Import</string>
+    <string name="action_open_settings">Open settings</string>
+    <string name="action_not_now">Not now</string>
+    <string name="cd_settings">Settings</string>
+    <string name="snackbar_completed">Completed \"%1$s\"</string>
+    <string name="snackbar_deleted">Deleted \"%1$s\"</string>
+    <string name="tab_jar">Jar</string>
+    <string name="tab_jobs">Jobs</string>
+    <string name="tab_stats">Stats</string>
+    <plurals name="dialog_force_complete_body">
+        <item quantity="one">%1$d subtask is still open. Completing this job will mark it done too.</item>
+        <item quantity="other">%1$d subtasks are still open. Completing this job will mark them done too.</item>
+    </plurals>
+    <plurals name="completed_n_times">
+        <item quantity="one"> · completed once</item>
+        <item quantity="other"> · completed %1$d times</item>
+    </plurals>
+
+    <!-- Repeat schedules -->
+    <string name="repeat_daily">Daily</string>
+    <string name="repeat_weekly">Weekly</string>
+    <string name="repeat_biweekly">Biweekly</string>
+    <string name="repeat_monthly">Monthly</string>
+    <plurals name="repeat_every_n_days">
+        <item quantity="one">Every day</item>
+        <item quantity="other">Every %1$d days</item>
+    </plurals>
+    <string name="repeat_every_day">Every day</string>
+    <string name="repeat_weekdays">Weekdays</string>
+    <string name="repeat_weekends">Weekends</string>
+    <string name="repeat_every_named_day">Every %1$s</string>
+    <string name="due_now">Due now</string>
+    <string name="due_later_today">Next: later today</string>
+    <string name="due_tomorrow">Next: tomorrow</string>
+    <plurals name="due_in_n_days">
+        <item quantity="one">Next: in %1$d day</item>
+        <item quantity="other">Next: in %1$d days</item>
+    </plurals>
     <string name="cd_expand_subtasks">Show subtasks</string>
     <string name="cd_collapse_subtasks">Hide subtasks</string>
     <string name="cd_mark_done">Mark done</string>
@@ -24,7 +60,6 @@
     <string name="action_move_to_jar">Move back to jar</string>
     <string name="badge_in_progress">In progress</string>
     <string name="filter_in_progress">In Progress</string>
-    <string name="action_ok">OK</string>
     <string name="action_next">Next</string>
     <string name="action_schedule">Schedule</string>
     <string name="action_unschedule">Unschedule</string>
@@ -36,8 +71,18 @@
     <!-- Draw (Jar) screen -->
     <string name="draw_screen_title">The Job Jar</string>
     <string name="draw_button">Draw a job</string>
-    <string name="draw_jar_count">%1$d in the jar</string>
-    <string name="draw_in_progress_count">%1$d in progress</string>
+    <plurals name="draw_jar_count">
+        <item quantity="one">%1$d in the jar</item>
+        <item quantity="other">%1$d in the jar</item>
+    </plurals>
+    <plurals name="draw_in_progress_count">
+        <item quantity="one">%1$d in progress</item>
+        <item quantity="other">%1$d in progress</item>
+    </plurals>
+    <plurals name="draw_budget_summary">
+        <item quantity="one">%1$d job · %2$s left of %3$s</item>
+        <item quantity="other">%1$d jobs · %2$s left of %3$s</item>
+    </plurals>
     <string name="draw_section_time_available">TIME AVAILABLE</string>
     <string name="draw_section_how_many">HOW MANY</string>
     <string name="draw_section_category">CATEGORY</string>
@@ -46,7 +91,6 @@
     <string name="draw_no_match_long">Nothing needs %1$s+ yet. Try a shorter time, or add a bigger job.</string>
     <string name="draw_no_match_short">No jobs fit that time and category. Try a longer time or add more jobs.</string>
     <string name="draw_empty_prompt">Set your time and tap \"Draw a job\" to pick something from the jar.</string>
-    <string name="draw_budget_summary">%1$d job(s) · %2$s left of %3$s</string>
     <string name="draw_redraw">Redraw</string>
     <string name="draw_close_jar">I changed my mind</string>
     <string name="draw_subtasks_progress">%1$d/%2$d subtasks done · %3$s left</string>
@@ -62,14 +106,25 @@
     <string name="filter_repeating">Repeating</string>
     <string name="filter_category_default">Category</string>
     <string name="cd_more_options">More options</string>
+    <string name="sort_shortest_first">Shortest first</string>
+    <string name="sort_longest_first">Longest first</string>
+    <string name="sort_priority">Priority</string>
+    <string name="sort_newest">Newest</string>
+    <string name="sort_category">Category</string>
+    <plurals name="dialog_delete_job_with_subtasks">
+        <item quantity="one">\"%1$s\" and its %2$d subtask will be removed.</item>
+        <item quantity="other">\"%1$s\" and its %2$d subtasks will be removed.</item>
+    </plurals>
+    <plurals name="dialog_remove_category_body">
+        <item quantity="one">\"%1$s\" will be removed from %2$d job. That job will have no category - nothing else about it changes.</item>
+        <item quantity="other">\"%1$s\" will be removed from %2$d jobs. Those jobs will have no category - nothing else about them changes.</item>
+    </plurals>
     <string name="menu_open">Open</string>
     <string name="dialog_delete_job_title">Delete job?</string>
-    <string name="dialog_delete_job_with_subtasks">\"%1$s\" and its %2$d subtask(s) will be removed permanently.</string>
-    <string name="dialog_delete_job_plain">\"%1$s\" will be removed permanently.</string>
+    <string name="dialog_delete_job_plain">\"%1$s\" will be removed.</string>
     <string name="manage_categories_title">Manage categories</string>
     <string name="cd_remove_category">Remove %1$s</string>
     <string name="dialog_remove_category_title">Remove category?</string>
-    <string name="dialog_remove_category_body">\"%1$s\" will be removed from %2$d job(s). Those jobs will have no category - nothing else about them changes.</string>
     <string name="action_remove">Remove</string>
     <string name="action_done">Done</string>
     <string name="cd_close_search">Close search</string>
@@ -99,6 +154,10 @@
     <string name="depends_on_none">None</string>
     <string name="repeat_label">Repeat</string>
     <string name="field_custom_recurrence">Custom: every N days</string>
+    <string name="repeat_mode_interval">Every few days</string>
+    <string name="repeat_mode_weekdays">Specific days</string>
+    <string name="repeat_interval_explainer">Comes back this many days after you finish it.</string>
+    <string name="repeat_weekdays_explainer">Comes back at the start of each chosen day, whenever you last finished it.</string>
     <string name="repeat_blocked_by_subtasks">Jobs with subtasks can\'t repeat. Remove its subtasks first if you want this one to repeat.</string>
     <string name="subtasks_blocked_by_repeat">Repeating jobs can\'t have subtasks. Turn off Repeat to break this job down.</string>
     <string name="repeat_explainer">Completing a repeating job reopens it automatically after the interval, instead of leaving it done for good.</string>
@@ -108,7 +167,6 @@
     <!-- Job detail screen -->
     <string name="jobdetail_title">Job details</string>
     <string name="job_not_found">Job not found.</string>
-    <string name="completed_n_times"> · completed %1$d time(s)</string>
     <string name="priority_display">Priority: %1$s</string>
     <string name="action_mark_as_done">Mark as done</string>
     <string name="action_make_available_now">Make available now</string>
@@ -130,4 +188,39 @@
     <string name="stats_by_category">By category</string>
     <string name="stats_empty_hint">Complete a few jobs to see your stats here.</string>
     <string name="stats_category_summary">%1$d done · %2$s</string>
+
+    <!-- Settings screen -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_appearance">Appearance</string>
+    <string name="theme_system">System</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="settings_your_data">Your data</string>
+    <string name="settings_data_explainer">Your jobs are stored only on this phone. Export saves a copy you can keep anywhere - Drive, email, a computer - and import it again later, on this phone or a new one.</string>
+    <string name="settings_export">Export jobs</string>
+    <string name="settings_import">Import jobs</string>
+    <plurals name="settings_exported">
+        <item quantity="one">Exported %1$d job</item>
+        <item quantity="other">Exported %1$d jobs</item>
+    </plurals>
+    <plurals name="settings_imported">
+        <item quantity="one">Imported %1$d job</item>
+        <item quantity="other">Imported %1$d jobs</item>
+    </plurals>
+    <string name="settings_export_failed">Couldn\'t save the export file.</string>
+    <string name="settings_import_failed">Couldn\'t read that file. Nothing was changed.</string>
+    <string name="settings_import_not_backup">That file isn\'t a Job Jar export. Nothing was changed.</string>
+    <string name="settings_import_newer">That export is from a newer version of Job Jar. Update the app, then try again.</string>
+    <string name="dialog_import_title">Replace your jobs?</string>
+    <plurals name="dialog_import_body">
+        <item quantity="one">This file has %1$d job.</item>
+        <item quantity="other">This file has %1$d jobs.</item>
+    </plurals>
+    <plurals name="dialog_import_replaces">
+        <item quantity="one">Importing replaces the %1$d job on this phone. Export first if you want to keep it.</item>
+        <item quantity="other">Importing replaces the %1$d jobs on this phone. Export first if you want to keep them.</item>
+    </plurals>
+    <string name="settings_about">About</string>
+    <string name="settings_version">Job Jar %1$s</string>
+    <string name="settings_privacy">No account, no ads, no tracking. Job Jar has no internet access - your jobs never leave this phone unless you export them. Calendar access is only used to add the jobs you schedule.</string>
 </resources>

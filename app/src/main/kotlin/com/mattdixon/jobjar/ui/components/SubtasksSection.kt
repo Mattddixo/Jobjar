@@ -89,7 +89,7 @@ fun SubtasksSection(
                             ?.takeUnless { subtask.isUnblocked(siblingsById) }
                             ?.let { siblingsById[it]?.title },
                         onClick = { onOpenSubtask(subtask.id) },
-                        onToggleDone = { scope.launch { repository.toggleDone(subtask) } }
+                        onToggleDone = { scope.launch { repository.toggleDone(subtask.id) } }
                     )
                 }
             }

@@ -79,7 +79,9 @@ data class DrawUiState(
      */
     val pendingCount: Int = 0,
     /** How many jobs are currently in progress - shown alongside [pendingCount] since those jobs have left the jar but aren't done yet either. */
-    val inProgressCount: Int = 0
+    val inProgressCount: Int = 0,
+    /** False until the jar's contents have loaded, so it doesn't flash "0 in the jar" on launch. */
+    val isLoaded: Boolean = false
 )
 
 class DrawViewModel(
@@ -115,7 +117,8 @@ class DrawViewModel(
                     categories = categories,
                     selectedCategories = stillValidSelection,
                     pendingCount = allJobs.count { it.isAvailableToDraw() },
-                    inProgressCount = allJobs.count { it.isInProgress }
+                    inProgressCount = allJobs.count { it.isInProgress },
+                    isLoaded = true
                 )
                 if (stillValidSelection != previousSelection) {
                     saveSettings(_uiState.value)
@@ -243,7 +246,7 @@ class DrawViewModel(
     fun startJob(jobId: Long) {
         val entry = _uiState.value.drawnJobs.find { it.job.id == jobId } ?: return
         viewModelScope.launch {
-            repository.toggleInProgress(entry.job)
+            repository.toggleInProgress(entry.job.id)
             _uiState.value = _uiState.value.copy(
                 drawnJobs = _uiState.value.drawnJobs.filterNot { it.job.id == jobId }
             )
@@ -259,7 +262,7 @@ class DrawViewModel(
     fun scheduleJob(jobId: Long, dateTimeMillis: Long) {
         val entry = _uiState.value.drawnJobs.find { it.job.id == jobId } ?: return
         viewModelScope.launch {
-            repository.scheduleJob(entry.job, dateTimeMillis)
+            repository.scheduleJob(entry.job.id, dateTimeMillis)
             _uiState.value = _uiState.value.copy(
                 drawnJobs = _uiState.value.drawnJobs.filterNot { it.job.id == jobId }
             )

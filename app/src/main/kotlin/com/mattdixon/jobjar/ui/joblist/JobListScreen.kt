@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
@@ -35,6 +36,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material3.AlertDialog
@@ -53,6 +55,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -80,12 +84,20 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mattdixon.jobjar.R
 import com.mattdixon.jobjar.data.JobRepository
+import com.mattdixon.jobjar.data.UndoSnapshot
 import com.mattdixon.jobjar.data.isPending
 import com.mattdixon.jobjar.ui.components.CategoryBadge
 import com.mattdixon.jobjar.ui.components.InfoBadge
 import com.mattdixon.jobjar.ui.components.SchedulePickerDialog
 import com.mattdixon.jobjar.ui.components.TimeBucketBadge
 import com.mattdixon.jobjar.ui.components.TodayDateButton
+import com.mattdixon.jobjar.ui.components.dueStatusLabel
+import com.mattdixon.jobjar.ui.components.plural
+import com.mattdixon.jobjar.ui.components.recurrenceLabel
+import com.mattdixon.jobjar.ui.LocalUndoController
+import com.mattdixon.jobjar.ui.UndoEvent
+import com.mattdixon.jobjar.ui.UndoKind
+import com.mattdixon.jobjar.ui.UndoSnackbarEffect
 import com.mattdixon.jobjar.ui.theme.Spacing
 import com.mattdixon.jobjar.ui.theme.appCardBorder
 import com.mattdixon.jobjar.ui.theme.appCardColors
@@ -100,8 +112,7 @@ fun JobListScreen(
     repository: JobRepository,
     onAddJob: () -> Unit,
     onOpenJob: (Long) -> Unit,
-    darkTheme: Boolean,
-    onToggleTheme: () -> Unit
+    onOpenSettings: () -> Unit
 ) {
     val viewModel: JobListViewModel = viewModel(factory = JobListViewModel.Factory(repository))
     val state by viewModel.uiState.collectAsState()
@@ -113,8 +124,15 @@ fun JobListScreen(
     var manageCategoriesOpen by remember { mutableStateOf(false) }
     var categoryPendingRemoval by remember { mutableStateOf<String?>(null) }
     var itemPendingSchedule by remember { mutableStateOf<JobListItem?>(null) }
+    val undo = LocalUndoController.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    UndoSnackbarEffect(snackbarHostState, isJobList = true)
+    val onCompleted: (JobListItem) -> (UndoSnapshot) -> Unit = { item ->
+        { snapshot -> undo.offer(UndoEvent(UndoKind.COMPLETED, item.job.title, snapshot)) }
+    }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             if (searchActive) {
                 SearchTopBar(
@@ -144,7 +162,7 @@ fun JobListScreen(
                             DropdownMenu(expanded = sortMenuExpanded, onDismissRequest = { sortMenuExpanded = false }) {
                                 SortOrder.entries.forEach { order ->
                                     DropdownMenuItem(
-                                        text = { Text(order.label) },
+                                        text = { Text(stringResource(order.labelRes)) },
                                         onClick = {
                                             viewModel.setSortOrder(order)
                                             sortMenuExpanded = false
@@ -153,8 +171,8 @@ fun JobListScreen(
                                 }
                             }
                         }
-                        TextButton(onClick = onToggleTheme) {
-                            Text(stringResource(if (darkTheme) R.string.theme_toggle_light else R.string.theme_toggle_dark))
+                        IconButton(onClick = onOpenSettings) {
+                            Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.cd_settings))
                         }
                     }
                 )
@@ -285,7 +303,11 @@ fun JobListScreen(
                 }
             }
 
-            if (state.items.isEmpty()) {
+            if (!state.isLoaded) {
+                // First load from the database is near-instant; showing nothing for that moment
+                // beats flashing "No jobs yet" at someone who has plenty.
+                Spacer(Modifier.fillMaxSize())
+            } else if (state.items.isEmpty()) {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -311,7 +333,7 @@ fun JobListScreen(
                                 if (item.job.isPending() && hasOpenSubtasks) {
                                     itemPendingForceComplete = item
                                 } else {
-                                    viewModel.toggleDone(item.job)
+                                    viewModel.toggleDone(item.job, onCompleted(item))
                                 }
                             },
                             onToggleInProgress = { viewModel.toggleInProgress(item.job) },
@@ -333,7 +355,7 @@ fun JobListScreen(
             text = {
                 Text(
                     if (item.subtaskTotal > 0) {
-                        stringResource(R.string.dialog_delete_job_with_subtasks, item.job.title, item.subtaskTotal)
+                        plural(R.plurals.dialog_delete_job_with_subtasks, item.subtaskTotal, item.job.title, item.subtaskTotal)
                     } else {
                         stringResource(R.string.dialog_delete_job_plain, item.job.title)
                     }
@@ -341,7 +363,9 @@ fun JobListScreen(
             },
             confirmButton = {
                 TextButton(onClick = {
-                    viewModel.deleteJob(item.job)
+                    viewModel.deleteJob(item.job) { snapshot ->
+                        undo.offer(UndoEvent(UndoKind.DELETED, item.job.title, snapshot))
+                    }
                     itemPendingDelete = null
                 }) { Text(stringResource(R.string.action_delete)) }
             },
@@ -356,10 +380,10 @@ fun JobListScreen(
         AlertDialog(
             onDismissRequest = { itemPendingForceComplete = null },
             title = { Text(stringResource(R.string.dialog_mark_as_done_title)) },
-            text = { Text(stringResource(R.string.dialog_force_complete_body, incompleteCount)) },
+            text = { Text(plural(R.plurals.dialog_force_complete_body, incompleteCount, incompleteCount)) },
             confirmButton = {
                 TextButton(onClick = {
-                    viewModel.toggleDone(item.job)
+                    viewModel.toggleDone(item.job, onCompleted(item))
                     itemPendingForceComplete = null
                 }) { Text(stringResource(R.string.action_mark_done)) }
             },
@@ -383,7 +407,8 @@ fun JobListScreen(
             onDismissRequest = { categoryPendingRemoval = null },
             title = { Text(stringResource(R.string.dialog_remove_category_title)) },
             text = {
-                Text(stringResource(R.string.dialog_remove_category_body, category, state.categoryCounts[category] ?: 0))
+                val count = state.categoryCounts[category] ?: 0
+                Text(plural(R.plurals.dialog_remove_category_body, count, category, count))
             },
             confirmButton = {
                 TextButton(onClick = {
@@ -586,7 +611,7 @@ private fun JobRow(
                     TimeBucketBadge(minutes = item.displayMinutes)
                     if (job.category.isNotBlank()) CategoryBadge(category = job.category)
                     if (item.subtaskTotal > 0) InfoBadge(text = stringResource(R.string.subtasks_done_count, item.subtaskDone, item.subtaskTotal))
-                    if (item.recurrenceLabel != null) InfoBadge(text = item.recurrenceLabel)
+                    job.recurrenceDays?.let { InfoBadge(text = recurrenceLabel(it, job.repeatWeekdays)) }
                     if (item.scheduledDate != null) {
                         InfoBadge(text = stringResource(R.string.badge_scheduled, formatScheduledDateTime(item.scheduledDate)))
                     }
@@ -611,9 +636,9 @@ private fun JobRow(
                         )
                     }
                 }
-                if (item.dueStatus != null) {
+                if (job.recurrenceDays != null) {
                     Text(
-                        item.dueStatus,
+                        dueStatusLabel(job.nextDueAt),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

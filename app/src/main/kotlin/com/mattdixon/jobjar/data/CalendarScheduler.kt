@@ -7,6 +7,8 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.provider.CalendarContract
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.util.TimeZone
 
 /**
@@ -16,51 +18,90 @@ import java.util.TimeZone
  * cloud automatically, but this app never needs a sign-in flow, an API key, or a network call to
  * make that happen. The tradeoff, by design: this is one-directional. Job Jar writes events; it
  * never reads calendar-side changes back.
+ *
+ * Every provider call is a blocking disk/IPC call, so all of it runs on [Dispatchers.IO]. Every
+ * event this app writes is tagged with its package and a per-job URI ([jobUri]), and an existing
+ * event is only ever changed or deleted once that tag proves it's ours (see [CalendarGateway]).
+ * Events written before tagging existed are recognised by still matching the job's exact title
+ * and start time, and get tagged the next time they're updated.
  */
-class CalendarScheduler(private val context: Context) {
+class CalendarScheduler(private val context: Context) : CalendarGateway {
+
+    private val resolver get() = context.contentResolver
 
     fun hasPermission(): Boolean =
         ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_CALENDAR) == PackageManager.PERMISSION_GRANTED &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED
 
-    /**
-     * Inserts one event on the device's primary (or first writable) calendar. Returns its event
-     * id - callers store this on the [Job] so a later reschedule/unschedule touches this exact
-     * event instead of leaving orphaned duplicates - or null if permission isn't granted or the
-     * device has no writable calendar to insert into.
-     */
-    fun insertEvent(title: String, startMillis: Long, endMillis: Long): Long? {
-        if (!hasPermission()) return null
-        val calendarId = findWritableCalendarId() ?: return null
+    override suspend fun insertEvent(job: Job, startMillis: Long, endMillis: Long): Long? = withContext(Dispatchers.IO) {
+        if (!hasPermission()) return@withContext null
+        val calendarId = findWritableCalendarId() ?: return@withContext null
         val values = ContentValues().apply {
             put(CalendarContract.Events.CALENDAR_ID, calendarId)
-            put(CalendarContract.Events.TITLE, title)
+            put(CalendarContract.Events.TITLE, job.title)
             put(CalendarContract.Events.DTSTART, startMillis)
             put(CalendarContract.Events.DTEND, endMillis)
             put(CalendarContract.Events.EVENT_TIMEZONE, TimeZone.getDefault().id)
         }
-        val uri = context.contentResolver.insert(CalendarContract.Events.CONTENT_URI, values) ?: return null
-        return ContentUris.parseId(uri)
+        // Some calendar providers reject the custom-app columns; an untagged event is still far
+        // better than no event, and is recognised later by its title and start time instead.
+        val uri = runCatching { resolver.insert(CalendarContract.Events.CONTENT_URI, values.tagged(job)) }.getOrNull()
+            ?: runCatching { resolver.insert(CalendarContract.Events.CONTENT_URI, values) }.getOrNull()
+        uri?.let { ContentUris.parseId(it) }
     }
 
-    /** Updates an existing event's time/title in place. Returns false (rather than throwing) if
-     * the event no longer exists - e.g. the user deleted it from Google Calendar directly -
-     * so the caller can fall back to inserting a fresh one instead. */
-    fun updateEvent(eventId: Long, title: String, startMillis: Long, endMillis: Long): Boolean {
-        if (!hasPermission()) return false
-        val values = ContentValues().apply {
-            put(CalendarContract.Events.TITLE, title)
-            put(CalendarContract.Events.DTSTART, startMillis)
-            put(CalendarContract.Events.DTEND, endMillis)
+    override suspend fun updateEvent(eventId: Long, owner: Job, title: String, startMillis: Long, endMillis: Long): Boolean =
+        withContext(Dispatchers.IO) {
+            if (!hasPermission() || !isOurs(eventId, owner)) return@withContext false
+            val uri = ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, eventId)
+            val values = ContentValues().apply {
+                put(CalendarContract.Events.TITLE, title)
+                put(CalendarContract.Events.DTSTART, startMillis)
+                put(CalendarContract.Events.DTEND, endMillis)
+            }
+            val updated = runCatching { resolver.update(uri, values.tagged(owner), null, null) }.getOrNull()
+                ?: runCatching { resolver.update(uri, values, null, null) }.getOrNull()
+            (updated ?: 0) > 0
         }
+
+    override suspend fun deleteEvent(eventId: Long, owner: Job): Boolean = withContext(Dispatchers.IO) {
+        if (!hasPermission() || !isOurs(eventId, owner)) return@withContext false
         val uri = ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, eventId)
-        return context.contentResolver.update(uri, values, null, null) > 0
+        (runCatching { resolver.delete(uri, null, null) }.getOrNull() ?: 0) > 0
     }
 
-    fun deleteEvent(eventId: Long): Boolean {
-        if (!hasPermission()) return false
+    override suspend fun ownsEvent(eventId: Long, owner: Job): Boolean = withContext(Dispatchers.IO) {
+        hasPermission() && isOurs(eventId, owner)
+    }
+
+    private fun ContentValues.tagged(job: Job) = ContentValues(this).apply {
+        put(CalendarContract.Events.CUSTOM_APP_PACKAGE, context.packageName)
+        put(CalendarContract.Events.CUSTOM_APP_URI, jobUri(job.id))
+    }
+
+    private fun isOurs(eventId: Long, owner: Job): Boolean {
+        val projection = arrayOf(
+            CalendarContract.Events.TITLE,
+            CalendarContract.Events.DTSTART,
+            CalendarContract.Events.CUSTOM_APP_PACKAGE,
+            CalendarContract.Events.CUSTOM_APP_URI,
+            CalendarContract.Events.DELETED
+        )
         val uri = ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, eventId)
-        return context.contentResolver.delete(uri, null, null) > 0
+        val cursor = runCatching { resolver.query(uri, projection, null, null, null) }.getOrNull() ?: return false
+        cursor.use {
+            if (!it.moveToFirst()) return false
+            if (it.getInt(4) != 0) return false
+            val pkg = it.getString(2)
+            val appUri = it.getString(3)
+            if (pkg != null || appUri != null) {
+                return pkg == context.packageName && appUri == jobUri(owner.id)
+            }
+            // Untagged - either one of the user's own events that happens to share this id
+            // (e.g. after a restore onto a new phone) or one this app wrote before tagging
+            // existed. Only the latter still looks exactly like what was written.
+            return it.getString(0) == owner.title && !it.isNull(1) && it.getLong(1) == owner.scheduledDate
+        }
     }
 
     /**
@@ -76,20 +117,27 @@ class CalendarScheduler(private val context: Context) {
             CalendarContract.Calendars.IS_PRIMARY,
             CalendarContract.Calendars.CALENDAR_ACCESS_LEVEL
         )
-        context.contentResolver.query(CalendarContract.Calendars.CONTENT_URI, projection, null, null, null)?.use { cursor ->
-            val idIndex = cursor.getColumnIndexOrThrow(CalendarContract.Calendars._ID)
-            val primaryIndex = cursor.getColumnIndex(CalendarContract.Calendars.IS_PRIMARY)
-            val accessIndex = cursor.getColumnIndexOrThrow(CalendarContract.Calendars.CALENDAR_ACCESS_LEVEL)
+        val cursor = runCatching {
+            resolver.query(CalendarContract.Calendars.CONTENT_URI, projection, null, null, null)
+        }.getOrNull() ?: return null
+        cursor.use {
+            val idIndex = it.getColumnIndexOrThrow(CalendarContract.Calendars._ID)
+            val primaryIndex = it.getColumnIndex(CalendarContract.Calendars.IS_PRIMARY)
+            val accessIndex = it.getColumnIndexOrThrow(CalendarContract.Calendars.CALENDAR_ACCESS_LEVEL)
             var fallbackId: Long? = null
-            while (cursor.moveToNext()) {
-                if (cursor.getInt(accessIndex) < CalendarContract.Calendars.CAL_ACCESS_CONTRIBUTOR) continue
-                val id = cursor.getLong(idIndex)
-                val isPrimary = primaryIndex >= 0 && cursor.getInt(primaryIndex) != 0
+            while (it.moveToNext()) {
+                if (it.getInt(accessIndex) < CalendarContract.Calendars.CAL_ACCESS_CONTRIBUTOR) continue
+                val id = it.getLong(idIndex)
+                val isPrimary = primaryIndex >= 0 && it.getInt(primaryIndex) != 0
                 if (isPrimary) return id
                 if (fallbackId == null) fallbackId = id
             }
             return fallbackId
         }
-        return null
+    }
+
+    companion object {
+        /** Stored on every event this app writes, identifying the exact job it belongs to. */
+        fun jobUri(jobId: Long) = "jobjar://job/$jobId"
     }
 }

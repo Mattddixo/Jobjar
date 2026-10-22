@@ -3,13 +3,14 @@ package com.mattdixon.jobjar.ui.joblist
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import androidx.annotation.StringRes
+import com.mattdixon.jobjar.R
 import com.mattdixon.jobjar.data.Job
 import com.mattdixon.jobjar.data.JobRepository
+import com.mattdixon.jobjar.data.UndoSnapshot
 import com.mattdixon.jobjar.data.isPending
 import com.mattdixon.jobjar.data.isUnblocked
 import com.mattdixon.jobjar.data.remainingMinutes
-import com.mattdixon.jobjar.util.formatDueStatus
-import com.mattdixon.jobjar.util.formatRecurrenceInterval
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -17,12 +18,12 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-enum class SortOrder(val label: String) {
-    TIME_ASC("Shortest first"),
-    TIME_DESC("Longest first"),
-    PRIORITY("Priority"),
-    NEWEST("Newest"),
-    CATEGORY("Category")
+enum class SortOrder(@StringRes val labelRes: Int) {
+    TIME_ASC(R.string.sort_shortest_first),
+    TIME_DESC(R.string.sort_longest_first),
+    PRIORITY(R.string.sort_priority),
+    NEWEST(R.string.sort_newest),
+    CATEGORY(R.string.sort_category)
 }
 
 /** Which of the three top-level views the Jobs list is showing - replaces a plain
@@ -49,10 +50,6 @@ data class JobListItem(
     val subtaskDone: Int = 0,
     val subtaskTotal: Int = 0,
     val waitingOnTitle: String? = null,
-    /** "Weekly" etc, or null if this job doesn't repeat. */
-    val recurrenceLabel: String? = null,
-    /** "Due now" / "Next: in 3 days", or null if this job doesn't repeat. */
-    val dueStatus: String? = null,
     val scheduledDate: Long? = null
 )
 
@@ -69,7 +66,9 @@ data class JobListUiState(
     val sortOrder: SortOrder = SortOrder.NEWEST,
     val searchQuery: String = "",
     /** Parent job IDs whose subtask group is currently expanded. Collapsed (not present) by default. */
-    val expandedParentIds: Set<Long> = emptySet()
+    val expandedParentIds: Set<Long> = emptySet(),
+    /** False only until the first load from the database - so the empty-list message doesn't flash on launch. */
+    val isLoaded: Boolean = false
 ) {
     /** Whether any *narrowing* filter (as opposed to the Active/Completed/Scheduled view or sort) is on - drives the "Clear" chip. */
     val hasActiveFilters: Boolean get() = selectedCategories.isNotEmpty() || showRepeatingOnly || showInProgressOnly
@@ -148,8 +147,6 @@ class JobListViewModel(private val repository: JobRepository) : ViewModel() {
                     displayMinutes = if (subtasks.isEmpty()) job.estimatedMinutes else job.remainingMinutes(subtasks),
                     subtaskDone = subtasks.count { it.isDone },
                     subtaskTotal = subtasks.size,
-                    recurrenceLabel = job.recurrenceDays?.let { formatRecurrenceInterval(it) },
-                    dueStatus = job.recurrenceDays?.let { formatDueStatus(job.nextDueAt) },
                     scheduledDate = job.scheduledDate
                 )
             } else {
@@ -244,7 +241,8 @@ class JobListViewModel(private val repository: JobRepository) : ViewModel() {
             showInProgressOnly = currentFilters.inProgressOnly,
             sortOrder = currentFilters.sort,
             searchQuery = currentFilters.searchQuery,
-            expandedParentIds = expanded
+            expandedParentIds = expanded,
+            isLoaded = true
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), JobListUiState())
 
@@ -267,25 +265,30 @@ class JobListViewModel(private val repository: JobRepository) : ViewModel() {
         }
     }
 
-    fun toggleDone(job: Job) {
-        viewModelScope.launch { repository.toggleDone(job) }
+    /** [onCompleted] gets the undo snapshot when this *completed* the job (not when it reopened one). */
+    fun toggleDone(job: Job, onCompleted: (UndoSnapshot) -> Unit) {
+        val completing = job.isPending()
+        viewModelScope.launch {
+            val snapshot = repository.toggleDone(job.id)
+            if (snapshot != null && completing) onCompleted(snapshot)
+        }
     }
 
     /** Starts or reverts a job's in-progress flag - the same toggle backs both the "Start" and "Move back to jar" row menu items, since only one is ever shown for a given job at a time. */
     fun toggleInProgress(job: Job) {
-        viewModelScope.launch { repository.toggleInProgress(job) }
+        viewModelScope.launch { repository.toggleInProgress(job.id) }
     }
 
-    fun deleteJob(job: Job) {
-        viewModelScope.launch { repository.deleteJob(job) }
+    fun deleteJob(job: Job, onDeleted: (UndoSnapshot) -> Unit) {
+        viewModelScope.launch { repository.deleteJob(job.id)?.let(onDeleted) }
     }
 
     fun scheduleJob(job: Job, dateTimeMillis: Long) {
-        viewModelScope.launch { repository.scheduleJob(job, dateTimeMillis) }
+        viewModelScope.launch { repository.scheduleJob(job.id, dateTimeMillis) }
     }
 
     fun unscheduleJob(job: Job) {
-        viewModelScope.launch { repository.unscheduleJob(job) }
+        viewModelScope.launch { repository.unscheduleJob(job.id) }
     }
 
     /** Drops [category] from the active filter selection too, if it was one of the ones

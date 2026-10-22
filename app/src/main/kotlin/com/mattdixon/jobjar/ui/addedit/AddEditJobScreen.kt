@@ -1,6 +1,8 @@
 package com.mattdixon.jobjar.ui.addedit
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -37,7 +39,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mattdixon.jobjar.R
@@ -45,12 +49,15 @@ import com.mattdixon.jobjar.data.JobRepository
 import com.mattdixon.jobjar.data.LONG_JOB_MINUTES
 import com.mattdixon.jobjar.data.Priority
 import com.mattdixon.jobjar.data.subtasksAvailableAsDependency
+import com.mattdixon.jobjar.data.weekdayBit
 import com.mattdixon.jobjar.ui.components.AllocationSummary
 import com.mattdixon.jobjar.ui.components.SubtasksSection
+import com.mattdixon.jobjar.ui.components.recurrenceLabel
 import com.mattdixon.jobjar.ui.theme.Spacing
 import com.mattdixon.jobjar.util.formatMinutes
-import com.mattdixon.jobjar.util.formatRecurrenceInterval
 import kotlinx.coroutines.flow.flowOf
+import java.time.DayOfWeek
+import java.time.format.TextStyle
 
 private val QUICK_DURATIONS = listOf(5, 15, 30, 45, 60, 90, 120, 180)
 private val RECURRENCE_PRESETS = listOf(1, 7, 14, 30)
@@ -318,26 +325,59 @@ fun AddEditJobScreen(
                     }
                     val recurrenceDays = state.recurrenceDays
                     if (recurrenceDays != null) {
-                        Text(formatRecurrenceInterval(recurrenceDays), style = MaterialTheme.typography.headlineSmall)
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(Spacing.md)) {
-                            items(RECURRENCE_PRESETS) { days ->
-                                FilterChip(
-                                    selected = recurrenceDays == days,
-                                    onClick = { viewModel.setRecurrenceDays(days) },
-                                    label = { Text(formatRecurrenceInterval(days)) }
-                                )
-                            }
-                        }
-                        OutlinedTextField(
-                            value = if (recurrenceDays == 0) "" else recurrenceDays.toString(),
-                            onValueChange = { text ->
-                                val value = text.filter { it.isDigit() }.toIntOrNull() ?: 0
-                                viewModel.setRecurrenceDays(value)
-                            },
-                            label = { Text(stringResource(R.string.field_custom_recurrence)) },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true
+                        Text(
+                            recurrenceLabel(recurrenceDays, state.repeatWeekdays.takeIf { state.repeatsOnWeekdays }),
+                            style = MaterialTheme.typography.headlineSmall
                         )
+                        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                            SegmentedButton(
+                                selected = !state.repeatsOnWeekdays,
+                                onClick = { viewModel.setRepeatOnWeekdays(false) },
+                                shape = SegmentedButtonDefaults.itemShape(0, 2)
+                            ) { Text(stringResource(R.string.repeat_mode_interval)) }
+                            SegmentedButton(
+                                selected = state.repeatsOnWeekdays,
+                                onClick = { viewModel.setRepeatOnWeekdays(true) },
+                                shape = SegmentedButtonDefaults.itemShape(1, 2)
+                            ) { Text(stringResource(R.string.repeat_mode_weekdays)) }
+                        }
+                        if (state.repeatsOnWeekdays) {
+                            WeekdayPicker(
+                                mask = state.repeatWeekdays ?: 0,
+                                onToggle = viewModel::toggleWeekday
+                            )
+                            Text(
+                                stringResource(R.string.repeat_weekdays_explainer),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else {
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(Spacing.md)) {
+                                items(RECURRENCE_PRESETS) { days ->
+                                    FilterChip(
+                                        selected = recurrenceDays == days,
+                                        onClick = { viewModel.setRecurrenceDays(days) },
+                                        label = { Text(recurrenceLabel(days)) }
+                                    )
+                                }
+                            }
+                            OutlinedTextField(
+                                value = if (recurrenceDays == 0) "" else recurrenceDays.toString(),
+                                onValueChange = { text ->
+                                    val value = text.filter { it.isDigit() }.take(3).toIntOrNull() ?: 0
+                                    viewModel.setRecurrenceDays(value)
+                                },
+                                label = { Text(stringResource(R.string.field_custom_recurrence)) },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true
+                            )
+                            Text(
+                                stringResource(R.string.repeat_interval_explainer),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     } else {
                         Text(
                             stringResource(if (hasSubtasks) R.string.repeat_blocked_by_subtasks else R.string.repeat_explainer),
@@ -384,6 +424,25 @@ fun AddEditJobScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+/** One chip per day of the week, Monday first; any combination can be on. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun WeekdayPicker(mask: Int, onToggle: (DayOfWeek) -> Unit) {
+    val locale = LocalConfiguration.current.locales[0]
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+        verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+    ) {
+        DayOfWeek.entries.forEach { day ->
+            FilterChip(
+                selected = mask and weekdayBit(day) != 0,
+                onClick = { onToggle(day) },
+                label = { Text(day.getDisplayName(TextStyle.SHORT, locale)) }
+            )
         }
     }
 }

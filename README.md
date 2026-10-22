@@ -203,20 +203,30 @@ left waiting on a subtask that no longer exists.
 ### Repeating jobs
 
 Any top-level job without subtasks can repeat, set from the same job form
-via a **Repeat** switch and an interval — Daily/Weekly/Biweekly/Monthly
-presets, or a custom "every N days." Completing one doesn't leave it done
+via a **Repeat** switch and one of two kinds of schedule:
+
+- **Every few days** — Daily/Weekly/Biweekly/Monthly presets, or a custom
+  "every N days", counted from when you actually finish it.
+- **Specific days** — any combination of weekdays ("Mon, Thu", "Weekdays",
+  "Every Sunday"). It comes back at the start of each chosen day, however
+  late you finished the last one (`Job.repeatWeekdays`, a weekday bitmask;
+  see `data/Recurrence.kt`). A new one created on a non-matching day waits
+  for its first day rather than landing in the jar straight away.
+
+Completing one doesn't leave it done
 for good: it silently reopens once the interval passes, so it comes back
 into the jar with no reminder, notification, or confirmation needed (there's
 no notification system in this app at all - "silent" is just what a repeating
 job does by construction).
 
-The schedule is **relative to when you actually complete it**, not a fixed
-calendar date - completing a weekly job late just shifts the next one later
-too, rather than tracking a strict "always Monday" pattern or trying to
-catch you up on missed occurrences. Concretely: a repeating `Job` never
-persists `isDone = true`. Completing it (`JobRepository.cycleRepeatingJob`)
-instead bumps `completionCount`, stamps `completedAt`, and sets `nextDueAt`
-to that moment plus the interval. `Job.isPending()` - not `isDone` - is
+An "every few days" schedule is **relative to when you actually complete
+it** - completing a weekly job late just shifts the next one later too,
+rather than trying to catch you up on missed occurrences. It's computed in
+local calendar days, so a daily 9am chore stays at 9am across clock changes.
+Concretely: a repeating `Job` never persists `isDone = true`. Completing it
+(`JobRepository.cycleRepeatingJob`) instead bumps `completionCount`, stamps
+`completedAt`, and sets `nextDueAt` from the schedule
+(`nextDueAfterCompletion`). `Job.isPending()` - not `isDone` - is
 what decides whether a repeating job is "active" everywhere in the app: the
 Jar's draw pool, and the Jobs tab's Active/Completed split. So completing a
 repeating job makes it disappear from Active the same way a normal job
@@ -331,10 +341,8 @@ Standard modern-Android stack, no unnecessary abstraction:
   drawn job's card on the Jar tab. Dark mode is a soft blue-grey charcoal
   rather than near-black, with surfaces stepping visibly lighter. Light and dark
   themes are both fully designed (not just a dark-mode auto-invert), and
-  the top-right toggle on each tab (labelled with whichever mode tapping
-  it would switch *to*) lets you override the system setting directly;
-  that choice is persisted (`data/ThemePreferences.kt`, one SharedPreferences
-  boolean) so it survives relaunching the app. Every screen pulls from
+  Settings (the gear on each tab) offers System / Light / Dark, persisted in
+  `data/ThemePreferences.kt` so it survives relaunching the app. Every screen pulls from
   `MaterialTheme.colorScheme` roles rather than hardcoded colors, so
   retuning the palette in one place reaches the whole app. Typography
   (`ui/theme/Type.kt`) gives every used Material3 role a deliberate value
@@ -345,9 +353,10 @@ Standard modern-Android stack, no unnecessary abstraction:
   not hunting through seven. All user-facing text lives in
   `res/values/strings.xml` rather than inline Kotlin string literals, the
   normal Android convention for a single source of truth and an actual
-  localization path (enum-attached labels like `DrawBatchSize.label` are
-  a known, deliberate exception - localizing those needs a composable
-  accessor, not just moving the string, and was left out of this pass).
+  localization path. Counts use `<plurals>` ("1 subtask" / "3 subtasks"),
+  and weekday names come from the device locale. Remaining exceptions:
+  durations (`util/DurationFormat.kt`, "1h 30m") and the "1"-"4"/"All"
+  batch sizes.
 - **Room** for local persistence (one `jobs` table). All reads are exposed
   as `Flow`, so UI state recomposes automatically as data changes.
 - **MVVM**: one `ViewModel` per screen (`DrawViewModel`, `JobListViewModel`,
@@ -357,7 +366,12 @@ Standard modern-Android stack, no unnecessary abstraction:
   app has a single dependency (`JobRepository`) to thread through.
 - **Navigation Compose** for a bottom-nav shell (`Jar` / `Jobs` / `Stats`)
   plus pushed routes for add/edit and job detail.
-- **`JobRepository`** is the single seam between UI and Room — it also
+- **`JobRepository`** is the single seam between UI and Room. Every write
+  re-reads the rows it changes instead of trusting a screen's copy, runs
+  all of its database changes in one transaction (`TransactionRunner`), and
+  makes calendar changes only after that commits. Undoable actions (complete,
+  delete) return an `UndoSnapshot` of exactly the rows they touched, which
+  `undo()` puts back - see `ui/UndoController.kt` for the snackbar. It also
   contains the non-trivial logic: `drawJob()` loads the full job table into
   memory, computes each top-level job's remaining minutes against its
   subtasks, filters to what's eligible for the requested time/category/
@@ -367,26 +381,34 @@ Standard modern-Android stack, no unnecessary abstraction:
   jar, not a shared backend) makes doing it in Kotlin both simpler and
   plenty fast. Completion logic (auto-completing a parent once all its
   subtasks are done, cascading deletes from parent to subtasks) lives here
-  too, rather than spread across ViewModels. It's also the only class that
-  needs a platform `Context` (the Application context, passed once from
-  `JobJarApplication`) — solely to own a `CalendarScheduler` internally, so
-  every call site can schedule/unschedule a job through a plain
-  `repository.scheduleJob(...)` call without needing its own Context-aware
-  calendar plumbing (see Scheduling above).
+  too, rather than spread across ViewModels. It has no Android
+  dependencies of its own - the calendar sits behind `CalendarGateway` and
+  transactions behind `TransactionRunner` - so all of its rules are unit
+  tested on the JVM (`app/src/test`).
+- **Calendar safety**: `CalendarScheduler` tags every event it writes with
+  the app's package and a per-job URI, and only ever changes or deletes an
+  event once that tag proves it belongs to that job. Calendar event ids are
+  per-device row numbers, so after a backup is restored onto a new phone a
+  stored id can point at one of the user's own events - this is what stops
+  completing a job from deleting it. All provider calls run off the main
+  thread.
 
 ```
 app/src/main/kotlin/com/mattdixon/jobjar/
-├── data/              Job entity, DAO, Room database, Converters, JobRepository, CalendarScheduler
-├── util/               Duration + recurrence + scheduled-date formatting
+├── data/              Job entity, DAO, Room database + migrations, JobRepository, Recurrence,
+│                      CalendarScheduler, JobExport (backup file format), preferences
+├── util/               Duration + scheduled-date formatting
 └── ui/
     ├── theme/          Material 3 color/type/theme
-    ├── components/     Shared badges (duration / category), SubtasksSection, SchedulePickerDialog
+    ├── components/     Shared badges, repeat labels, SubtasksSection, SchedulePickerDialog
     ├── draw/            The Jar tab: time budget → random draw → act on it
     ├── joblist/         Full job list: filter, sort, complete, delete
     ├── addedit/          Add/edit form
     ├── jobdetail/        Single job view
-    └── stats/            Completion + time-invested stats
+    ├── stats/            Completion + time-invested stats
+    ├── settings/         Theme, export/import, about
     JobJarApp.kt          Nav host + bottom navigation
+    UndoController.kt     App-wide "Undo" snackbar for complete/delete
 ```
 
 ## Data model
@@ -406,6 +428,7 @@ data class Job(
     val timesDrawn: Int = 0,                     // how often it's come up in the jar
     val parentId: Long? = null,                  // null = top-level job; set = subtask, one level deep
     val recurrenceDays: Int? = null,             // null = one-off; set = repeats every N days
+    val repeatWeekdays: Int? = null,             // set = repeats on these weekdays instead (bitmask, Monday = bit 0)
     val nextDueAt: Long? = null,                 // repeating only: null/past = due now
     val completionCount: Int = 0,                // repeating only: how many cycles completed
     val dependsOnSubtaskId: Long? = null,        // subtask only: sibling subtask that must be done first
@@ -422,27 +445,45 @@ a parent's `estimatedMinutes` can never be less than what its subtasks add
 up to (it grows to match, never auto-shrinks) — see the Subtasks section
 above for why.
 
+## Your data
+
+Everything lives on the phone; the app has no internet permission.
+**Settings → Export jobs** writes a JSON file (`data/JobExport.kt`) you can
+keep anywhere, and **Import jobs** replaces the current jobs with one -
+after showing how many jobs it contains and asking first. Imports are
+checked against the app's rules (no subtasks under repeating jobs, no
+nested subtasks, dependencies only between siblings) before anything is
+written. Completing or deleting a job shows an **Undo** snackbar.
+
 ## Building
 
-Requires the Android SDK (compileSdk 34, minSdk 26) and JDK 17+. Open this
-folder in Android Studio (Koala or newer), let it sync, and run the `app`
+Requires the Android SDK (compileSdk 35, minSdk 26) and JDK 17+. Open this
+folder in Android Studio (Ladybug or newer), let it sync, and run the `app`
 configuration — or from the command line:
 
 ```bash
 ./gradlew assembleDebug
 ```
 
-The Gradle wrapper is checked in. This project was authored and structurally
-validated (XML, version catalog, Kotlin file structure) in an environment
-without network access to Google's Maven repository, so a full
-`./gradlew build` has not been run here — do that as the first step after
-cloning to confirm dependency resolution in your own environment.
+Tests:
+
+```bash
+./gradlew testDebugUnitTest          # repository rules, recurrence, export format (JVM, fast)
+./gradlew connectedDebugAndroidTest  # database migrations, on a device or emulator
+```
+
+GitHub Actions (`.github/workflows/android.yml`) runs the unit tests, lint,
+and debug + release builds on every push, and the migration tests on an
+emulator. Room writes each database version's schema to `app/schemas/`
+during the build - commit those files; they're the reference future
+migrations are checked against.
+
+Releasing (signing, versioning, Play Console checklist) is covered in
+[`docs/RELEASE.md`](docs/RELEASE.md); the privacy policy to host is
+[`docs/PRIVACY.md`](docs/PRIVACY.md).
 
 ## Possible next steps
 
-- Daily/weekly reminder notifications ("you have 20 minutes — draw a job?")
-  via WorkManager.
 - A home-screen widget that surfaces one drawn job.
-- Undo snackbar on delete/complete instead of an immediate action.
-- Search within the job list.
-- Export/import jobs (JSON) for backup or sharing a jar between devices.
+- A completion history per repeating job.
+- Tablet and landscape layouts.

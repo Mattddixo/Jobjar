@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -29,6 +30,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -44,6 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.mattdixon.jobjar.R
+import com.mattdixon.jobjar.data.Job
 import com.mattdixon.jobjar.data.JobRepository
 import com.mattdixon.jobjar.data.isPending
 import com.mattdixon.jobjar.data.remainingMinutes
@@ -54,11 +58,17 @@ import com.mattdixon.jobjar.ui.components.SubtasksSection
 import com.mattdixon.jobjar.ui.components.TimeBucketBadge
 import com.mattdixon.jobjar.ui.theme.AppShapes
 import com.mattdixon.jobjar.ui.theme.Spacing
-import com.mattdixon.jobjar.util.formatDueStatus
 import com.mattdixon.jobjar.util.formatMinutes
-import com.mattdixon.jobjar.util.formatRecurrenceInterval
+import com.mattdixon.jobjar.ui.LocalUndoController
+import com.mattdixon.jobjar.ui.UndoEvent
+import com.mattdixon.jobjar.ui.UndoKind
+import com.mattdixon.jobjar.ui.UndoSnackbarEffect
+import com.mattdixon.jobjar.ui.components.dueStatusLabel
+import com.mattdixon.jobjar.ui.components.plural
+import com.mattdixon.jobjar.ui.components.recurrenceLabel
 import com.mattdixon.jobjar.util.formatScheduledDateTime
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -73,13 +83,26 @@ fun JobDetailScreen(
 ) {
     // remember()'d so recompositions (e.g. toggling a dialog) reuse the same Flow instance
     // instead of Room starting a brand-new query/subscription on every recomposition.
-    val jobFlow = remember(repository, jobId) { repository.jobById(jobId) }
-    val job by jobFlow.collectAsState(initial = null)
+    // Wrapped so "still loading" (null) is distinguishable from "loaded, and gone" (Loaded(null)) -
+    // otherwise "Job not found" flashes for a moment every time a job is opened.
+    val jobFlow = remember(repository, jobId) { repository.jobById(jobId).map { Loaded(it) } }
+    val loadedJob by jobFlow.collectAsState(initial = null)
+    val job = loadedJob?.value
 
     val subtasksFlow = remember(repository, jobId) { repository.subtasksOf(jobId) }
     val subtasks by subtasksFlow.collectAsState(initial = emptyList())
 
     val scope = rememberCoroutineScope()
+    val undo = LocalUndoController.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    UndoSnackbarEffect(snackbarHostState)
+    fun toggleDone(target: Job) {
+        val completing = target.isPending()
+        scope.launch {
+            val snapshot = repository.toggleDone(target.id)
+            if (snapshot != null && completing) undo.offer(UndoEvent(UndoKind.COMPLETED, target.title, snapshot))
+        }
+    }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showForceCompleteDialog by remember { mutableStateOf(false) }
     var showSchedulePicker by remember { mutableStateOf(false) }
@@ -98,6 +121,7 @@ fun JobDetailScreen(
     val siblings by siblingsFlow.collectAsState(initial = emptyList())
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.jobdetail_title)) },
@@ -117,7 +141,9 @@ fun JobDetailScreen(
             )
         }
     ) { padding ->
-        if (currentJob == null) {
+        if (loadedJob == null) {
+            Spacer(Modifier.padding(padding).fillMaxSize())
+        } else if (currentJob == null) {
             Column(
                 modifier = Modifier
                     .padding(padding)
@@ -162,7 +188,7 @@ fun JobDetailScreen(
                     if (currentJob.isInProgress) InfoBadge(text = stringResource(R.string.badge_in_progress))
                     TimeBucketBadge(minutes = displayMinutes)
                     if (currentJob.category.isNotBlank()) CategoryBadge(category = currentJob.category)
-                    currentJob.recurrenceDays?.let { InfoBadge(text = formatRecurrenceInterval(it)) }
+                    currentJob.recurrenceDays?.let { InfoBadge(text = recurrenceLabel(it, currentJob.repeatWeekdays)) }
                 }
 
                 if (subtasks.isNotEmpty()) {
@@ -175,9 +201,9 @@ fun JobDetailScreen(
 
                 if (currentJob.recurrenceDays != null) {
                     Text(
-                        formatDueStatus(currentJob.nextDueAt) +
+                        dueStatusLabel(currentJob.nextDueAt) +
                             if (currentJob.completionCount > 0) {
-                                stringResource(R.string.completed_n_times, currentJob.completionCount)
+                                plural(R.plurals.completed_n_times, currentJob.completionCount, currentJob.completionCount)
                             } else {
                                 ""
                             },
@@ -245,7 +271,7 @@ fun JobDetailScreen(
                             horizontalArrangement = Arrangement.spacedBy(Spacing.md)
                         ) {
                             OutlinedButton(
-                                onClick = { scope.launch { repository.toggleInProgress(currentJob) } },
+                                onClick = { scope.launch { repository.toggleInProgress(currentJob.id) } },
                                 shape = AppShapes.control,
                                 modifier = Modifier.weight(1f)
                             ) {
@@ -258,7 +284,7 @@ fun JobDetailScreen(
                             OutlinedButton(
                                 onClick = {
                                     if (currentJob.scheduledDate != null) {
-                                        scope.launch { repository.unscheduleJob(currentJob) }
+                                        scope.launch { repository.unscheduleJob(currentJob.id) }
                                     } else {
                                         showSchedulePicker = true
                                     }
@@ -275,7 +301,7 @@ fun JobDetailScreen(
                         }
                     } else {
                         OutlinedButton(
-                            onClick = { scope.launch { repository.toggleInProgress(currentJob) } },
+                            onClick = { scope.launch { repository.toggleInProgress(currentJob.id) } },
                             shape = AppShapes.control,
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -293,7 +319,7 @@ fun JobDetailScreen(
                         if (currentJob.isPending() && incompleteSubtaskCount > 0) {
                             showForceCompleteDialog = true
                         } else {
-                            scope.launch { repository.toggleDone(currentJob) }
+                            toggleDone(currentJob)
                         }
                     },
                     modifier = Modifier.fillMaxWidth()
@@ -327,7 +353,7 @@ fun JobDetailScreen(
                     text = {
                         Text(
                             if (subtasks.isNotEmpty()) {
-                                stringResource(R.string.dialog_delete_job_with_subtasks, currentJob.title, subtasks.size)
+                                plural(R.plurals.dialog_delete_job_with_subtasks, subtasks.size, currentJob.title, subtasks.size)
                             } else {
                                 stringResource(R.string.dialog_delete_job_plain, currentJob.title)
                             }
@@ -335,11 +361,17 @@ fun JobDetailScreen(
                     },
                     confirmButton = {
                         TextButton(onClick = {
-                            scope.launch {
-                                repository.deleteJob(currentJob)
-                                showDeleteDialog = false
-                                onBack()
+                            val id = currentJob.id
+                            val title = currentJob.title
+                            // Runs app-wide: this screen closes straight away, which would
+                            // otherwise cancel the delete halfway. The Jobs list offers the undo.
+                            undo.launchInApp {
+                                repository.deleteJob(id)?.let { snapshot ->
+                                    undo.offer(UndoEvent(UndoKind.DELETED, title, snapshot, showOnListOnly = true))
+                                }
                             }
+                            showDeleteDialog = false
+                            onBack()
                         }) { Text(stringResource(R.string.action_delete)) }
                     },
                     dismissButton = {
@@ -352,10 +384,10 @@ fun JobDetailScreen(
                 AlertDialog(
                     onDismissRequest = { showForceCompleteDialog = false },
                     title = { Text(stringResource(R.string.dialog_mark_as_done_title)) },
-                    text = { Text(stringResource(R.string.dialog_force_complete_body, incompleteSubtaskCount)) },
+                    text = { Text(plural(R.plurals.dialog_force_complete_body, incompleteSubtaskCount, incompleteSubtaskCount)) },
                     confirmButton = {
                         TextButton(onClick = {
-                            scope.launch { repository.toggleDone(currentJob) }
+                            toggleDone(currentJob)
                             showForceCompleteDialog = false
                         }) { Text(stringResource(R.string.action_mark_done)) }
                     },
@@ -369,7 +401,7 @@ fun JobDetailScreen(
                 SchedulePickerDialog(
                     onDismiss = { showSchedulePicker = false },
                     onConfirm = { dateTimeMillis ->
-                        scope.launch { repository.scheduleJob(currentJob, dateTimeMillis) }
+                        scope.launch { repository.scheduleJob(currentJob.id, dateTimeMillis) }
                         showSchedulePicker = false
                     }
                 )
@@ -377,3 +409,6 @@ fun JobDetailScreen(
         }
     }
 }
+
+/** "Loaded, possibly empty" - see the job flow in [JobDetailScreen]. */
+private class Loaded<T>(val value: T)

@@ -1,6 +1,10 @@
 package com.mattdixon.jobjar.ui.components
 
 import android.Manifest
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -66,7 +70,21 @@ fun SchedulePickerDialog(
                 title = { Text(stringResource(R.string.dialog_calendar_permission_title)) },
                 text = { Text(stringResource(R.string.dialog_calendar_permission_body)) },
                 confirmButton = {
-                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_ok)) }
+                    // Once permission has been refused twice Android stops asking, so the
+                    // system's own settings page is the only way left to grant it.
+                    TextButton(onClick = {
+                        onDismiss()
+                        try {
+                            context.startActivity(
+                                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
+                            )
+                        } catch (e: ActivityNotFoundException) {
+                            // No settings screen to open - nothing more to do.
+                        }
+                    }) { Text(stringResource(R.string.action_open_settings)) }
+                },
+                dismissButton = {
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_not_now)) }
                 }
             )
         }

@@ -23,6 +23,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -41,7 +42,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -81,7 +82,8 @@ import com.mattdixon.jobjar.ui.theme.Spacing
 import com.mattdixon.jobjar.ui.theme.appCardBorder
 import com.mattdixon.jobjar.ui.theme.appCardColors
 import com.mattdixon.jobjar.util.formatMinutes
-import com.mattdixon.jobjar.util.formatRecurrenceInterval
+import com.mattdixon.jobjar.ui.components.plural
+import com.mattdixon.jobjar.ui.components.recurrenceLabel
 
 private val TIME_PRESETS = listOf(15, 30, 45, 60, 90, 120)
 
@@ -97,8 +99,7 @@ private const val JAR_FILL_CAP = 15
 fun DrawScreen(
     repository: JobRepository,
     onOpenJob: (Long) -> Unit,
-    darkTheme: Boolean,
-    onToggleTheme: () -> Unit
+    onOpenSettings: () -> Unit
 ) {
     val appContext = LocalContext.current.applicationContext
     val viewModel: DrawViewModel = viewModel(factory = DrawViewModel.Factory(repository, appContext))
@@ -115,8 +116,8 @@ fun DrawScreen(
                     }
                 },
                 actions = {
-                    TextButton(onClick = onToggleTheme) {
-                        Text(stringResource(if (darkTheme) R.string.theme_toggle_light else R.string.theme_toggle_dark))
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.cd_settings))
                     }
                 }
             )
@@ -138,7 +139,7 @@ fun DrawScreen(
                 .padding(horizontal = Spacing.xl, vertical = Spacing.lg),
             verticalArrangement = Arrangement.spacedBy(Spacing.lg)
         ) {
-            JarHero(pendingCount = state.pendingCount, inProgressCount = state.inProgressCount)
+            JarHero(pendingCount = state.pendingCount, inProgressCount = state.inProgressCount, isLoaded = state.isLoaded)
 
             PickerPanel(
                 state = state,
@@ -219,7 +220,7 @@ fun DrawScreen(
  * and only when it's actually nonzero so an idle jar doesn't show a "0 in progress" line.
  */
 @Composable
-private fun JarHero(pendingCount: Int, inProgressCount: Int, modifier: Modifier = Modifier) {
+private fun JarHero(pendingCount: Int, inProgressCount: Int, isLoaded: Boolean, modifier: Modifier = Modifier) {
     val fraction = (pendingCount.toFloat() / JAR_FILL_CAP).coerceIn(0f, 1f)
     Row(
         modifier = modifier.fillMaxWidth(),
@@ -230,13 +231,14 @@ private fun JarHero(pendingCount: Int, inProgressCount: Int, modifier: Modifier 
         Spacer(modifier = Modifier.width(Spacing.lg))
         Column {
             Text(
-                stringResource(R.string.draw_jar_count, pendingCount),
+                // Blank (not "0 in the jar") for the moment before the jar has loaded.
+                if (isLoaded) plural(R.plurals.draw_jar_count, pendingCount, pendingCount) else "",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold
             )
             if (inProgressCount > 0) {
                 Text(
-                    stringResource(R.string.draw_in_progress_count, inProgressCount),
+                    plural(R.plurals.draw_in_progress_count, inProgressCount, inProgressCount),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -540,8 +542,9 @@ private fun DrawnJobsBatch(
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
         if (showBudgetSummary) {
             Text(
-                stringResource(
-                    R.string.draw_budget_summary,
+                plural(
+                    R.plurals.draw_budget_summary,
+                    entries.size,
                     entries.size,
                     formatMinutes(remainingMinutes),
                     formatMinutes(availableMinutes)
@@ -630,7 +633,7 @@ private fun BatchJobCard(
             Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
                 TimeBucketBadge(minutes = context?.remainingMinutes ?: job.estimatedMinutes, compact = true)
                 if (job.category.isNotBlank()) CategoryBadge(category = job.category, compact = true)
-                job.recurrenceDays?.let { InfoBadge(text = formatRecurrenceInterval(it), compact = true) }
+                job.recurrenceDays?.let { InfoBadge(text = recurrenceLabel(it, job.repeatWeekdays), compact = true) }
             }
             if (context?.parentTitle != null) {
                 Text(

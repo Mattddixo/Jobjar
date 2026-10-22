@@ -5,10 +5,11 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import androidx.room.withTransaction
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [Job::class], version = 9, exportSchema = true)
+@Database(entities = [Job::class], version = 10, exportSchema = true)
 @TypeConverters(Converters::class)
 abstract class JobDatabase : RoomDatabase() {
 
@@ -114,16 +115,30 @@ abstract class JobDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) = migrateToStandalone(db)
         }
 
+        /** Adds fixed-weekday repeats ("every Monday and Thursday") - see [Job.repeatWeekdays]. */
+        val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE jobs ADD COLUMN repeatWeekdays INTEGER DEFAULT NULL")
+            }
+        }
+
+        /** Every migration, oldest first - shared with the migration test so the two can't drift. */
+        val ALL_MIGRATIONS = arrayOf(
+            MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
+            MIGRATION_6_9, MIGRATION_7_9, MIGRATION_8_9, MIGRATION_9_10
+        )
+
         fun getInstance(context: Context): JobDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
                     context.applicationContext,
                     JobDatabase::class.java,
                     "jobjar.db"
-                ).addMigrations(
-                    MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_9,
-                    MIGRATION_7_9, MIGRATION_8_9
-                ).build().also { INSTANCE = it }
+                ).addMigrations(*ALL_MIGRATIONS).build().also { INSTANCE = it }
             }
     }
+}
+
+class RoomTransactionRunner(private val db: RoomDatabase) : TransactionRunner {
+    override suspend fun <R> run(block: suspend () -> R): R = db.withTransaction(block)
 }

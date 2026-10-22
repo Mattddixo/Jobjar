@@ -17,7 +17,8 @@ const val LONG_JOB_MINUTES = 240
  * row just cycles rather than piling up a new "done" row per occurrence. [nextDueAt] is the
  * schedule: null means due right now (true for a fresh repeating job that's never been
  * completed yet, or a due one); once completed it's set to that moment plus [recurrenceDays]
- * days, i.e. the schedule is relative to when you actually did it, not a fixed calendar date.
+ * days, i.e. the schedule is relative to when you actually did it, not a fixed calendar date -
+ * unless [repeatWeekdays] pins it to specific days of the week instead.
  */
 @Entity(tableName = "jobs", indices = [Index("parentId")])
 data class Job(
@@ -42,6 +43,14 @@ data class Job(
     val timesDrawn: Int = 0,
     val parentId: Long? = null,
     val recurrenceDays: Int? = null,
+    /**
+     * Only meaningful when [recurrenceDays] is non-null. Null = the classic "every N days after
+     * I finish it" schedule. Non-null = a bitmask of weekdays (see [weekdayBit]; Monday is bit 0)
+     * the job comes due on instead - "every Monday and Thursday" - in which case [recurrenceDays]
+     * is just the nominal "this repeats" flag (7) and [nextDueAt] is the start of the next
+     * matching day. See [nextDueAfterCompletion].
+     */
+    val repeatWeekdays: Int? = null,
     val nextDueAt: Long? = null,
     val completionCount: Int = 0,
     /** Only meaningful when this is itself a subtask: the sibling subtask (same [parentId]) that must be done first, if any. */

@@ -1,5 +1,6 @@
 package com.mattdixon.jobjar.ui.components
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.provider.CalendarContract
 import androidx.compose.foundation.clickable
@@ -32,7 +33,13 @@ fun TodayDateButton() {
                 .appendPath("time")
                 .appendPath(System.currentTimeMillis().toString())
                 .build()
-            context.startActivity(Intent(Intent.ACTION_VIEW).setData(uri))
+            // Not every device has a calendar app that handles this link - in that case the
+            // label just stays a label rather than crashing the app.
+            try {
+                context.startActivity(Intent(Intent.ACTION_VIEW).setData(uri))
+            } catch (e: ActivityNotFoundException) {
+                // Nothing to open.
+            }
         }
     )
 }

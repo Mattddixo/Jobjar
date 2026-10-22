@@ -10,6 +10,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import com.mattdixon.jobjar.data.ThemeMode
 import com.mattdixon.jobjar.data.ThemePreferences
 import com.mattdixon.jobjar.ui.JobJarApp
 import com.mattdixon.jobjar.ui.theme.JobJarTheme
@@ -23,19 +24,20 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val context = LocalContext.current
-            val systemDark = isSystemInDarkTheme()
-            // Falls back to the system setting until the user explicitly taps the toggle, at
-            // which point the choice sticks (persisted via ThemePreferences) regardless of what
-            // the system does afterward.
-            var darkTheme by remember { mutableStateOf(ThemePreferences.isDarkTheme(context) ?: systemDark) }
+            var themeMode by remember { mutableStateOf(ThemePreferences.themeMode(context)) }
+            val darkTheme = when (themeMode) {
+                ThemeMode.SYSTEM -> isSystemInDarkTheme()
+                ThemeMode.LIGHT -> false
+                ThemeMode.DARK -> true
+            }
 
             JobJarTheme(darkTheme = darkTheme) {
                 JobJarApp(
                     repository = repository,
-                    darkTheme = darkTheme,
-                    onToggleTheme = {
-                        darkTheme = !darkTheme
-                        ThemePreferences.setDarkTheme(context, darkTheme)
+                    themeMode = themeMode,
+                    onThemeModeChange = { mode ->
+                        themeMode = mode
+                        ThemePreferences.setThemeMode(context, mode)
                     }
                 )
             }
