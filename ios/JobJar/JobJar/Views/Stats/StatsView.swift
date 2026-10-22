@@ -95,11 +95,9 @@ private func computeStats(allJobs: [Job]) -> StatsSummary {
     // A parent with subtasks is a container, not a unit of work itself - its subtasks already
     // account for that time, so counting the parent too would double up every minute they
     // cover. So: count completed jobs that represent real, granular effort - plain top-level
-    // jobs with no subtasks, and subtasks of a *non-repeating* parent. Subtasks of a
-    // *repeating* parent are excluded here even when currently done, because cycling resets
-    // them back to not-done on every cycle - crediting them individually would make stats
-    // swing backward each time that reset happens. Their work is credited once per cycle via
-    // the parent's own completionCount instead.
+    // jobs with no subtasks, and subtasks of a *non-repeating* parent. (Repeating jobs can't
+    // have subtasks; a repeating job's work is credited once per cycle via its own
+    // completionCount instead.)
     let oneOffCompleted = allJobs.filter { job in
         guard job.isDone else { return false }
         if let parentId = job.parentId {

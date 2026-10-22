@@ -37,6 +37,7 @@ final class DrawViewModel {
 
     /// Draws a random eligible job. Pass `excludeCurrent` = true to redraw without repeating
     /// the job on screen.
+    @MainActor
     func draw(repository: JobRepository, allJobs: [Job], excludeCurrent: Bool = false) {
         let excludeSet: Set<UUID>
         if excludeCurrent, let current = drawnJob {
@@ -82,9 +83,13 @@ final class DrawViewModel {
         noMatchFound = false
     }
 
-    func completeDrawnJob(repository: JobRepository, allJobs: [Job]) {
-        guard let job = drawnJob else { return }
-        repository.toggleDone(job, allJobs: allJobs)
+    /// Returns the drawn job's title and the undo snapshot, for the Undo toast.
+    @MainActor
+    func completeDrawnJob(repository: JobRepository, allJobs: [Job]) -> (String, UndoSnapshot)? {
+        guard let job = drawnJob else { return nil }
+        let title = job.title
+        let snapshot = repository.toggleDone(job, allJobs: allJobs)
         clearDraw()
+        return (title, snapshot)
     }
 }

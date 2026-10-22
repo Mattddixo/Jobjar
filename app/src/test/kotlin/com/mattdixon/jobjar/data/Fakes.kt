@@ -29,7 +29,8 @@ class FakeJobDao : JobDao {
     override fun getJobById(id: Long): Flow<Job?> = rows.map { it[id] }
     override suspend fun getJob(id: Long): Job? = rows.value[id]
     override suspend fun getAllJobs(): List<Job> = all
-    override suspend fun getCategoriesSnapshot(): List<String> = all.map { it.category }.filter { it != "" }.distinct()
+    override suspend fun getCategoriesOfOtherJobs(excludeJobId: Long): List<String> =
+        all.filter { it.id != excludeJobId }.map { it.category }.filter { it != "" }.distinct()
     override suspend fun renameCategory(from: String, to: String) {
         rows.value = rows.value.mapValues { (_, j) -> if (j.category == from) j.copy(category = to) else j }
     }

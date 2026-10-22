@@ -61,13 +61,14 @@ class JobRepository(
     }
 
     /**
-     * "home" and "Home" are the same category. A typed category adopts the spelling already in
-     * use, so the filter and draw lists never show near-duplicates.
+     * "home" and "Home" are the same category. A typed category adopts the spelling other jobs
+     * already use, so the filter and draw lists never show near-duplicates. The job being saved
+     * ([jobId]) doesn't count, so re-casing a category only one job has still sticks.
      */
-    private suspend fun canonicalCategory(raw: String): String {
+    private suspend fun canonicalCategory(raw: String, jobId: Long = 0): String {
         val trimmed = raw.trim()
         if (trimmed.isEmpty()) return ""
-        return dao.getCategoriesSnapshot().firstOrNull { it.equals(trimmed, ignoreCase = true) } ?: trimmed
+        return dao.getCategoriesOfOtherJobs(jobId).firstOrNull { it.equals(trimmed, ignoreCase = true) } ?: trimmed
     }
 
     /** One-time tidy-up for data saved before [canonicalCategory] existed: merges categories that
@@ -144,7 +145,7 @@ class JobRepository(
             title = edited.title.trim(),
             notes = edited.notes.trim(),
             estimatedMinutes = edited.estimatedMinutes,
-            category = canonicalCategory(edited.category),
+            category = canonicalCategory(edited.category, fresh.id),
             priority = edited.priority,
             recurrenceDays = recurrenceDays,
             repeatWeekdays = weekdays,

@@ -52,7 +52,7 @@ final class JobListViewModel {
                 displayMinutes: subtasks.isEmpty ? job.estimatedMinutes : job.remainingMinutes(subtasks: subtasks),
                 subtaskDone: subtasks.filter { $0.isDone }.count,
                 subtaskTotal: subtasks.count,
-                recurrenceLabel: job.recurrenceDays.map(formatRecurrenceInterval),
+                recurrenceLabel: job.recurrenceDays.map { formatRecurrence(days: $0, weekdays: job.repeatWeekdays) },
                 dueStatus: job.recurrenceDays != nil ? formatDueStatus(job.nextDueAt) : nil
             )
         }

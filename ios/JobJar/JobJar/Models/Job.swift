@@ -31,14 +31,14 @@ enum Priority: String, Codable, CaseIterable, Identifiable {
 
 /// A job can optionally be a subtask of another job via [parentId]. Subtasks are one level
 /// deep only - a job that already has a parent cannot itself have subtasks. Only a top-level
-/// job (one that isn't itself a subtask) can repeat.
+/// job (one that isn't itself a subtask) can repeat, and a repeating job can't have subtasks.
 ///
 /// A repeating job (non-nil [recurrenceDays]) never persists [isDone] = true - completing it
 /// instead advances [nextDueAt] and bumps [completionCount] (see JobRepository), so the same
 /// row just cycles rather than piling up a new "done" row per occurrence. [nextDueAt] is the
 /// schedule: nil means due right now; once completed it's set to that moment plus
-/// [recurrenceDays] days, i.e. the schedule is relative to when you actually did it, not a
-/// fixed calendar date.
+/// [recurrenceDays] days, i.e. the schedule is relative to when you actually did it - unless
+/// [repeatWeekdays] pins it to specific days of the week instead (see Recurrence.swift).
 @Model
 final class Job: Identifiable {
     var id: UUID = UUID()
@@ -53,6 +53,9 @@ final class Job: Identifiable {
     var timesDrawn: Int = 0
     var parentId: UUID?
     var recurrenceDays: Int?
+    /// Non-nil = repeats on these weekdays ("Mon, Thu") instead of every N days. A bitmask in
+    /// the same encoding the Android app and export files use: Monday is bit 0, Sunday bit 6.
+    var repeatWeekdays: Int?
     var nextDueAt: Date?
     var completionCount: Int = 0
     /// Only meaningful when this is itself a subtask: the sibling subtask (same parentId)
@@ -72,6 +75,7 @@ final class Job: Identifiable {
         timesDrawn: Int = 0,
         parentId: UUID? = nil,
         recurrenceDays: Int? = nil,
+        repeatWeekdays: Int? = nil,
         nextDueAt: Date? = nil,
         completionCount: Int = 0,
         dependsOnSubtaskId: UUID? = nil
@@ -88,6 +92,7 @@ final class Job: Identifiable {
         self.timesDrawn = timesDrawn
         self.parentId = parentId
         self.recurrenceDays = recurrenceDays
+        self.repeatWeekdays = repeatWeekdays
         self.nextDueAt = nextDueAt
         self.completionCount = completionCount
         self.dependsOnSubtaskId = dependsOnSubtaskId

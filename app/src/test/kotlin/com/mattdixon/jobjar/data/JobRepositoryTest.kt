@@ -265,6 +265,13 @@ class JobRepositoryTest {
     }
 
     @Test
+    fun recasingACategoryOnlyOneJobHasSticks() = runTest {
+        val job = add("A", category = "home")
+        repo.updateJob(dao.row(job).copy(category = "Home"))
+        assertEquals("Home", dao.row(job).category)
+    }
+
+    @Test
     fun mergeCategoryCaseUsesTheMostCommonSpelling() = runTest {
         dao.insert(Job(title = "A", estimatedMinutes = 5, category = "home"))
         dao.insert(Job(title = "B", estimatedMinutes = 5, category = "Home"))

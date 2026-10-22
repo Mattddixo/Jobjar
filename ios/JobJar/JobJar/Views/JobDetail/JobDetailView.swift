@@ -9,6 +9,7 @@ struct JobDetailView: View {
     var onBack: () -> Void
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(UndoCenter.self) private var undoCenter
     @Query private var allJobs: [Job]
     @State private var showDeleteDialog = false
     @State private var showForceCompleteDialog = false
@@ -46,7 +47,9 @@ struct JobDetailView: View {
             Button("Cancel", role: .cancel) {}
             Button("Delete", role: .destructive) {
                 if let job = currentJob {
-                    repository.deleteJob(job, allJobs: allJobs)
+                    let title = job.title
+                    let snapshot = repository.deleteJob(job, allJobs: allJobs)
+                    undoCenter.offerDeleted(title, snapshot)
                 }
                 onBack()
             }
@@ -54,20 +57,19 @@ struct JobDetailView: View {
             if let job = currentJob {
                 Text(
                     subtasks.isEmpty
-                        ? "\"\(job.title)\" will be removed permanently."
-                        : "\"\(job.title)\" and its \(subtasks.count) subtask(s) will be removed permanently."
+                        ? "\"\(job.title)\" will be removed."
+                        : "\"\(job.title)\" and its \(countLabel(subtasks.count, "subtask", "subtasks")) will be removed."
                 )
             }
         }
         .alert("Mark as done?", isPresented: $showForceCompleteDialog) {
             Button("Cancel", role: .cancel) {}
             Button("Mark done") {
-                if let job = currentJob {
-                    repository.toggleDone(job, allJobs: allJobs)
-                }
+                if let job = currentJob { toggleDone(job) }
             }
         } message: {
-            Text("\(subtasks.filter { !$0.isDone }.count) subtask(s) are still open. They'll stay open, but this job will be marked done.")
+            let open = subtasks.filter { !$0.isDone }.count
+            Text("\(countLabel(open, "subtask is", "subtasks are")) still open. Completing this job will mark \(open == 1 ? "it" : "them") done too.")
         }
     }
 
@@ -81,7 +83,7 @@ struct JobDetailView: View {
                     let displayMinutes = subtasks.isEmpty ? job.estimatedMinutes : job.remainingMinutes(subtasks: subtasks)
                     TimeBadge(minutes: displayMinutes)
                     if !job.category.isEmpty { CategoryBadge(category: job.category) }
-                    if let days = job.recurrenceDays { InfoBadge(text: formatRecurrenceInterval(days)) }
+                    if let days = job.recurrenceDays { InfoBadge(text: formatRecurrence(days: days, weekdays: job.repeatWeekdays)) }
                 }
 
                 if !subtasks.isEmpty {
@@ -92,7 +94,8 @@ struct JobDetailView: View {
                 }
 
                 if job.recurrenceDays != nil {
-                    let suffix = job.completionCount > 0 ? " · completed \(job.completionCount) time(s)" : ""
+                    let suffix = job.completionCount == 0 ? ""
+                        : job.completionCount == 1 ? " · completed once" : " · completed \(job.completionCount) times"
                     Text(formatDueStatus(job.nextDueAt) + suffix)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
@@ -121,7 +124,7 @@ struct JobDetailView: View {
                 }
 
                 if job.timesDrawn > 0 {
-                    Text("Drawn from the jar \(job.timesDrawn) time(s)")
+                    Text(job.timesDrawn == 1 ? "Drawn from the jar once" : "Drawn from the jar \(job.timesDrawn) times")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -131,7 +134,7 @@ struct JobDetailView: View {
                     if job.isPending() && incompleteSubtaskCount > 0 {
                         showForceCompleteDialog = true
                     } else {
-                        repository.toggleDone(job, allJobs: allJobs)
+                        toggleDone(job)
                     }
                 }) {
                     Text(buttonLabel(for: job))
@@ -140,7 +143,7 @@ struct JobDetailView: View {
                 }
                 .buttonStyle(.borderedProminent)
 
-                if job.parentId == nil {
+                if job.parentId == nil && job.recurrenceDays == nil {
                     Divider()
                     SubtasksSection(
                         parentId: job.id,
@@ -152,6 +155,13 @@ struct JobDetailView: View {
             }
             .padding(20)
         }
+    }
+
+    /// Completing offers an Undo; reopening doesn't need one - it's its own undo.
+    private func toggleDone(_ job: Job) {
+        let completing = job.isPending()
+        let snapshot = repository.toggleDone(job, allJobs: allJobs)
+        if completing { undoCenter.offerCompleted(job.title, snapshot) }
     }
 
     private func buttonLabel(for job: Job) -> String {

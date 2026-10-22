@@ -6,6 +6,8 @@ enum Route: Hashable {
 }
 
 struct ContentView: View {
+    @Environment(\.modelContext) private var modelContext
+
     var body: some View {
         TabView {
             DrawTab()
@@ -14,9 +16,12 @@ struct ContentView: View {
                 .tabItem { Label("Jobs", systemImage: "list.bullet") }
             NavigationStack {
                 StatsView()
+                    .settingsButton()
             }
             .tabItem { Label("Stats", systemImage: "chart.bar") }
         }
+        .overlay(alignment: .bottom) { UndoToast() }
+        .task { JobRepository(modelContext: modelContext).applyLaunchRules() }
     }
 }
 
@@ -29,6 +34,7 @@ private struct DrawTab: View {
     var body: some View {
         NavigationStack(path: $path) {
             DrawView(onOpenJob: { id in path.append(Route.jobDetail(id)) })
+                .settingsButton()
                 .navigationDestination(for: Route.self) { route in
                     RouteDestination(route: route, path: $path)
                 }
@@ -45,6 +51,7 @@ private struct JobsTab: View {
                 onAddJob: { path.append(Route.addEditJob(jobId: nil, parentId: nil)) },
                 onOpenJob: { id in path.append(Route.jobDetail(id)) }
             )
+            .settingsButton()
             .navigationDestination(for: Route.self) { route in
                 RouteDestination(route: route, path: $path)
             }

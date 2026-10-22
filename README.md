@@ -7,9 +7,11 @@ list.
 
 Two native builds live in this repo: **Android** (Kotlin + Jetpack Compose +
 Room, described below, in `app/`) and **iOS** (SwiftUI + SwiftData, in
-`ios/` — see [`ios/README.md`](ios/README.md)). Same feature set and the
-same underlying logic on both, each built the idiomatic way for its
-platform rather than transliterated line-by-line.
+`ios/` — see [`ios/README.md`](ios/README.md)). The same core rules on
+both, each built the idiomatic way for its platform rather than
+transliterated line-by-line, and the same export file format, so a backup
+moves between them. The iOS port doesn't yet have in-progress jobs, calendar
+scheduling or batch draws.
 
 ## Core idea
 

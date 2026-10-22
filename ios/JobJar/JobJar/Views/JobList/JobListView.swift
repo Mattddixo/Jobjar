@@ -6,6 +6,7 @@ struct JobListView: View {
     var onOpenJob: (UUID) -> Void
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(UndoCenter.self) private var undoCenter
     @Query private var allJobs: [Job]
     @State private var viewModel = JobListViewModel()
     @State private var itemPendingDelete: JobListItem? = nil
@@ -83,7 +84,7 @@ struct JobListView: View {
                                 if item.job.isPending() && hasOpenSubtasks {
                                     itemPendingForceComplete = item
                                 } else {
-                                    repository.toggleDone(item.job, allJobs: allJobs)
+                                    toggleDone(item.job)
                                 }
                             }
                         )
@@ -123,7 +124,9 @@ struct JobListView: View {
             Button("Cancel", role: .cancel) { itemPendingDelete = nil }
             Button("Delete", role: .destructive) {
                 if let item = itemPendingDelete {
-                    repository.deleteJob(item.job, allJobs: allJobs)
+                    let title = item.job.title
+                    let snapshot = repository.deleteJob(item.job, allJobs: allJobs)
+                    undoCenter.offerDeleted(title, snapshot)
                 }
                 itemPendingDelete = nil
             }
@@ -131,8 +134,8 @@ struct JobListView: View {
             if let item = itemPendingDelete {
                 Text(
                     item.subtaskTotal > 0
-                        ? "\"\(item.job.title)\" and its \(item.subtaskTotal) subtask(s) will be removed permanently."
-                        : "\"\(item.job.title)\" will be removed permanently."
+                        ? "\"\(item.job.title)\" and its \(countLabel(item.subtaskTotal, "subtask", "subtasks")) will be removed."
+                        : "\"\(item.job.title)\" will be removed."
                 )
             }
         }
@@ -143,16 +146,25 @@ struct JobListView: View {
             Button("Cancel", role: .cancel) { itemPendingForceComplete = nil }
             Button("Mark done") {
                 if let item = itemPendingForceComplete {
-                    repository.toggleDone(item.job, allJobs: allJobs)
+                    toggleDone(item.job)
                 }
                 itemPendingForceComplete = nil
             }
         } message: {
             if let item = itemPendingForceComplete {
                 let incomplete = item.subtaskTotal - item.subtaskDone
-                Text("\(incomplete) subtask(s) are still open. They'll stay open, but this job will be marked done.")
+                Text("\(countLabel(incomplete, "subtask is", "subtasks are")) still open. Completing this job will mark \(incomplete == 1 ? "it" : "them") done too.")
             }
         }
+    }
+}
+
+extension JobListView {
+    /// Completing offers an Undo; reopening doesn't need one - it's its own undo.
+    private func toggleDone(_ job: Job) {
+        let completing = job.isPending()
+        let snapshot = repository.toggleDone(job, allJobs: allJobs)
+        if completing { undoCenter.offerCompleted(job.title, snapshot) }
     }
 }
 

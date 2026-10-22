@@ -33,8 +33,9 @@ interface JobDao {
     @Query("SELECT * FROM jobs")
     suspend fun getAllJobs(): List<Job>
 
-    @Query("SELECT DISTINCT category FROM jobs WHERE category != ''")
-    suspend fun getCategoriesSnapshot(): List<String>
+    /** Categories in use by every job except [excludeJobId] (0 = exclude nothing). */
+    @Query("SELECT DISTINCT category FROM jobs WHERE category != '' AND id != :excludeJobId")
+    suspend fun getCategoriesOfOtherJobs(excludeJobId: Long): List<String>
 
     @Query("UPDATE jobs SET category = :to WHERE category = :from")
     suspend fun renameCategory(from: String, to: String)

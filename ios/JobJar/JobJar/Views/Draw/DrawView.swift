@@ -7,6 +7,7 @@ struct DrawView: View {
     var onOpenJob: (UUID) -> Void
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(UndoCenter.self) private var undoCenter
     @Query(sort: \Job.createdAt, order: .reverse) private var allJobs: [Job]
     @State private var viewModel = DrawViewModel()
     @State private var showForceCompleteDialog = false
@@ -108,7 +109,7 @@ struct DrawView: View {
                             if hasOpenSubtasks {
                                 showForceCompleteDialog = true
                             } else {
-                                viewModel.completeDrawnJob(repository: repository, allJobs: allJobs)
+                                completeDrawnJob()
                             }
                         },
                         onSkip: { viewModel.draw(repository: repository, allJobs: allJobs, excludeCurrent: true) }
@@ -135,12 +136,16 @@ struct DrawView: View {
         .navigationTitle("The Job Jar")
         .alert("Mark as done?", isPresented: $showForceCompleteDialog) {
             Button("Cancel", role: .cancel) {}
-            Button("Mark done") {
-                viewModel.completeDrawnJob(repository: repository, allJobs: allJobs)
-            }
+            Button("Mark done") { completeDrawnJob() }
         } message: {
             let incomplete = (viewModel.drawnContext?.subtaskTotal ?? 0) - (viewModel.drawnContext?.subtaskDone ?? 0)
-            Text("\(incomplete) subtask(s) are still open. They'll stay open, but this job will be marked done.")
+            Text("\(countLabel(incomplete, "subtask is", "subtasks are")) still open. Completing this job will mark \(incomplete == 1 ? "it" : "them") done too.")
+        }
+    }
+
+    private func completeDrawnJob() {
+        if let completed = viewModel.completeDrawnJob(repository: repository, allJobs: allJobs) {
+            undoCenter.offerCompleted(completed.0, completed.1)
         }
     }
 }
@@ -160,7 +165,7 @@ private struct DrawnJobCard: View {
             HStack(spacing: 8) {
                 TimeBadge(minutes: context?.remainingMinutes ?? job.estimatedMinutes)
                 if !job.category.isEmpty { CategoryBadge(category: job.category) }
-                if let days = job.recurrenceDays { InfoBadge(text: formatRecurrenceInterval(days)) }
+                if let days = job.recurrenceDays { InfoBadge(text: formatRecurrence(days: days, weekdays: job.repeatWeekdays)) }
             }
 
             if let parentTitle = context?.parentTitle {
@@ -200,6 +205,7 @@ private struct DrawnJobCard: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 16).fill(Color(.secondarySystemBackground)))
+        // The one warm spot in the app: whatever came out of the jar stands apart.
+        .background(RoundedRectangle(cornerRadius: 16).fill(Color("DrawnCard")))
     }
 }
