@@ -29,6 +29,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Query private var allJobs: [Job]
     @AppStorage("themeMode") private var themeMode = ThemeMode.system.rawValue
+    @AppStorage(favourFillKey) private var favourFill = true
 
     @State private var exportDocument: JobExportDocument? = nil
     @State private var showExporter = false
@@ -51,6 +52,14 @@ struct SettingsView: View {
                     }
                 }
                 .pickerStyle(.segmented)
+            }
+
+            Section {
+                Toggle("Favour jobs that fill my time", isOn: $favourFill)
+            } header: {
+                Text("Jar")
+            } footer: {
+                Text("Draws lean toward jobs that suit the time you pick and how many you ask for. Turn off to ignore job length. Priority always counts: high-priority jobs come up more often.")
             }
 
             Section {

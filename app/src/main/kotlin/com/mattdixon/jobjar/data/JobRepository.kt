@@ -3,6 +3,7 @@ package com.mattdixon.jobjar.data
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import java.time.ZoneId
+import kotlin.random.Random
 
 private const val MINUTE_MILLIS = 60L * 1000
 
@@ -21,7 +22,8 @@ class JobRepository(
     private val calendar: CalendarGateway,
     private val transactions: TransactionRunner,
     private val clock: () -> Long = { System.currentTimeMillis() },
-    private val zone: () -> ZoneId = { ZoneId.systemDefault() }
+    private val zone: () -> ZoneId = { ZoneId.systemDefault() },
+    private val random: Random = Random.Default
 ) {
     val allJobsFlat: Flow<List<Job>> = dao.getAllJobsFlow()
 
@@ -358,8 +360,19 @@ class JobRepository(
      * Skips anything done, not due, started or booked, plus subtasks whose prerequisite isn't done
      * or whose parent has been started. Parents count by their remaining minutes, so a big job gets
      * drawable for shorter slots as you chip away at it.
+     *
+     * Priority always counts ([priorityWeight]). With [favourFill], jobs closer to a fair share of
+     * the time ([maxMinutes] over [picksLeft], see [drawWeight]) are also more likely; 4+ hrs draws
+     * ignore length, since every candidate is long.
      */
-    suspend fun drawJob(maxMinutes: Int, categories: Set<String>, excludeIds: List<Long>, longOnly: Boolean = false): DrawPick? {
+    suspend fun drawJob(
+        maxMinutes: Int,
+        categories: Set<String>,
+        excludeIds: List<Long>,
+        longOnly: Boolean = false,
+        picksLeft: Int? = 1,
+        favourFill: Boolean = false
+    ): DrawPick? {
         val now = clock()
         val all = allJobsFlat.first()
         val allById = all.associateBy { it.id }
@@ -377,9 +390,14 @@ class JobRepository(
                 }
         }
 
-        val picked = candidates.randomOrNull() ?: return null
+        val weighByFit = favourFill && !longOnly
+        val picked = pickWeighted(candidates, random) { job ->
+            val fit = if (weighByFit) drawWeight(minutesNeeded(job, subtasksByParent), maxMinutes, picksLeft) else 1.0
+            fit * priorityWeight(job.priority)
+        } ?: return null
         dao.incrementDrawCount(picked.id)
-        return DrawPick(picked, minutesNeeded(picked, subtasksByParent))
+        // A parent whose subtasks ran over has nothing left; it mustn't give time back to a batch.
+        return DrawPick(picked, minutesNeeded(picked, subtasksByParent).coerceAtLeast(0))
     }
 
     private fun minutesNeeded(job: Job, subtasksByParent: Map<Long?, List<Job>>): Int =

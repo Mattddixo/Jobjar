@@ -129,6 +129,8 @@ struct JobRepository {
     let modelContext: ModelContext
     var calendar: CalendarGateway = DeviceCalendar.shared
     var now: () -> Date = { .now }
+    /// A random number in 0..<1. Tests swap in a seeded one.
+    var randomUnit: () -> Double = { Double.random(in: 0..<1) }
 
     private func fetchAll() -> [Job] {
         (try? modelContext.fetch(FetchDescriptor<Job>())) ?? []
@@ -486,7 +488,14 @@ struct JobRepository {
     /// Picks a random job that fits `maxMinutes`, or with `longOnly` one of `longJobMinutes` or
     /// more. Skips anything done, not due, started or booked, plus subtasks whose prerequisite
     /// isn't done or whose parent has been started. Parents count by their remaining minutes.
-    func drawJob(allJobs: [Job], maxMinutes: Int, categories: Set<String>, excludeIds: Set<UUID>, longOnly: Bool) -> DrawPick? {
+    ///
+    /// Priority always counts (`priorityWeight`). With `favourFill`, jobs closer to a fair share of
+    /// the time (`maxMinutes` over `picksLeft`, see `drawWeight`) are also more likely; 4+ hrs draws
+    /// ignore length, since every candidate is long.
+    func drawJob(
+        allJobs: [Job], maxMinutes: Int, categories: Set<String>, excludeIds: Set<UUID>, longOnly: Bool,
+        picksLeft: Int? = 1, favourFill: Bool = false
+    ) -> DrawPick? {
         let now = now()
         let byId = Dictionary(allJobs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let subtasksByParent = Dictionary(grouping: allJobs.filter { $0.parentId != nil }) { $0.parentId! }
@@ -502,10 +511,18 @@ struct JobRepository {
             return longOnly ? needed >= longJobMinutes : needed <= maxMinutes
         }
 
-        guard let picked = candidates.randomElement() else { return nil }
+        let weighByFit = favourFill && !longOnly
+        let picked = pickWeighted(candidates, unit: randomUnit()) { job in
+            let fit = weighByFit
+                ? drawWeight(neededMinutes: minutesNeeded(job: job, subtasksByParent: subtasksByParent), remainingMinutes: maxMinutes, picksLeft: picksLeft)
+                : 1
+            return fit * priorityWeight(job.priority)
+        }
+        guard let picked else { return nil }
         picked.timesDrawn += 1
         save()
-        return DrawPick(job: picked, minutesUsed: minutesNeeded(job: picked, subtasksByParent: subtasksByParent))
+        // A parent whose subtasks ran over has nothing left; it mustn't give time back to a batch.
+        return DrawPick(job: picked, minutesUsed: max(minutesNeeded(job: picked, subtasksByParent: subtasksByParent), 0))
     }
 
     private func minutesNeeded(job: Job, subtasksByParent: [UUID: [Job]]) -> Int {

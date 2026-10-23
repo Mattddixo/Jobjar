@@ -5,6 +5,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -27,6 +29,7 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -34,12 +37,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mattdixon.jobjar.R
+import com.mattdixon.jobjar.data.DrawPreferences
 import com.mattdixon.jobjar.data.JobExport
 import com.mattdixon.jobjar.data.JobRepository
 import com.mattdixon.jobjar.data.ThemeMode
@@ -113,6 +121,32 @@ fun SettingsScreen(
                             shape = SegmentedButtonDefaults.itemShape(index, options.size)
                         ) { Text(stringResource(label)) }
                     }
+                }
+            }
+
+            HorizontalDivider()
+
+            Section(title = stringResource(R.string.settings_jar)) {
+                var favourFill by remember { mutableStateOf(DrawPreferences.favourFill(context)) }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .toggleable(value = favourFill, role = Role.Switch) {
+                            favourFill = it
+                            DrawPreferences.setFavourFill(context, it)
+                        },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.lg)
+                ) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spacing.xxs)) {
+                        Text(stringResource(R.string.settings_favour_fill), style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            stringResource(R.string.settings_favour_fill_explainer),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(checked = favourFill, onCheckedChange = null)
                 }
             }
 

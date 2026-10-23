@@ -158,6 +158,8 @@ class DrawViewModel(
             _uiState.value = _uiState.value.copy(isDrawing = true, noMatchFound = false)
 
             val maxJobs = if (current.longJobsOnly) 1 else (current.batchSize.count ?: MAX_BATCH_JOBS)
+            // Read each time so flipping it in Settings applies to the next draw.
+            val favourFill = DrawPreferences.favourFill(appContext)
             val excluded = seedExcludeIds.toMutableList()
             val picks = mutableListOf<DrawPick>()
             var remaining = current.availableMinutes
@@ -167,7 +169,10 @@ class DrawViewModel(
                     maxMinutes = remaining,
                     categories = current.selectedCategories,
                     excludeIds = excluded,
-                    longOnly = current.longJobsOnly
+                    longOnly = current.longJobsOnly,
+                    // "All" has no fixed count, so each pick aims at whatever time is left.
+                    picksLeft = if (current.longJobsOnly) 1 else current.batchSize.count?.let { it - picks.size },
+                    favourFill = favourFill
                 ) ?: break
                 picks += pick
                 excluded += pick.job.id

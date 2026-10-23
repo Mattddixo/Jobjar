@@ -45,6 +45,9 @@ enum DrawBatchSize: String, CaseIterable, Identifiable {
 
 let maxBatchJobs = 10
 
+/// Settings > "Favour jobs that fill my time" (UserDefaults key).
+let favourFillKey = "draw_favour_fill"
+
 /// The Jar tab. The panel settings are remembered between launches, the draw itself isn't.
 @Observable
 final class DrawViewModel {
@@ -131,6 +134,8 @@ final class DrawViewModel {
         var excluded = seedExcluded
         var picks: [DrawPick] = []
         var remaining = availableMinutes
+        // Read each time so flipping it in Settings applies to the next draw. On unless turned off.
+        let favourFill = defaults.object(forKey: favourFillKey) as? Bool ?? true
 
         while picks.count < maxJobs {
             guard let pick = repository.drawJob(
@@ -138,7 +143,10 @@ final class DrawViewModel {
                 maxMinutes: remaining,
                 categories: selectedCategories,
                 excludeIds: excluded,
-                longOnly: longJobsOnly
+                longOnly: longJobsOnly,
+                // "All" has no fixed count, so each pick aims at whatever time is left.
+                picksLeft: longJobsOnly ? Optional(1) : batchSize.count.map { $0 - picks.count },
+                favourFill: favourFill
             ) else { break }
             picks.append(pick)
             excluded.insert(pick.job.id)
