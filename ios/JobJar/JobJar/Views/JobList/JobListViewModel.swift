@@ -7,7 +7,7 @@ enum JobSortOrder: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .timeAsc: return "Shortest first"
+        case .timeAsc: return "Quickest first"
         case .timeDesc: return "Longest first"
         case .priority: return "Priority"
         case .newest: return "Newest"
@@ -16,16 +16,14 @@ enum JobSortOrder: String, CaseIterable, Identifiable {
     }
 }
 
-/// A top-level job plus how many of its subtasks (if any) are done, for the list row's badge.
+/// A top-level job plus its subtask counts.
 struct JobListItem: Identifiable {
     let job: Job
     var id: UUID { job.id }
     let displayMinutes: Int
     let subtaskDone: Int
     let subtaskTotal: Int
-    /// "Weekly" etc, or nil if this job doesn't repeat.
     let recurrenceLabel: String?
-    /// "Due now" / "Next: in 3 days", or nil if this job doesn't repeat.
     let dueStatus: String?
 }
 
@@ -36,11 +34,8 @@ final class JobListViewModel {
     var showRepeatingOnly = false
     var sortOrder: JobSortOrder = .newest
 
-    /// A repeating job never persists isDone, so "completed" for it means "resting until its
-    /// next cycle" - isPending() (not isDone) is what decides Active vs Completed for it, and
-    /// for everything else it's equivalent to !isDone. When filtering to repeating jobs only,
-    /// the Active/Completed split is bypassed entirely and both due and resting ones show
-    /// together, so this is the one place you can see the full set regardless of state.
+    /// Repeating jobs never stay done, so isPending() decides To do vs Done. The Repeating filter
+    /// shows them all regardless.
     func items(allJobs: [Job]) -> [JobListItem] {
         let subtasksByParent = Dictionary(grouping: allJobs.filter { $0.parentId != nil }) { $0.parentId! }
         let topLevel = allJobs.filter { $0.parentId == nil }

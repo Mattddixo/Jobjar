@@ -1,12 +1,7 @@
 import SwiftData
 import SwiftUI
 
-/// The "Subtasks" list, progress summary, and add-subtask button for a top-level job. Shared
-/// by the job detail screen and the job creation/edit screen so subtask management looks and
-/// works identically everywhere it appears.
-///
-/// `parentId` must refer to a job that is itself NOT a subtask (subtasks are one level deep) -
-/// callers are responsible for that check, since this view has no way to verify it.
+/// Subtask list + add button for a top-level job. Used on the detail and edit screens.
 struct SubtasksSection: View {
     let parentId: UUID
     let parentEstimatedMinutes: Int
@@ -34,7 +29,7 @@ struct SubtasksSection: View {
             }
 
             if subtasks.isEmpty {
-                Text("Break this job into smaller pieces you can draw on their own.")
+                Text("Big job? Split it into smaller ones.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             } else {
@@ -65,8 +60,7 @@ struct SubtasksSection: View {
         }
     }
 
-    /// Non-nil (blocked) only when the dependency isn't satisfied yet - a soft block: the
-    /// checkbox below stays fully live either way, this only changes the draw pool.
+    /// Set when waiting on an unfinished sibling. Still tickable.
     private func waitingOnTitle(for subtask: Job, siblingsById: [UUID: Job]) -> String? {
         guard let prerequisiteId = subtask.dependsOnSubtaskId, !subtask.isUnblocked(siblingsById: siblingsById) else {
             return nil
@@ -102,7 +96,7 @@ private struct SubtaskRow: View {
                             Image(systemName: "lock.fill")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
-                            Text("Waiting on: \(waitingOnTitle)")
+                            Text("Waiting on \(waitingOnTitle)")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }

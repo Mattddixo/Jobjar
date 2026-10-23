@@ -10,30 +10,26 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface JobDao {
-
-    /** Every row, parents and subtasks alike. Used internally by the repository (draws, stats). */
     @Query("SELECT * FROM jobs")
     fun getAllJobsFlow(): Flow<List<Job>>
 
     @Query("SELECT DISTINCT category FROM jobs WHERE category != '' ORDER BY category ASC")
     fun getCategories(): Flow<List<String>>
 
-    /** Category is a free-text field on Job, not its own table - "removing" one just clears it back to blank on every job that has it. */
+    /** "Removing" a category just blanks it on every job that has it. */
     @Query("UPDATE jobs SET category = '' WHERE category = :category")
     suspend fun clearCategory(category: String)
 
     @Query("SELECT * FROM jobs WHERE id = :id")
     fun getJobById(id: Long): Flow<Job?>
 
-    /** One-shot read of the current row - what every write in [JobRepository] starts from, so it
-     * never writes back a stale copy a screen happened to be holding. */
     @Query("SELECT * FROM jobs WHERE id = :id")
     suspend fun getJob(id: Long): Job?
 
     @Query("SELECT * FROM jobs")
     suspend fun getAllJobs(): List<Job>
 
-    /** Categories in use by every job except [excludeJobId] (0 = exclude nothing). */
+    /** [excludeJobId] = 0 excludes nothing. */
     @Query("SELECT DISTINCT category FROM jobs WHERE category != '' AND id != :excludeJobId")
     suspend fun getCategoriesOfOtherJobs(excludeJobId: Long): List<String>
 
@@ -49,7 +45,7 @@ interface JobDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(job: Job): Long
 
-    /** Writes rows with their existing ids - undo and import put rows back exactly as they were. */
+    /** Keeps the ids as they are (undo and import rely on that). */
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(jobs: List<Job>)
 
@@ -65,8 +61,7 @@ interface JobDao {
     @Query("UPDATE jobs SET timesDrawn = timesDrawn + 1 WHERE id = :id")
     suspend fun incrementDrawCount(id: Long)
 
-    // isInProgress is cleared here too - a job can't be done and in-progress at once, and this
-    // is the one query every "mark done" path (including auto-complete-parent) routes through.
+    // Clears in-progress too: a job can't be both.
     @Query("UPDATE jobs SET isDone = 1, isInProgress = 0, completedAt = :completedAt WHERE id = :id")
     suspend fun markDone(id: Long, completedAt: Long)
 
@@ -79,7 +74,6 @@ interface JobDao {
     @Query("UPDATE jobs SET isInProgress = 0 WHERE id = :id")
     suspend fun markNotInProgress(id: Long)
 
-    /** Booking a job for later also means it isn't being worked on right now. */
     @Query("UPDATE jobs SET scheduledDate = :scheduledDate, calendarEventId = :calendarEventId, isInProgress = 0 WHERE id = :id")
     suspend fun setSchedule(id: Long, scheduledDate: Long, calendarEventId: Long?)
 

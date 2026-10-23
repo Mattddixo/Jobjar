@@ -2,17 +2,16 @@ import Foundation
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The backup file behind Settings' Export/Import - the same JSON format the Android app
-/// writes (see its data/JobExport.kt), so a backup moves between the two:
+/// Backup file for Settings > Export/Import, same JSON as the Android app so backups move
+/// between them.
 ///
 /// ```json
 /// { "format": "job-jar", "version": 1, "exportedAt": 1761000000000, "jobs": [ { "id": 1, ... } ] }
 /// ```
 ///
-/// Ids in the file are plain integers (Android's own row ids); this app's UUIDs are numbered
-/// 1, 2, 3... on export and given fresh UUIDs on import. Dates are epoch milliseconds. Fields
-/// this app doesn't have yet (in progress, scheduled dates) are written as false/absent and
-/// ignored on import.
+/// Ids in the file are numbers. UUIDs get numbered 1, 2, 3... on export and new UUIDs are made
+/// on import. Dates are epoch ms. In-progress and schedule fields aren't on iOS yet, so they're
+/// written empty and ignored when reading.
 enum JobExport {
     static let version = 1
     private static let format = "job-jar"
@@ -88,10 +87,8 @@ enum JobExport {
         return try encoder.encode(File(format: format, version: version, exportedAt: millis(exportedAt), jobs: entries))
     }
 
-    /// Reads a file written by either app. Beyond the JSON itself, the jobs are made consistent
-    /// with the app's rules before anything is imported: subtasks pointing at a missing, nested
-    /// or repeating parent become top-level jobs, and dependencies on anything but a sibling
-    /// are dropped.
+    /// Also fixes up anything the app would never save itself, in case the file was edited:
+    /// missing, nested or repeating parents, and dependencies on non-siblings.
     static func decode(_ data: Data) -> Result<[JobRecord], Failure> {
         let decoder = JSONDecoder()
         guard let header = try? decoder.decode(Header.self, from: data), header.format == format else {
@@ -142,7 +139,6 @@ enum JobExport {
     }
 }
 
-/// Wraps the export bytes for SwiftUI's `fileExporter`.
 struct JobExportDocument: FileDocument {
     static var readableContentTypes: [UTType] { [.json] }
 

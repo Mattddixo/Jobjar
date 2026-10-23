@@ -12,7 +12,6 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 @Database(entities = [Job::class], version = 10, exportSchema = true)
 @TypeConverters(Converters::class)
 abstract class JobDatabase : RoomDatabase() {
-
     abstract fun jobDao(): JobDao
 
     companion object {
@@ -54,16 +53,12 @@ abstract class JobDatabase : RoomDatabase() {
         }
 
         /**
-         * Versions 7 and 8 only ever shipped on the Home Jobs Tracker interop branch, which added
-         * a tracker-link column (spawnedFromTrackerJobId, later renamed linkedTrackerJobId). This
-         * standalone build has no such column, so any of 6/7/8 lands on the same v9 shape:
+         * 7 and 8 were only used by the old Job Tracker build, which added a tracker link column.
+         * Whichever of 6/7/8 you're on, this gets you to 9:
          *
-         * 1. Repeating jobs can no longer have subtasks (a subtask's own completion never lined up
-         *    with its parent's cycle). Any existing ones are kept, just detached into ordinary
-         *    top-level jobs, rather than deleted.
-         * 2. The jobs table is rebuilt without the tracker column. SQLite's DROP COLUMN needs a
-         *    newer engine than minSdk 26 guarantees, so this copies into a fresh table instead -
-         *    which also works from v6, where the column never existed.
+         * 1. Subtasks of repeating jobs are detached (kept as normal jobs, not deleted).
+         * 2. The table is rebuilt without the tracker column. DROP COLUMN isn't available on all the
+         *    SQLite versions minSdk 26 ships with, so it's copied into a new table.
          */
         private fun migrateToStandalone(db: SupportSQLiteDatabase) {
             db.execSQL(
@@ -115,14 +110,14 @@ abstract class JobDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) = migrateToStandalone(db)
         }
 
-        /** Adds fixed-weekday repeats ("every Monday and Thursday") - see [Job.repeatWeekdays]. */
+        /** Weekday repeats. */
         val MIGRATION_9_10 = object : Migration(9, 10) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE jobs ADD COLUMN repeatWeekdays INTEGER DEFAULT NULL")
             }
         }
 
-        /** Every migration, oldest first - shared with the migration test so the two can't drift. */
+        /** Also used by MigrationTest. */
         val ALL_MIGRATIONS = arrayOf(
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
             MIGRATION_6_9, MIGRATION_7_9, MIGRATION_8_9, MIGRATION_9_10

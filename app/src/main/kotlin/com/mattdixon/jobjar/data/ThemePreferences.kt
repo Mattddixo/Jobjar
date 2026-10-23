@@ -4,15 +4,12 @@ import android.content.Context
 
 private const val PREFS_NAME = "job_jar_settings"
 private const val KEY_THEME_MODE = "theme_mode"
-/** The old on/off dark-mode override, read once so an existing choice carries over. */
+/** Old on/off dark mode setting, still read so it carries over. */
 private const val KEY_LEGACY_DARK_THEME = "dark_theme"
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
-/**
- * Light/dark/follow-the-system, chosen in Settings. A single SharedPreferences value is all
- * that's worth building for that - no need for a DataStore dependency over one setting.
- */
+/** Light / dark / follow the system. */
 object ThemePreferences {
     fun themeMode(context: Context): ThemeMode {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

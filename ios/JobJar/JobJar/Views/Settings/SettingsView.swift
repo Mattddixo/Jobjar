@@ -9,7 +9,7 @@ enum ThemeMode: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .system: return "System"
+        case .system: return "Auto"
         case .light: return "Light"
         case .dark: return "Dark"
         }
@@ -44,7 +44,7 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            Section("Appearance") {
+            Section("Theme") {
                 Picker("Theme", selection: $themeMode) {
                     ForEach(ThemeMode.allCases) { mode in
                         Text(mode.label).tag(mode.rawValue)
@@ -59,22 +59,22 @@ struct SettingsView: View {
                         exportDocument = JobExportDocument(data: data)
                         showExporter = true
                     } else {
-                        message = "Couldn't create the export."
+                        message = "Export failed."
                     }
                 } label: {
-                    Label("Export jobs", systemImage: "square.and.arrow.up")
+                    Label("Export", systemImage: "square.and.arrow.up")
                 }
                 Button {
                     showImporter = true
                 } label: {
-                    Label("Import jobs", systemImage: "square.and.arrow.down")
+                    Label("Import", systemImage: "square.and.arrow.down")
                 }
             } header: {
-                Text("Your data")
+                Text("Backup")
             } footer: {
                 Text(
-                    "Your jobs are stored only on this device. Export saves a copy you can keep anywhere and " +
-                        "import again later - on this device, a new one, or the Android app."
+                    "Your jobs are only stored on this phone. Export a copy to keep somewhere safe, or to move " +
+                        "to a new phone. Backups work with the Android app too."
                 )
             }
 
@@ -83,7 +83,7 @@ struct SettingsView: View {
             } header: {
                 Text("About")
             } footer: {
-                Text("No account, no ads, no tracking. Your jobs never leave this device unless you export them.")
+                Text("No account, no ads, no tracking. Your jobs stay on your phone.")
             }
         }
         .navigationTitle("Settings")
@@ -107,18 +107,18 @@ struct SettingsView: View {
             let accessing = url.startAccessingSecurityScopedResource()
             defer { if accessing { url.stopAccessingSecurityScopedResource() } }
             guard let data = try? Data(contentsOf: url) else {
-                message = "Couldn't read that file. Nothing was changed."
+                message = "Couldn't read that file."
                 return
             }
             switch JobExport.decode(data) {
             case .success(let records):
                 pendingImport = records
             case .failure(.newerVersion):
-                message = "That export is from a newer version of Job Jar. Update the app, then try again."
+                message = "That backup is from a newer version. Update Job Jar and try again."
             case .failure(.notABackup):
-                message = "That file isn't a Job Jar export. Nothing was changed."
+                message = "That's not a Job Jar backup."
             case .failure(.corrupt):
-                message = "Couldn't read that file. Nothing was changed."
+                message = "Couldn't read that file."
             }
         }
         .alert(
@@ -136,8 +136,8 @@ struct SettingsView: View {
         } message: {
             let incoming = pendingImport?.count ?? 0
             Text(
-                "This file has \(countLabel(incoming, "job", "jobs")). Importing replaces the " +
-                    "\(countLabel(allJobs.count, "job", "jobs")) on this device. Export first if you want to keep them."
+                "The backup has \(countLabel(incoming, "job", "jobs")). It'll replace the " +
+                    "\(countLabel(allJobs.count, "job", "jobs")) you have now."
             )
         }
         .alert(
@@ -149,7 +149,7 @@ struct SettingsView: View {
     }
 }
 
-/// Adds the gear button that opens Settings to a tab's root screen.
+/// Adds the gear button that opens Settings.
 struct SettingsButton: ViewModifier {
     @State private var showSettings = false
 

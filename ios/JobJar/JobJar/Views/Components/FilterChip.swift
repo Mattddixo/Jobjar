@@ -1,8 +1,6 @@
 import SwiftUI
 
-/// A tappable pill, selected or not - the SwiftUI equivalent of Material 3's FilterChip, used
-/// identically everywhere a single- or multi-choice filter/preset row shows up (time presets,
-/// category filters, priority-adjacent pickers, the recurring/depends-on pickers).
+/// Tappable pill, selected or not. Like Material's FilterChip.
 struct FilterChip: View {
     let label: String
     let selected: Bool

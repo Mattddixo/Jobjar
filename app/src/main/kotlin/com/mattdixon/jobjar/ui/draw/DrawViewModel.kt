@@ -18,7 +18,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-/** Extra context about a drawn job shown on its card: is it part of something bigger, or does it have subtasks of its own? */
+/** Parent title or subtask progress, for the card. */
 data class DrawnJobContext(
     val parentTitle: String? = null,
     val subtaskDone: Int = 0,
@@ -26,21 +26,13 @@ data class DrawnJobContext(
     val remainingMinutes: Int? = null
 )
 
-/**
- * One job in the current draw, paired with its display context and how many minutes it counted
- * against the time budget.
- */
 data class DrawnJobEntry(
     val job: Job,
     val context: DrawnJobContext?,
     val minutesUsed: Int
 )
 
-/**
- * How many jobs a single draw should try to pack into the time budget. [count] = null means
- * "as many as fit," capped at [MAX_BATCH_JOBS] so a budget full of many tiny jobs can't pull an
- * unbounded number of cards into one draw.
- */
+/** Jobs per draw. null = as many as fit, up to [MAX_BATCH_JOBS]. */
 enum class DrawBatchSize(val label: String, val count: Int?) {
     ONE("1", 1),
     TWO("2", 2),
@@ -53,34 +45,21 @@ const val MAX_BATCH_JOBS = 10
 
 data class DrawUiState(
     val availableMinutes: Int = 30,
-    /**
-     * When true, ignore availableMinutes and draw only from jobs needing 4+ hours - an explicit
-     * "give me a big one" instead of "what fits". Always draws exactly one job regardless of
-     * [batchSize]: there's no "remaining budget" left to fill after a single open-ended pick.
-     */
+    /** 4+ hrs mode: ignores the time and always draws a single job. */
     val longJobsOnly: Boolean = false,
-    /** Empty = no category narrowing (draw from any category) - same convention as the Jobs list's own multiselect category filter. */
+    /** Empty = any category. */
     val selectedCategories: Set<String> = emptySet(),
     val categories: List<String> = emptyList(),
     val batchSize: DrawBatchSize = DrawBatchSize.ONE,
     val drawnJobs: List<DrawnJobEntry> = emptyList(),
-    /** Minutes of the budget left unused after the last draw - lets the UI explain a batch that came up short of the requested count. */
+    /** Unused minutes after the last draw. */
     val remainingMinutesAfterDraw: Int = 0,
     val excludedIds: List<Long> = emptyList(),
     val isDrawing: Boolean = false,
     val noMatchFound: Boolean = false,
-    /**
-     * How many jobs (parents and subtasks alike) could actually be drawn right now, per
-     * [Job.isAvailableToDraw] - not done, due if repeating, and not already in progress. This
-     * drives the jar glyph's fill level. Deliberately just a count, not a ratio against
-     * completed work: that decays toward "always looks full" as your lifetime completed total
-     * grows, which stops meaning anything after a while. If you want completion history, that's
-     * what the Stats tab is for.
-     */
+    /** Jobs that could be drawn right now. Drives the jar picture. */
     val pendingCount: Int = 0,
-    /** How many jobs are currently in progress - shown alongside [pendingCount] since those jobs have left the jar but aren't done yet either. */
     val inProgressCount: Int = 0,
-    /** False until the jar's contents have loaded, so it doesn't flash "0 in the jar" on launch. */
     val isLoaded: Boolean = false
 )
 
@@ -88,7 +67,6 @@ class DrawViewModel(
     private val repository: JobRepository,
     private val appContext: Context
 ) : ViewModel() {
-
     private val _uiState: MutableStateFlow<DrawUiState>
     val uiState: StateFlow<DrawUiState>
 
@@ -108,9 +86,7 @@ class DrawViewModel(
             combine(repository.categories, repository.allJobsFlat) { categories, allJobs ->
                 categories to allJobs
             }.collect { (categories, allJobs) ->
-                // A category removed elsewhere (Jobs list's "Manage categories") could otherwise
-                // stay checked here indefinitely - it can no longer appear in this screen's own
-                // dropdown to be unchecked by hand, and every draw would silently match nothing.
+                // Drop categories that have been removed, or every draw would come up empty.
                 val previousSelection = _uiState.value.selectedCategories
                 val stillValidSelection = previousSelection.intersect(categories.toSet())
                 _uiState.value = _uiState.value.copy(
@@ -127,10 +103,7 @@ class DrawViewModel(
         }
     }
 
-    /** Persists the control-panel settings a user sets on this screen (time budget, long-jobs
-     * toggle, category, batch size) so they're still there on the next launch instead of
-     * resetting to defaults every time. Deliberately excludes the actual draw result and
-     * exclusion list below - those are this session's output, not a setting to remember. */
+    /** Saves the panel settings (not the draw itself). */
     private fun saveSettings(state: DrawUiState) {
         DrawPreferences.save(
             appContext,
@@ -168,15 +141,10 @@ class DrawViewModel(
     }
 
     /**
-     * Draws a fresh batch: greedily picks random eligible jobs against the time budget - draw
-     * one, subtract what it needs from the remaining budget, draw another that fits what's
-     * left, and so on - stopping once [DrawUiState.batchSize] is reached or nothing eligible
-     * fits the remaining budget anymore. "4+ hrs" mode always draws exactly one job regardless
-     * of batchSize (see its doc comment).
+     * Draws a batch: keep picking random jobs that fit what's left of the time until we have
+     * enough or nothing fits. 4+ hrs mode draws one.
      *
-     * Pass [excludeCurrent] = true (Skip) to redraw the whole batch fresh, excluding every job
-     * the current batch already showed - a plain draw has no exclusions and could in principle
-     * reshow the same batch by chance, same as the single-job version this replaced.
+     * [excludeCurrent] (Draw again) leaves out everything already shown.
      */
     fun draw(excludeCurrent: Boolean = false) {
         val current = _uiState.value
@@ -236,13 +204,7 @@ class DrawViewModel(
         _uiState.value = _uiState.value.copy(drawnJobs = emptyList(), excludedIds = emptyList(), noMatchFound = false)
     }
 
-    /**
-     * Marks one job in the current batch as started and drops it from the visible list - a
-     * drawn job isn't completed right away just by being drawn, so this is the only action a
-     * batch card offers. From here it's tracked via the Jobs list' "In Progress" filter (or its
-     * own detail page) until you actually mark it done there; any other jobs in the batch stay
-     * put.
-     */
+    /** Starts a drawn job and takes its card off the list. */
     fun startJob(jobId: Long) {
         val entry = _uiState.value.drawnJobs.find { it.job.id == jobId } ?: return
         viewModelScope.launch {
@@ -253,12 +215,7 @@ class DrawViewModel(
         }
     }
 
-    /**
-     * Same shape as [startJob], for the batch card's "Schedule" button: sets [dateTimeMillis] as
-     * the job's scheduled date (writing the calendar event) and drops it from the visible batch.
-     * A drawn job can never already be scheduled - scheduling excludes a job from the draw pool
-     * - so there's no unschedule counterpart needed here.
-     */
+    /** Schedules a drawn job and takes its card off the list. */
     fun scheduleJob(jobId: Long, dateTimeMillis: Long) {
         val entry = _uiState.value.drawnJobs.find { it.job.id == jobId } ?: return
         viewModelScope.launch {

@@ -36,15 +36,8 @@ import java.time.ZoneOffset
 private val CALENDAR_PERMISSIONS = arrayOf(Manifest.permission.WRITE_CALENDAR, Manifest.permission.READ_CALENDAR)
 
 /**
- * The full "Schedule" flow, shared by every screen that offers it (the Jar tab's drawn card, a
- * Jobs list row, the job detail screen): request calendar permission if it isn't already
- * granted, then a date, then a time, then hand the caller back one epoch-millis instant. The
- * caller is responsible for the actual [com.mattdixon.jobjar.data.JobRepository.scheduleJob]
- * call - this composable only collects the "when," it doesn't know about a specific job.
- *
- * Composed only while the caller wants it shown (same pattern as this app's other on-demand
- * dialogs) - there's no `visible` parameter, the caller just conditionally includes this in its
- * own composition.
+ * Schedule flow: calendar permission if needed, then date, then time. Hands back the chosen
+ * time; the caller does the actual scheduling.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -70,8 +63,7 @@ fun SchedulePickerDialog(
                 title = { Text(stringResource(R.string.dialog_calendar_permission_title)) },
                 text = { Text(stringResource(R.string.dialog_calendar_permission_body)) },
                 confirmButton = {
-                    // Once permission has been refused twice Android stops asking, so the
-                    // system's own settings page is the only way left to grant it.
+                    // After two refusals Android stops asking, so settings is the only way.
                     TextButton(onClick = {
                         onDismiss()
                         try {
@@ -79,7 +71,6 @@ fun SchedulePickerDialog(
                                 Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
                             )
                         } catch (e: ActivityNotFoundException) {
-                            // No settings screen to open - nothing more to do.
                         }
                     }) { Text(stringResource(R.string.action_open_settings)) }
                 },
@@ -89,9 +80,7 @@ fun SchedulePickerDialog(
             )
         }
         !hasPermission -> {
-            // Fires once, right as this dialog is first composed; nothing to render while the
-            // system's own permission prompt is up - the launcher's callback above moves this
-            // on to the date step (or to the denied dialog) once the user answers it.
+            // Ask for permission straight away. The callback moves us on.
             LaunchedEffect(Unit) { permissionLauncher.launch(CALENDAR_PERMISSIONS) }
         }
         pickedDateMillis == null -> {
@@ -112,8 +101,7 @@ fun SchedulePickerDialog(
             }
         }
         else -> {
-            // A sensible default rather than "now": most scheduling happens in advance, so
-            // defaulting to the current minute would usually just get typed over anyway.
+            // 9am default. Most things get scheduled ahead of time.
             val timePickerState = rememberTimePickerState(initialHour = 9, initialMinute = 0)
             AlertDialog(
                 onDismissRequest = onDismiss,
@@ -121,11 +109,8 @@ fun SchedulePickerDialog(
                 text = { TimePicker(state = timePickerState) },
                 confirmButton = {
                     TextButton(onClick = {
-                        // DatePicker reports its selection as UTC midnight for the chosen
-                        // calendar date (a deliberate Material3 design choice, to keep date
-                        // selection itself independent of the device's local zone) - re-anchor
-                        // that date to the device's real zone once combined with the picked
-                        // time, rather than the millis value drifting a day off in some zones.
+                        // DatePicker returns UTC midnight for the picked date. Convert to a local date first or it
+                        // can land a day out depending on the time zone.
                         val date = Instant.ofEpochMilli(pickedDateMillis!!).atZone(ZoneOffset.UTC).toLocalDate()
                         val dateTime = LocalDateTime.of(date, LocalTime.of(timePickerState.hour, timePickerState.minute))
                         onConfirm(dateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli())

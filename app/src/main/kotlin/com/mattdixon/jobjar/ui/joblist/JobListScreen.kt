@@ -103,7 +103,6 @@ import com.mattdixon.jobjar.ui.theme.appCardBorder
 import com.mattdixon.jobjar.ui.theme.appCardColors
 import com.mattdixon.jobjar.util.formatScheduledDateTime
 
-/** Consistent horizontal inset for every row on this screen. */
 private val ScreenHPadding = Spacing.xl
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -209,24 +208,12 @@ fun JobListScreen(
                 SegmentedButton(
                     selected = state.view == JobsView.SCHEDULED,
                     onClick = { viewModel.setView(JobsView.SCHEDULED) },
-                    // Repeating and Scheduled are mutually exclusive by design (see
-                    // JobsView.SCHEDULED's filter), so this tab stays enabled regardless of the
-                    // Repeating toggle instead of following Active/Completed's own disable rule -
-                    // there's no bypass relationship between the two to protect against here.
+                    // Scheduled never overlaps with Repeating, so it stays enabled.
                     shape = SegmentedButtonDefaults.itemShape(2, 3)
                 ) { Text(stringResource(R.string.filter_scheduled)) }
             }
 
-            // Every filter - current and future - lives in this one horizontally-scrollable
-            // row instead of each getting its own dedicated widget/row. Repeating and In
-            // Progress are plain toggle chips, cleared the same way they're set - tap again.
-            // Category opens a multi-select dropdown from its chip and always shows a fixed
-            // "Category · N" label rather than the actual selected names, so the chip's own
-            // width can never grow with the selection; each category clears the same way it's
-            // set too - re-tick its checkbox in the dropdown. There's deliberately no separate
-            // "clear all" control living in this row: that was a second element competing for
-            // the same scrollable space, which is exactly what caused it to visually collide
-            // with the Category chip.
+            // All filters live in this one scrolling row. Tap a chip again to clear it.
             LazyRow(
                 modifier = Modifier.fillMaxWidth(),
                 contentPadding = PaddingValues(horizontal = ScreenHPadding),
@@ -251,9 +238,7 @@ fun JobListScreen(
                 if (state.categories.isNotEmpty()) {
                     item {
                         Box {
-                            // The chip's own label never changes with the selection - only the
-                            // badge does - so the chip itself never resizes and can't throw off
-                            // the row's rhythm the way a growing "Category · N" label used to.
+                            // The label stays fixed and the badge shows the count, so the chip doesn't change size.
                             BadgedBox(
                                 badge = {
                                     if (state.selectedCategories.isNotEmpty()) {
@@ -283,11 +268,7 @@ fun JobListScreen(
                                         onClick = { viewModel.toggleCategory(category) }
                                     )
                                 }
-                                // Category is free text typed while creating/editing a job, with
-                                // no dedicated management screen of its own - this is the one
-                                // place that already lists every category in use, so it's also
-                                // where removing one belongs, rather than bolting a global,
-                                // multi-job action onto the single-job add/edit form.
+                                // Nowhere else lists every category, so editing them lives here.
                                 HorizontalDivider()
                                 DropdownMenuItem(
                                     text = { Text(stringResource(R.string.manage_categories_title)) },
@@ -304,8 +285,7 @@ fun JobListScreen(
             }
 
             if (!state.isLoaded) {
-                // First load from the database is near-instant; showing nothing for that moment
-                // beats flashing "No jobs yet" at someone who has plenty.
+                // Loads almost instantly; better to show nothing than flash "empty".
                 Spacer(Modifier.fillMaxSize())
             } else if (state.items.isEmpty()) {
                 Column(
@@ -433,13 +413,7 @@ fun JobListScreen(
     }
 }
 
-/**
- * Category is free text typed while creating/editing a job - there's no separate entity to
- * browse or manage, so this lists whatever's currently in use (from the same source as the
- * filter dropdown it's opened from) and lets each be detached from every job that has it. The
- * actual removal is a separate confirm step owned by the caller, not this dialog - deleting is
- * bulk and not undoable, so it shouldn't be one tap away from an otherwise-safe browsing list.
- */
+/** Lists categories in use so you can remove one. The caller confirms the removal. */
 @Composable
 private fun ManageCategoriesDialog(
     categories: List<String>,
@@ -551,10 +525,7 @@ private fun JobRow(
     val job = item.job
     val isSubtask = job.parentId != null
 
-    // A subtask row reads as genuinely subordinate, not just a same-looking card nudged over:
-    // inset from the screen edge, a size step down on the title, tighter padding, and left at
-    // a borderless, barely-tinted surfaceContainerLow rather than the parent's own white,
-    // outlined card - so it quietly recedes instead of competing with the row above it.
+    // Subtasks: indented, smaller title, no border, so they sit under their parent.
     val indent = if (isSubtask) Spacing.xxl else 0.dp
     val rowPadding = if (isSubtask) Spacing.md else Spacing.lg
     val titleStyle = if (isSubtask) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium
@@ -596,13 +567,7 @@ private fun JobRow(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                // A plain Row neither wraps nor scrolls, so once enough badges are present at
-                // once (e.g. In Progress + time + category + a subtask count) their combined
-                // width can exceed what's left after the trailing icons - and instead of just
-                // spilling off-screen, the badge that doesn't fit gets squeezed toward zero
-                // width, wrapping its text one character per line and inflating the whole row's
-                // height. FlowRow keeps every badge at its natural size and wraps any overflow
-                // onto a second line instead - visible outright, no swipe needed to discover it.
+                // FlowRow wraps badges to a second line instead of squashing the last one.
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
                     verticalArrangement = Arrangement.spacedBy(Spacing.xs)
@@ -644,11 +609,7 @@ private fun JobRow(
                     )
                 }
             }
-            // Only a parent with subtasks needs a way to reveal/hide its group - groups default
-            // to collapsed, so this is the sole way in besides an active search/filter that
-            // auto-reveals matches. Sits inside the same Card(onClick = ...) as the overflow
-            // menu icon below it and relies on the same nested-clickable isolation to avoid also
-            // triggering the row's own navigate-to-detail click.
+            // Expand/collapse for parents. Groups start collapsed (search and filters open them).
             if (item.subtaskTotal > 0) {
                 IconButton(onClick = onToggleExpanded) {
                     Icon(
@@ -679,8 +640,6 @@ private fun JobRow(
                         },
                         onClick = { menuExpanded = false; onToggleDone() }
                     )
-                    // Starting doesn't need the subtask guard completing does - nothing gets
-                    // silently closed by picking a job up, so it's a plain toggle either way.
                     if (job.isInProgress) {
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.action_move_to_jar)) },
@@ -694,9 +653,7 @@ private fun JobRow(
                             onClick = { menuExpanded = false; onToggleInProgress() }
                         )
                     }
-                    // Scheduling a repeating job would leave a calendar event describing a
-                    // one-off occurrence of something that keeps coming back - out of scope for
-                    // this feature, so the menu simply doesn't offer it for those jobs.
+                    // Repeating jobs can't be scheduled.
                     if (job.recurrenceDays == null) {
                         if (job.scheduledDate != null) {
                             DropdownMenuItem(

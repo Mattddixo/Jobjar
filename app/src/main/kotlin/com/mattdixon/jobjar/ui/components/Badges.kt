@@ -10,8 +10,7 @@ import androidx.compose.ui.unit.dp
 import com.mattdixon.jobjar.ui.theme.AppShapes
 import com.mattdixon.jobjar.util.formatMinutes
 
-/** [compact] trims the padding for tighter contexts (e.g. the Jar screen's drawn-job cards)
- * without changing how the badge looks anywhere that doesn't opt in. */
+/** [compact] = tighter padding, for the Jar cards. */
 @Composable
 fun InfoBadge(text: String, modifier: Modifier = Modifier, compact: Boolean = false) {
     Surface(

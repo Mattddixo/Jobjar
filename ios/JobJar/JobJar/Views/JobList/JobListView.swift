@@ -21,16 +21,16 @@ struct JobListView: View {
     private var items: [JobListItem] { viewModel.items(allJobs: allJobs) }
 
     private var emptyStateText: String {
-        if viewModel.showRepeatingOnly { return "No repeating jobs yet." }
-        if viewModel.showCompleted { return "No completed jobs yet." }
-        return "No jobs yet. Tap + to add one."
+        if viewModel.showRepeatingOnly { return "No repeating jobs." }
+        if viewModel.showCompleted { return "Nothing done yet." }
+        return "The jar's empty. Tap + to add a job."
     }
 
     var body: some View {
         VStack(spacing: 0) {
             Picker("", selection: $viewModel.showCompleted) {
-                Text("Active").tag(false)
-                Text("Completed").tag(true)
+                Text("To do").tag(false)
+                Text("Done").tag(true)
             }
             .pickerStyle(.segmented)
             .disabled(viewModel.showRepeatingOnly)
@@ -134,8 +134,8 @@ struct JobListView: View {
             if let item = itemPendingDelete {
                 Text(
                     item.subtaskTotal > 0
-                        ? "\"\(item.job.title)\" and its \(countLabel(item.subtaskTotal, "subtask", "subtasks")) will be removed."
-                        : "\"\(item.job.title)\" will be removed."
+                        ? "\(item.job.title) and its \(countLabel(item.subtaskTotal, "subtask", "subtasks")) will be deleted."
+                        : "\(item.job.title) will be deleted."
                 )
             }
         }
@@ -153,14 +153,14 @@ struct JobListView: View {
         } message: {
             if let item = itemPendingForceComplete {
                 let incomplete = item.subtaskTotal - item.subtaskDone
-                Text("\(countLabel(incomplete, "subtask is", "subtasks are")) still open. Completing this job will mark \(incomplete == 1 ? "it" : "them") done too.")
+                Text(incomplete == 1 ? "There's still 1 subtask open. It'll be marked done too." : "There are still \(incomplete) subtasks open. They'll be marked done too.")
             }
         }
     }
 }
 
 extension JobListView {
-    /// Completing offers an Undo; reopening doesn't need one - it's its own undo.
+    /// Only completing offers Undo. Reopening is its own undo.
     private func toggleDone(_ job: Job) {
         let completing = job.isPending()
         let snapshot = repository.toggleDone(job, allJobs: allJobs)

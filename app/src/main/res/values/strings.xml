@@ -1,14 +1,14 @@
 <resources>
     <string name="app_name">Job Jar</string>
 
-    <!-- Shared across multiple screens - kept as single keys instead of duplicated per screen -->
+    <!-- Shared -->
     <string name="action_cancel">Cancel</string>
     <string name="action_delete">Delete</string>
     <string name="action_mark_done">Mark done</string>
     <string name="dialog_mark_as_done_title">Mark as done?</string>
-    <string name="label_part_of">Part of: %1$s</string>
-    <string name="label_waiting_on">Waiting on: %1$s</string>
-    <string name="label_remaining_of_total">%1$s left of %2$s total</string>
+    <string name="label_part_of">Part of %1$s</string>
+    <string name="label_waiting_on">Waiting on %1$s</string>
+    <string name="label_remaining_of_total">%1$s left of %2$s</string>
     <string name="long_job_chip_label">4+ hrs</string>
     <string name="cd_add_subtask">Add subtask</string>
     <string name="action_undo">Undo</string>
@@ -16,24 +16,24 @@
     <string name="action_open_settings">Open settings</string>
     <string name="action_not_now">Not now</string>
     <string name="cd_settings">Settings</string>
-    <string name="snackbar_completed">Completed \"%1$s\"</string>
-    <string name="snackbar_deleted">Deleted \"%1$s\"</string>
+    <string name="snackbar_completed">Done: %1$s</string>
+    <string name="snackbar_deleted">Deleted %1$s</string>
     <string name="tab_jar">Jar</string>
     <string name="tab_jobs">Jobs</string>
     <string name="tab_stats">Stats</string>
     <plurals name="dialog_force_complete_body">
-        <item quantity="one">%1$d subtask is still open. Completing this job will mark it done too.</item>
-        <item quantity="other">%1$d subtasks are still open. Completing this job will mark them done too.</item>
+        <item quantity="one">There\'s still %1$d subtask open. It\'ll be marked done too.</item>
+        <item quantity="other">There are still %1$d subtasks open. They\'ll be marked done too.</item>
     </plurals>
     <plurals name="completed_n_times">
-        <item quantity="one"> · completed once</item>
-        <item quantity="other"> · completed %1$d times</item>
+        <item quantity="one"> · done once</item>
+        <item quantity="other"> · done %1$d times</item>
     </plurals>
 
-    <!-- Repeat schedules -->
+    <!-- Repeats -->
     <string name="repeat_daily">Daily</string>
     <string name="repeat_weekly">Weekly</string>
-    <string name="repeat_biweekly">Biweekly</string>
+    <string name="repeat_biweekly">Every 2 weeks</string>
     <string name="repeat_monthly">Monthly</string>
     <plurals name="repeat_every_n_days">
         <item quantity="one">Every day</item>
@@ -44,11 +44,11 @@
     <string name="repeat_weekends">Weekends</string>
     <string name="repeat_every_named_day">Every %1$s</string>
     <string name="due_now">Due now</string>
-    <string name="due_later_today">Next: later today</string>
-    <string name="due_tomorrow">Next: tomorrow</string>
+    <string name="due_later_today">Back later today</string>
+    <string name="due_tomorrow">Back tomorrow</string>
     <plurals name="due_in_n_days">
-        <item quantity="one">Next: in %1$d day</item>
-        <item quantity="other">Next: in %1$d days</item>
+        <item quantity="one">Back in %1$d day</item>
+        <item quantity="other">Back in %1$d days</item>
     </plurals>
     <string name="cd_expand_subtasks">Show subtasks</string>
     <string name="cd_collapse_subtasks">Hide subtasks</string>
@@ -57,148 +57,148 @@
     <string name="cd_back">Back</string>
     <string name="cd_edit">Edit</string>
     <string name="action_start">Start</string>
-    <string name="action_move_to_jar">Move back to jar</string>
+    <string name="action_move_to_jar">Put back in jar</string>
     <string name="badge_in_progress">In progress</string>
-    <string name="filter_in_progress">In Progress</string>
+    <string name="filter_in_progress">In progress</string>
     <string name="action_next">Next</string>
     <string name="action_schedule">Schedule</string>
     <string name="action_unschedule">Unschedule</string>
-    <string name="dialog_calendar_permission_title">Calendar permission needed</string>
-    <string name="dialog_calendar_permission_body">Job Jar needs calendar access to schedule a job - it writes one event to your device\'s calendar, which then syncs to your account the same way any other calendar event does. Nothing is read back, and no data leaves your device.</string>
-    <string name="dialog_pick_time_title">Pick a time</string>
-    <string name="badge_scheduled">Scheduled: %1$s</string>
+    <string name="dialog_calendar_permission_title">Allow calendar access</string>
+    <string name="dialog_calendar_permission_body">To schedule a job, Job Jar adds it to your calendar. Turn on calendar access in settings to use this.</string>
+    <string name="dialog_pick_time_title">What time?</string>
+    <string name="badge_scheduled">Scheduled %1$s</string>
 
-    <!-- Draw (Jar) screen -->
-    <string name="draw_screen_title">The Job Jar</string>
+    <!-- Jar tab -->
+    <string name="draw_screen_title">Job Jar</string>
     <string name="draw_button">Draw a job</string>
     <plurals name="draw_jar_count">
-        <item quantity="one">%1$d in the jar</item>
-        <item quantity="other">%1$d in the jar</item>
+        <item quantity="one">%1$d job in the jar</item>
+        <item quantity="other">%1$d jobs in the jar</item>
     </plurals>
     <plurals name="draw_in_progress_count">
         <item quantity="one">%1$d in progress</item>
         <item quantity="other">%1$d in progress</item>
     </plurals>
     <plurals name="draw_budget_summary">
-        <item quantity="one">%1$d job · %2$s left of %3$s</item>
-        <item quantity="other">%1$d jobs · %2$s left of %3$s</item>
+        <item quantity="one">%1$d job · %2$s spare of %3$s</item>
+        <item quantity="other">%1$d jobs · %2$s spare of %3$s</item>
     </plurals>
-    <string name="draw_section_time_available">TIME AVAILABLE</string>
+    <string name="draw_section_time_available">TIME</string>
     <string name="draw_section_how_many">HOW MANY</string>
     <string name="draw_section_category">CATEGORY</string>
     <string name="draw_category_any">Any</string>
     <string name="draw_category_n_selected">%1$d categories</string>
-    <string name="draw_no_match_long">Nothing needs %1$s+ yet. Try a shorter time, or add a bigger job.</string>
-    <string name="draw_no_match_short">No jobs fit that time and category. Try a longer time or add more jobs.</string>
-    <string name="draw_empty_prompt">Set your time and tap \"Draw a job\" to pick something from the jar.</string>
-    <string name="draw_redraw">Redraw</string>
-    <string name="draw_close_jar">I changed my mind</string>
-    <string name="draw_subtasks_progress">%1$d/%2$d subtasks done · %3$s left</string>
+    <string name="draw_no_match_long">Nothing takes %1$s or more right now.</string>
+    <string name="draw_no_match_short">Nothing fits. Try more time or a different category.</string>
+    <string name="draw_empty_prompt">How much time have you got? Pick it above and draw.</string>
+    <string name="draw_redraw">Draw again</string>
+    <string name="draw_close_jar">Never mind</string>
+    <string name="draw_subtasks_progress">%1$d of %2$d subtasks done · %3$s left</string>
 
-    <!-- Jobs list screen -->
+    <!-- Jobs tab -->
     <string name="jobs_screen_title">Jobs</string>
     <string name="cd_search_jobs">Search jobs</string>
     <string name="cd_sort">Sort</string>
     <string name="cd_add_job">Add job</string>
-    <string name="filter_active">Active</string>
-    <string name="filter_completed">Completed</string>
+    <string name="filter_active">To do</string>
+    <string name="filter_completed">Done</string>
     <string name="filter_scheduled">Scheduled</string>
     <string name="filter_repeating">Repeating</string>
     <string name="filter_category_default">Category</string>
     <string name="cd_more_options">More options</string>
-    <string name="sort_shortest_first">Shortest first</string>
+    <string name="sort_shortest_first">Quickest first</string>
     <string name="sort_longest_first">Longest first</string>
     <string name="sort_priority">Priority</string>
     <string name="sort_newest">Newest</string>
     <string name="sort_category">Category</string>
     <plurals name="dialog_delete_job_with_subtasks">
-        <item quantity="one">\"%1$s\" and its %2$d subtask will be removed.</item>
-        <item quantity="other">\"%1$s\" and its %2$d subtasks will be removed.</item>
+        <item quantity="one">%1$s and its subtask will be deleted.</item>
+        <item quantity="other">%1$s and its %2$d subtasks will be deleted.</item>
     </plurals>
     <plurals name="dialog_remove_category_body">
-        <item quantity="one">\"%1$s\" will be removed from %2$d job. That job will have no category - nothing else about it changes.</item>
-        <item quantity="other">\"%1$s\" will be removed from %2$d jobs. Those jobs will have no category - nothing else about them changes.</item>
+        <item quantity="one">%1$s is used by %2$d job. It\'ll be left without a category.</item>
+        <item quantity="other">%1$s is used by %2$d jobs. They\'ll be left without a category.</item>
     </plurals>
     <string name="menu_open">Open</string>
     <string name="dialog_delete_job_title">Delete job?</string>
-    <string name="dialog_delete_job_plain">\"%1$s\" will be removed.</string>
-    <string name="manage_categories_title">Manage categories</string>
+    <string name="dialog_delete_job_plain">%1$s will be deleted.</string>
+    <string name="manage_categories_title">Edit categories</string>
     <string name="cd_remove_category">Remove %1$s</string>
     <string name="dialog_remove_category_title">Remove category?</string>
     <string name="action_remove">Remove</string>
     <string name="action_done">Done</string>
     <string name="cd_close_search">Close search</string>
     <string name="cd_clear_search">Clear search</string>
-    <string name="empty_no_search_match">No jobs match \"%1$s\".</string>
-    <string name="empty_no_filter_match">No jobs match these filters.</string>
-    <string name="empty_no_completed">No completed jobs yet.</string>
-    <string name="empty_no_scheduled">No scheduled jobs. Schedule one from the Jar tab or a job\'s own menu.</string>
-    <string name="empty_no_jobs">No jobs yet. Tap + to add one.</string>
+    <string name="empty_no_search_match">Nothing matches \"%1$s\".</string>
+    <string name="empty_no_filter_match">Nothing matches those filters.</string>
+    <string name="empty_no_completed">Nothing done yet.</string>
+    <string name="empty_no_scheduled">Nothing scheduled.</string>
+    <string name="empty_no_jobs">The jar\'s empty. Tap + to add a job.</string>
 
-    <!-- Add/Edit job screen -->
+    <!-- Add / edit -->
     <string name="addedit_title_edit_subtask">Edit subtask</string>
     <string name="addedit_title_edit_job">Edit job</string>
     <string name="addedit_title_new_subtask">New subtask</string>
     <string name="addedit_title_new_job">New job</string>
     <string name="cd_save">Save</string>
-    <string name="field_title_label">Title</string>
-    <string name="field_notes_label">Notes (optional)</string>
+    <string name="field_title_label">What needs doing?</string>
+    <string name="field_notes_label">Notes</string>
     <string name="title_char_count">%1$d/%2$d</string>
     <string name="duration_question">How long will it take?</string>
-    <string name="field_custom_minutes">Custom minutes</string>
+    <string name="field_custom_minutes">Minutes</string>
     <string name="category_label">Category</string>
-    <string name="category_hint">e.g. Chores, Work, Errands</string>
+    <string name="category_hint">Chores, errands, garden…</string>
     <string name="priority_label">Priority</string>
-    <string name="depends_on_label">Depends on</string>
-    <string name="depends_on_hint">Optional: this subtask stays out of the jar\'s random draw until the one it depends on is done. You can still check it off by hand any time.</string>
-    <string name="depends_on_none">None</string>
+    <string name="depends_on_label">Do this after</string>
+    <string name="depends_on_hint">It won\'t be drawn until that one\'s done. You can still tick it off whenever you like.</string>
+    <string name="depends_on_none">Nothing</string>
     <string name="repeat_label">Repeat</string>
-    <string name="field_custom_recurrence">Custom: every N days</string>
+    <string name="field_custom_recurrence">Every how many days?</string>
     <string name="repeat_mode_interval">Every few days</string>
-    <string name="repeat_mode_weekdays">Specific days</string>
-    <string name="repeat_interval_explainer">Comes back this many days after you finish it.</string>
-    <string name="repeat_weekdays_explainer">Comes back at the start of each chosen day, whenever you last finished it.</string>
-    <string name="repeat_blocked_by_subtasks">Jobs with subtasks can\'t repeat. Remove its subtasks first if you want this one to repeat.</string>
-    <string name="subtasks_blocked_by_repeat">Repeating jobs can\'t have subtasks. Turn off Repeat to break this job down.</string>
-    <string name="repeat_explainer">Completing a repeating job reopens it automatically after the interval, instead of leaving it done for good.</string>
+    <string name="repeat_mode_weekdays">On set days</string>
+    <string name="repeat_interval_explainer">Counts from the day you finish it.</string>
+    <string name="repeat_weekdays_explainer">Comes back each chosen day, even if you were late last time.</string>
+    <string name="repeat_blocked_by_subtasks">Jobs with subtasks can\'t repeat.</string>
+    <string name="subtasks_blocked_by_repeat">Repeating jobs can\'t have subtasks.</string>
+    <string name="repeat_explainer">Puts the job back in the jar after you finish it.</string>
     <string name="subtasks_title">Subtasks</string>
-    <string name="subtasks_save_first_hint">Adding a subtask saves this job first, using what you\'ve filled in so far.</string>
+    <string name="subtasks_save_first_hint">This saves the job first.</string>
 
-    <!-- Job detail screen -->
-    <string name="jobdetail_title">Job details</string>
-    <string name="job_not_found">Job not found.</string>
-    <string name="priority_display">Priority: %1$s</string>
-    <string name="action_mark_as_done">Mark as done</string>
-    <string name="action_make_available_now">Make available now</string>
-    <string name="action_mark_as_not_done">Mark as not done</string>
+    <!-- Job details -->
+    <string name="jobdetail_title">Job</string>
+    <string name="job_not_found">This job has been deleted.</string>
+    <string name="priority_display">%1$s priority</string>
+    <string name="action_mark_as_done">Mark done</string>
+    <string name="action_make_available_now">Do it now</string>
+    <string name="action_mark_as_not_done">Mark not done</string>
 
-    <!-- Subtasks section (shared component) -->
+    <!-- Subtasks -->
     <string name="subtasks_done_count">%1$d/%2$d done</string>
-    <string name="subtasks_empty_hint">Break this job into smaller pieces you can draw on their own.</string>
-    <string name="subtasks_allocation_under">%1$s left to allocate · %2$s total</string>
-    <string name="subtasks_allocation_exact">Fully allocated · %1$s total</string>
-    <string name="subtasks_allocation_over">Over by %1$s · %2$s total</string>
-    <string name="subtasks_allocation_running_total">Subtasks so far: %1$s</string>
+    <string name="subtasks_empty_hint">Big job? Split it into smaller ones.</string>
+    <string name="subtasks_allocation_under">%1$s unassigned · %2$s total</string>
+    <string name="subtasks_allocation_exact">%1$s total</string>
+    <string name="subtasks_allocation_over">%1$s over · %2$s total</string>
+    <string name="subtasks_allocation_running_total">Subtasks: %1$s</string>
 
-    <!-- Stats screen -->
+    <!-- Stats -->
     <string name="stats_screen_title">Stats</string>
-    <string name="stat_active_jobs">Active jobs</string>
-    <string name="stat_completed">Completed</string>
-    <string name="stat_time_invested">Time invested</string>
+    <string name="stat_active_jobs">To do</string>
+    <string name="stat_completed">Done</string>
+    <string name="stat_time_invested">Time spent</string>
     <string name="stats_by_category">By category</string>
-    <string name="stats_empty_hint">Complete a few jobs to see your stats here.</string>
+    <string name="stats_empty_hint">Finish a few jobs and your stats will show up here.</string>
     <string name="stats_category_summary">%1$d done · %2$s</string>
 
-    <!-- Settings screen -->
+    <!-- Settings -->
     <string name="settings_title">Settings</string>
-    <string name="settings_appearance">Appearance</string>
-    <string name="theme_system">System</string>
+    <string name="settings_appearance">Theme</string>
+    <string name="theme_system">Auto</string>
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
-    <string name="settings_your_data">Your data</string>
-    <string name="settings_data_explainer">Your jobs are stored only on this phone. Export saves a copy you can keep anywhere - Drive, email, a computer - and import it again later, on this phone or a new one.</string>
-    <string name="settings_export">Export jobs</string>
-    <string name="settings_import">Import jobs</string>
+    <string name="settings_your_data">Backup</string>
+    <string name="settings_data_explainer">Your jobs are only stored on this phone. Export a copy to keep somewhere safe, or to move to a new phone.</string>
+    <string name="settings_export">Export</string>
+    <string name="settings_import">Import</string>
     <plurals name="settings_exported">
         <item quantity="one">Exported %1$d job</item>
         <item quantity="other">Exported %1$d jobs</item>
@@ -207,20 +207,20 @@
         <item quantity="one">Imported %1$d job</item>
         <item quantity="other">Imported %1$d jobs</item>
     </plurals>
-    <string name="settings_export_failed">Couldn\'t save the export file.</string>
-    <string name="settings_import_failed">Couldn\'t read that file. Nothing was changed.</string>
-    <string name="settings_import_not_backup">That file isn\'t a Job Jar export. Nothing was changed.</string>
-    <string name="settings_import_newer">That export is from a newer version of Job Jar. Update the app, then try again.</string>
+    <string name="settings_export_failed">Export failed. Try saving somewhere else.</string>
+    <string name="settings_import_failed">Couldn\'t read that file.</string>
+    <string name="settings_import_not_backup">That\'s not a Job Jar backup.</string>
+    <string name="settings_import_newer">That backup is from a newer version. Update Job Jar and try again.</string>
     <string name="dialog_import_title">Replace your jobs?</string>
     <plurals name="dialog_import_body">
-        <item quantity="one">This file has %1$d job.</item>
-        <item quantity="other">This file has %1$d jobs.</item>
+        <item quantity="one">The backup has %1$d job.</item>
+        <item quantity="other">The backup has %1$d jobs.</item>
     </plurals>
     <plurals name="dialog_import_replaces">
-        <item quantity="one">Importing replaces the %1$d job on this phone. Export first if you want to keep it.</item>
-        <item quantity="other">Importing replaces the %1$d jobs on this phone. Export first if you want to keep them.</item>
+        <item quantity="one">It\'ll replace the %1$d job you have now.</item>
+        <item quantity="other">It\'ll replace the %1$d jobs you have now.</item>
     </plurals>
     <string name="settings_about">About</string>
-    <string name="settings_version">Job Jar %1$s</string>
-    <string name="settings_privacy">No account, no ads, no tracking. Job Jar has no internet access - your jobs never leave this phone unless you export them. Calendar access is only used to add the jobs you schedule.</string>
+    <string name="settings_version">Version %1$s</string>
+    <string name="settings_privacy">No account, no ads, no tracking. Your jobs stay on your phone.</string>
 </resources>

@@ -217,7 +217,7 @@ class JobRepositoryTest {
 
     @Test
     fun anEventIdThatIsntOursIsNeverDeleted() = runTest {
-        // Simulates a backup restored onto a new phone: the stored id now belongs to someone else's event.
+        // Like after restoring a backup on a new phone: the stored id is someone else's event.
         calendar.events[555L] = FakeCalendar.Event(jobId = 9999, title = "Mum's birthday", start = 0, end = 0)
         val job = add("Dentist")
         dao.setSchedule(job, now + 3_600_000, 555L)

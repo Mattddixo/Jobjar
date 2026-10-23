@@ -4,21 +4,15 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-/** The threshold, in minutes, at which a job is treated as "long" - the "4+ hrs" option on both the job form and the draw screen. */
+/** "4+ hrs" on the job form and the Jar tab. */
 const val LONG_JOB_MINUTES = 240
 
 /**
- * A job can optionally be a subtask of another job via [parentId]. Subtasks are one level
- * deep only - a job that already has a parent cannot itself have subtasks. Only a top-level
- * job (one that isn't itself a subtask) can repeat, and a repeating job can't have subtasks.
+ * A job, or a subtask of one if [parentId] is set. Subtasks only go one level deep. Repeating
+ * jobs can't be subtasks or have subtasks.
  *
- * A repeating job (non-null [recurrenceDays]) never persists [isDone] = true - completing it
- * instead advances [nextDueAt] and bumps [completionCount] (see [JobRepository]), so the same
- * row just cycles rather than piling up a new "done" row per occurrence. [nextDueAt] is the
- * schedule: null means due right now (true for a fresh repeating job that's never been
- * completed yet, or a due one); once completed it's set to that moment plus [recurrenceDays]
- * days, i.e. the schedule is relative to when you actually did it, not a fixed calendar date -
- * unless [repeatWeekdays] pins it to specific days of the week instead.
+ * Repeating jobs never stay done. Completing one moves [nextDueAt] forward and bumps
+ * [completionCount] instead. Null [nextDueAt] means it's due now.
  */
 @Entity(tableName = "jobs", indices = [Index("parentId")])
 data class Job(
@@ -29,14 +23,7 @@ data class Job(
     val category: String = "",
     val priority: Priority = Priority.NORMAL,
     val isDone: Boolean = false,
-    /**
-     * Actively being worked on right now. Deliberately a separate flag from [isDone] rather than
-     * folding both into one tri-state status column: [isDone]'s state machine (repeating-job
-     * cycling, parent auto-complete/reopen cascades) is already carefully correct, and layering
-     * in-progress on top as an orthogonal bit avoids touching any of that. The only invariant
-     * this flag has to maintain is "never true at the same time as [isDone]" - every path that
-     * sets isDone = true also clears this (see [JobDao.markDone], [JobRepository.cycleRepeatingJob]).
-     */
+    /** Being worked on right now. Never true at the same time as [isDone]. */
     val isInProgress: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
     val completedAt: Long? = null,
@@ -44,41 +31,24 @@ data class Job(
     val parentId: Long? = null,
     val recurrenceDays: Int? = null,
     /**
-     * Only meaningful when [recurrenceDays] is non-null. Null = the classic "every N days after
-     * I finish it" schedule. Non-null = a bitmask of weekdays (see [weekdayBit]; Monday is bit 0)
-     * the job comes due on instead - "every Monday and Thursday" - in which case [recurrenceDays]
-     * is just the nominal "this repeats" flag (7) and [nextDueAt] is the start of the next
-     * matching day. See [nextDueAfterCompletion].
+     * Set when the job repeats on particular weekdays instead of every N days. Bitmask, Monday is
+     * bit 0 (see [weekdayBit]). [recurrenceDays] is just 7 in that case.
      */
     val repeatWeekdays: Int? = null,
     val nextDueAt: Long? = null,
     val completionCount: Int = 0,
-    /** Only meaningful when this is itself a subtask: the sibling subtask (same [parentId]) that must be done first, if any. */
+    /** Subtasks only: a sibling that has to be done first. */
     val dependsOnSubtaskId: Long? = null,
     /**
-     * When non-null, this job is booked for a specific date/time (see [JobRepository.scheduleJob])
-     * and excluded from the random draw - you've already committed it to a day, so the jar
-     * shouldn't also hand it to you before then. Deliberately a separate concept from
-     * [isInProgress]: scheduling is a planning action, starting is a "working on it right now"
-     * one, and only the latter is meant to ever flip automatically (scheduling never does, and
-     * starting or completing a scheduled job clears the schedule - see [JobRepository]). Only
-     * ever set for a one-off job or a subtask; a repeating job's own [nextDueAt] cycling already
-     * covers "when," so scheduling isn't offered for one.
+     * When the job is booked for. Booked jobs stay out of the jar. Starting or finishing the job
+     * clears it. Never set on repeating jobs.
      */
     val scheduledDate: Long? = null,
-    /** The device Calendar Provider event id [scheduledDate] was written to, so a later
-     * reschedule/unschedule/delete updates or removes that exact event instead of leaving
-     * orphaned duplicates on the user's calendar. Null if scheduling ever failed to actually
-     * write an event (e.g. permission denied, no writable calendar) - [scheduledDate] can still
-     * be set in that case, since the in-app "scheduled" state shouldn't depend on the calendar
-     * write having succeeded. */
+    /** Calendar event for [scheduledDate], if one was written (permission can be off). */
     val calendarEventId: Long? = null
 )
 
-/**
- * Is this job something you could act on right now? For a repeating job that's a due-date
- * check, not [isDone] (which a repeating job never persists as true - see [JobRepository]).
- */
+/** Due now? For repeating jobs that's about [nextDueAt], not [isDone]. */
 fun Job.isPending(now: Long = System.currentTimeMillis()): Boolean =
     if (recurrenceDays != null) {
         nextDueAt == null || nextDueAt <= now
@@ -87,42 +57,25 @@ fun Job.isPending(now: Long = System.currentTimeMillis()): Boolean =
     }
 
 /**
- * Whether this job could actually be pulled from the jar right now: [isPending] (not done, and
- * due if it's a repeating job) but also not already [isInProgress] or [scheduledDate]-booked.
- * Kept separate from [isPending] itself rather than folding the in-progress/scheduled checks
- * into it, because the two mean different things to different callers - the Jobs list's
- * Active/Completed split wants the broader "not done" sense of pending (an in-progress or
- * scheduled job is still "Active"), while the draw pool and the jar's headline count want this
- * narrower "genuinely available" sense.
+ * Could the jar hand this out right now? Pending, and not already started or booked.
+ * (The Jobs list still counts started/booked jobs as to-do, hence two functions.)
  */
 fun Job.isAvailableToDraw(now: Long = System.currentTimeMillis()): Boolean =
     isPending(now) && !isInProgress && scheduledDate == null
 
 /**
- * A blocked subtask (prerequisite not yet done) is only excluded from the random draw pool -
- * it's still fully completable by hand at any time, out of order if you want. [siblingsById]
- * should map every subtask sharing this job's [parentId] by id.
+ * Is this subtask's prerequisite done? Only matters for the draw, you can still tick it off
+ * by hand. [siblingsById]: the other subtasks of the same parent.
  */
 fun Job.isUnblocked(siblingsById: Map<Long, Job>): Boolean {
     val prerequisiteId = dependsOnSubtaskId ?: return true
     return siblingsById[prerequisiteId]?.isDone ?: true
 }
 
-/**
- * True unless this subtask's own parent is currently in progress - the same "excluded from the
- * random draw, still fully completable by hand" treatment a dependency-blocked subtask already
- * gets (see [isUnblocked]), for the same reason: if you've committed to working through the
- * overall project, the jar shouldn't also hand you a random piece of it as its own separate
- * draw. [parent] is looked up by the caller (typically from a full job map by id); this only
- * answers the question given that lookup, same division of responsibility as [isUnblocked].
- */
+/** Subtasks of a job you've already started don't get drawn on their own. */
 fun Job.isParentAvailable(parent: Job?): Boolean = parent?.isInProgress != true
 
-/**
- * Which of [siblings] (subtasks sharing the same parent) [excludingSelfId] could validly depend
- * on, without creating a cycle. A candidate is excluded if it already (transitively) depends on
- * the subtask being edited, since linking to it would close a loop.
- */
+/** Siblings the subtask [excludingSelfId] could depend on without making a loop. */
 fun subtasksAvailableAsDependency(siblings: List<Job>, excludingSelfId: Long?): List<Job> {
     val byId = siblings.associateBy { it.id }
     fun eventuallyDependsOn(startId: Long, targetId: Long): Boolean {
@@ -140,29 +93,15 @@ fun subtasksAvailableAsDependency(siblings: List<Job>, excludingSelfId: Long?): 
     }
 }
 
-/**
- * Minutes still "owed" against a parent's estimate: [estimatedMinutes] minus time already
- * accounted for by completed subtasks. Not clamped to zero - a parent whose subtasks were
- * never allowed to exceed it (see [JobRepository]'s grow-on-write invariant) shouldn't hit
- * this, but if it ever does, a negative remainder simply matches any time budget, since
- * there's little effort left to decide about.
- */
+/** Parent estimate minus finished subtasks. Can go negative, which is fine. */
 fun remainingMinutesOf(estimatedMinutes: Int, subtasks: List<Job>): Int =
     estimatedMinutes - subtasks.filter { it.isDone }.sumOf { it.estimatedMinutes }
 
 fun Job.remainingMinutes(subtasks: List<Job>): Int = remainingMinutesOf(estimatedMinutes, subtasks)
 
 /**
- * How much of [estimatedMinutes] is still unspoken-for while *building* a job's subtask list -
- * [estimatedMinutes] minus [subtasksTotalMinutes] (every subtask's own estimate, done or not, or
- * a live projection of that while one's still being edited). Deliberately a different question
- * from [remainingMinutesOf] (which only counts unfinished work, for "how much is left to
- * actually do"): a freshly created subtask is never done, so that metric can't tell you anything
- * useful while you're still dividing up the time - this one can, and can go negative, which is
- * the point - it's the cue that the subtasks you've sketched out already add up to more than the
- * total you typed. Takes the sum directly rather than a `List<Job>` since the add/edit screen's
- * own use of this needs to substitute a subtask's live in-progress estimate for its last-saved
- * one, which isn't a real `Job` to sum over.
+ * Estimate minus all subtask estimates, done or not. Used while splitting a job up, to show
+ * how much time hasn't been handed out yet. Negative means the subtasks add up to more.
  */
 fun unallocatedMinutesOf(estimatedMinutes: Int, subtasksTotalMinutes: Int): Int =
     estimatedMinutes - subtasksTotalMinutes

@@ -28,7 +28,7 @@ struct DrawView: View {
 
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
-                        Text("Time available").font(.subheadline.weight(.semibold))
+                        Text("Time").font(.subheadline.weight(.semibold))
                         Spacer()
                         Text(viewModel.longJobsOnly ? "4+ hrs" : formatMinutes(viewModel.availableMinutes))
                             .font(.title3.weight(.semibold))
@@ -51,9 +51,7 @@ struct DrawView: View {
                                     action: { viewModel.setAvailableMinutes(minutes) }
                                 )
                             }
-                            // Not a ceiling like the other chips - an explicit "pull from the
-                            // big projects" request, since the slider above can't reach past
-                            // 4 hours.
+                            // Not a duration: switches to "4hr or longer".
                             FilterChip(
                                 label: "4+ hrs",
                                 selected: viewModel.longJobsOnly,
@@ -118,13 +116,13 @@ struct DrawView: View {
                 } else if viewModel.noMatchFound {
                     Text(
                         viewModel.longJobsOnly
-                            ? "Nothing needs \(formatMinutes(longJobMinutes))+ yet. Try a shorter time, or add a bigger job."
-                            : "No jobs fit that time and category. Try a longer time or add more jobs."
+                            ? "Nothing takes \(formatMinutes(longJobMinutes)) or more right now."
+                            : "Nothing fits. Try more time or a different category."
                     )
                     .font(.body)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
-                    Text("Set your time and tap \"Draw a job\" to pick something from the jar.")
+                    Text("How much time have you got? Pick it above and draw.")
                         .font(.body)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -133,13 +131,13 @@ struct DrawView: View {
             .padding(16)
             .animation(.easeInOut(duration: 0.2), value: viewModel.drawnJob?.id)
         }
-        .navigationTitle("The Job Jar")
+        .navigationTitle("Job Jar")
         .alert("Mark as done?", isPresented: $showForceCompleteDialog) {
             Button("Cancel", role: .cancel) {}
             Button("Mark done") { completeDrawnJob() }
         } message: {
             let incomplete = (viewModel.drawnContext?.subtaskTotal ?? 0) - (viewModel.drawnContext?.subtaskDone ?? 0)
-            Text("\(countLabel(incomplete, "subtask is", "subtasks are")) still open. Completing this job will mark \(incomplete == 1 ? "it" : "them") done too.")
+            Text(incomplete == 1 ? "There's still 1 subtask open. It'll be marked done too." : "There are still \(incomplete) subtasks open. They'll be marked done too.")
         }
     }
 
@@ -169,14 +167,14 @@ private struct DrawnJobCard: View {
             }
 
             if let parentTitle = context?.parentTitle {
-                Text("Part of: \(parentTitle)")
+                Text("Part of \(parentTitle)")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
 
             if let context, context.subtaskTotal > 0 {
                 Text(
-                    "\(context.subtaskDone)/\(context.subtaskTotal) subtasks done · " +
+                    "\(context.subtaskDone) of \(context.subtaskTotal) subtasks done · " +
                         "\(formatMinutes(context.remainingMinutes ?? job.estimatedMinutes)) left of " +
                         "\(formatMinutes(job.estimatedMinutes)) total"
                 )
@@ -189,7 +187,7 @@ private struct DrawnJobCard: View {
             }
 
             HStack(spacing: 8) {
-                Button("Skip", action: onSkip)
+                Button("Draw again", action: onSkip)
                     .buttonStyle(.bordered)
                     .frame(maxWidth: .infinity)
                     .disabled(isBusy)
@@ -199,13 +197,13 @@ private struct DrawnJobCard: View {
                     .disabled(isBusy)
             }
 
-            Button("View details", action: onOpen)
+            Button("Details", action: onOpen)
                 .buttonStyle(.bordered)
                 .frame(maxWidth: .infinity)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        // The one warm spot in the app: whatever came out of the jar stands apart.
+        // Honey card for the drawn job.
         .background(RoundedRectangle(cornerRadius: 16).fill(Color("DrawnCard")))
     }
 }

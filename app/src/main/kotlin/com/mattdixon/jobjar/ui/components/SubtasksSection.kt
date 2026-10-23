@@ -37,14 +37,7 @@ import com.mattdixon.jobjar.ui.theme.appCardColors
 import com.mattdixon.jobjar.util.formatMinutes
 import kotlinx.coroutines.launch
 
-/**
- * The "Subtasks" list, progress summary, and add-subtask button for a top-level job. Shared by
- * the job detail screen and the job creation/edit screen so subtask management looks and works
- * identically everywhere it appears, instead of each screen reimplementing it.
- *
- * [parentId] must refer to a job that is itself NOT a subtask (subtasks are one level deep) -
- * callers are responsible for that check, since this composable has no way to verify it.
- */
+/** Subtask list + add button for a top-level job. Used on the detail and edit screens. */
 @Composable
 fun SubtasksSection(
     repository: JobRepository,
@@ -103,13 +96,8 @@ fun SubtasksSection(
 }
 
 /**
- * How much of the typed total [subtasksTotalMinutes] worth of subtasks add up to so far. A job
- * at or above [LONG_JOB_MINUTES] never had a firm target in the first place (see the "4+ hrs"
- * duration option) - "left to allocate" or "over by" would imply a ceiling that doesn't really
- * exist, so this just reports a running sum instead, no comparison to any total. Not private:
- * also used directly by the add/edit screen next to the duration picker itself, where
- * [subtasksTotalMinutes] is a live projection (every sibling subtask plus whatever's currently
- * typed for the one being edited) rather than a straight sum of already-saved subtasks.
+ * How the subtask estimates compare with the job's total. For 4hr+ jobs there's no real target,
+ * so it just shows the running total.
  */
 @Composable
 fun AllocationSummary(estimatedMinutes: Int, subtasksTotalMinutes: Int) {
@@ -128,12 +116,7 @@ fun AllocationSummary(estimatedMinutes: Int, subtasksTotalMinutes: Int) {
     Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
-/**
- * [waitingOnTitle], when non-null, means this subtask is soft-blocked on an unfinished sibling:
- * it's greyed out with a lock indicator and excluded from the jar's draw pool (see
- * [com.mattdixon.jobjar.data.JobRepository.drawJob]), but the checkbox stays fully live - it can
- * still be checked off by hand at any time.
- */
+/** [waitingOnTitle] set = greyed out with a lock. Still tickable. */
 @Composable
 private fun SubtaskRow(
     subtask: Job,

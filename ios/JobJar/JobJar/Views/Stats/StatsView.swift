@@ -17,20 +17,19 @@ struct StatsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: 12) {
-                    StatCard(label: "Active jobs", value: "\(stats.activeCount)")
-                    StatCard(label: "Completed", value: "\(stats.completedCount)")
-                    StatCard(label: "Time invested", value: formatMinutes(stats.totalMinutesCompleted))
+                    StatCard(label: "To do", value: "\(stats.activeCount)")
+                    StatCard(label: "Done", value: "\(stats.completedCount)")
+                    StatCard(label: "Time spent", value: formatMinutes(stats.totalMinutesCompleted))
                 }
 
                 Text("By category").font(.headline)
 
                 if stats.categoryStats.isEmpty {
-                    Text("Complete a few jobs to see your stats here.")
+                    Text("Finish a few jobs and your stats will show up here.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 } else {
-                    // Sorted descending by totalMinutes already, so the first entry is the max -
-                    // used to scale each bar relative to your biggest time sink.
+                    // Already sorted biggest first, so the first one sets the bar scale.
                     let maxMinutes = max(stats.categoryStats.first?.totalMinutes ?? 1, 1)
                     VStack(spacing: 8) {
                         ForEach(stats.categoryStats) { stat in
@@ -77,7 +76,7 @@ private struct StatsSummary {
     let categoryStats: [CategoryStat]
 }
 
-/// One unit of credited work: either a single one-off completion, or a repeating job's tally.
+/// A finished job, or a repeating job's total.
 private struct Contribution {
     let category: String
     let count: Int
@@ -85,19 +84,13 @@ private struct Contribution {
 }
 
 private func computeStats(allJobs: [Job]) -> StatsSummary {
-    // Every job and subtask alike, same population the Jar meter's "available" count uses -
-    // a standalone open subtask is just as much active work as a top-level job.
+    // Every job and subtask, same as the Jar counts.
     let activeCount = allJobs.filter { $0.isPending() }.count
 
     let parentIdsWithSubtasks = Set(allJobs.compactMap { $0.parentId })
     let repeatingParentIds = Set(allJobs.filter { $0.parentId == nil && $0.recurrenceDays != nil }.map { $0.id })
 
-    // A parent with subtasks is a container, not a unit of work itself - its subtasks already
-    // account for that time, so counting the parent too would double up every minute they
-    // cover. So: count completed jobs that represent real, granular effort - plain top-level
-    // jobs with no subtasks, and subtasks of a *non-repeating* parent. (Repeating jobs can't
-    // have subtasks; a repeating job's work is credited once per cycle via its own
-    // completionCount instead.)
+    // Parents with subtasks aren't counted themselves, their subtasks already cover that time.
     let oneOffCompleted = allJobs.filter { job in
         guard job.isDone else { return false }
         if let parentId = job.parentId {
@@ -106,9 +99,7 @@ private func computeStats(allJobs: [Job]) -> StatsSummary {
         return !parentIdsWithSubtasks.contains(job.id)
     }
 
-    // A repeating job never stays isDone = true, so its completions would otherwise be
-    // invisible to stats entirely. completionCount is the only record of how many times it's
-    // actually been done.
+    // Repeating jobs never stay done, so count them from completionCount.
     let repeatingCompletions = allJobs.filter { $0.recurrenceDays != nil && $0.completionCount > 0 }
 
     let contributions =

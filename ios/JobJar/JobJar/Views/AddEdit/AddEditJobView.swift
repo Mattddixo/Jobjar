@@ -36,7 +36,7 @@ struct AddEditJobView: View {
         return days > 0
     }
 
-    /// Repeating and having subtasks are mutually exclusive (see JobRepository.addJob).
+    /// Repeat and subtasks are either/or.
     private var hasSubtasks: Bool {
         guard let savedJobId else { return false }
         return allJobs.contains { $0.parentId == savedJobId }
@@ -52,8 +52,8 @@ struct AddEditJobView: View {
     var body: some View {
         Form {
             Section {
-                TextField("Title", text: $title)
-                TextField("Notes (optional)", text: $notes, axis: .vertical)
+                TextField("What needs doing?", text: $title)
+                TextField("Notes", text: $notes, axis: .vertical)
                     .lineLimit(2...4)
             }
 
@@ -66,16 +66,14 @@ struct AddEditJobView: View {
                                 estimatedMinutes = minutes
                             }
                         }
-                        // Long jobs don't have one "right" length, so this is a range, not an
-                        // exact value: selected whenever the estimate is 4hr or more, and
-                        // tapping it seeds 4hr as a starting point you can then fine-tune.
+                        // Selected for anything 4hr+. Tapping it sets 4hr.
                         FilterChip(label: "4+ hrs", selected: estimatedMinutes >= longJobMinutes) {
                             estimatedMinutes = longJobMinutes
                         }
                     }
                 }
                 Stepper(
-                    "Custom: \(estimatedMinutes) min",
+                    "\(estimatedMinutes) min",
                     value: $estimatedMinutes,
                     in: 0...1440,
                     step: 5
@@ -83,7 +81,7 @@ struct AddEditJobView: View {
             }
 
             Section("Category") {
-                TextField("e.g. Chores, Work, Errands", text: $category)
+                TextField("Chores, errands, garden…", text: $category)
                 if !categories.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
@@ -104,13 +102,11 @@ struct AddEditJobView: View {
                 .pickerStyle(.segmented)
             }
 
-            // The opposite gate from below: only a subtask can depend on another subtask, and
-            // only among its own siblings (same parent).
+            // Only subtasks can depend on something, and only on a sibling.
             if isLoaded, let subtaskParentId = resolvedParentId {
-                Section("Depends on") {
+                Section("Do this after") {
                     Text(
-                        "Optional: this subtask stays out of the jar's random draw until the one it depends " +
-                            "on is done. You can still check it off by hand any time."
+                        "It won't be drawn until that one's done. You can still tick it off whenever you like."
                     )
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -119,7 +115,7 @@ struct AddEditJobView: View {
                     let candidates = subtasksAvailableAsDependency(siblings: siblings, excludingSelfId: savedJobId)
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
-                            FilterChip(label: "None", selected: dependsOnSubtaskId == nil) {
+                            FilterChip(label: "Nothing", selected: dependsOnSubtaskId == nil) {
                                 dependsOnSubtaskId = nil
                             }
                             ForEach(candidates) { candidate in
@@ -132,9 +128,7 @@ struct AddEditJobView: View {
                 }
             }
 
-            // Only a job that isn't itself a subtask can repeat or have subtasks (one level
-            // deep). Gated on isLoaded so an existing subtask being edited never flashes
-            // either section before we know its real parentId.
+            // Top-level jobs only. Waits for isLoaded so a subtask doesn't flash these sections.
             if isLoaded, resolvedParentId == nil {
                 Section("Repeat") {
                     Toggle(
@@ -166,7 +160,7 @@ struct AddEditJobView: View {
                             )
                         ) {
                             Text("Every few days").tag(false)
-                            Text("Specific days").tag(true)
+                            Text("On set days").tag(true)
                         }
                         .pickerStyle(.segmented)
 
@@ -184,7 +178,7 @@ struct AddEditJobView: View {
                                     }
                                 }
                             }
-                            Text("Comes back at the start of each chosen day, whenever you last finished it.")
+                            Text("Comes back each chosen day, even if you were late last time.")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         } else {
@@ -198,19 +192,19 @@ struct AddEditJobView: View {
                                 }
                             }
                             Stepper(
-                                "Custom: every \(countLabel(days, "day", "days"))",
+                                "Every \(countLabel(days, "day", "days"))",
                                 value: Binding(get: { days }, set: { recurrenceDays = $0 }),
                                 in: 1...365
                             )
-                            Text("Comes back this many days after you finish it.")
+                            Text("Counts from the day you finish it.")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }
                     } else {
                         Text(
                             hasSubtasks
-                                ? "Jobs with subtasks can't repeat. Remove its subtasks first if you want this one to repeat."
-                                : "Completing a repeating job reopens it automatically, instead of leaving it done for good."
+                                ? "Jobs with subtasks can't repeat."
+                                : "Puts the job back in the jar after you finish it."
                         )
                         .font(.footnote)
                         .foregroundStyle(.secondary)
@@ -219,7 +213,7 @@ struct AddEditJobView: View {
 
                 Section("Subtasks") {
                     if recurrenceDays != nil {
-                        Text("Repeating jobs can't have subtasks. Turn off Repeat to break this job down.")
+                        Text("Repeating jobs can't have subtasks.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     } else if let savedJobId {
@@ -230,7 +224,7 @@ struct AddEditJobView: View {
                             onAddSubtask: { ensurePersisted { onAddSubtask($0) } }
                         )
                     } else {
-                        Text("Adding a subtask saves this job first, using what you've filled in so far.")
+                        Text("This saves the job first.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                         Button {
@@ -265,7 +259,7 @@ struct AddEditJobView: View {
             resolvedParentId = job.parentId
             savedJobId = job.id
         } else {
-            // Prefill the new subtask's category from its parent, purely as a convenience.
+            // Handy default: same category as the parent.
             resolvedParentId = parentId
             if let parentId, let parent = allJobs.first(where: { $0.id == parentId }), !parent.category.isEmpty {
                 category = parent.category
@@ -279,19 +273,14 @@ struct AddEditJobView: View {
         onDone()
     }
 
-    /// Ensures this job already exists in SwiftData - inserting it now, using whatever's
-    /// currently in the form, if it's still an unsaved draft - then invokes `onReady` with its
-    /// id. This is what lets "Add subtask" work before you've explicitly hit Save: the job
-    /// behind the form quietly becomes real the moment you need to attach something to it. An
-    /// already-saved job is re-saved from the form too, so e.g. having just switched Repeat off
-    /// is actually stored before a subtask is attached.
+    /// Saves the form (inserting it if it's new) and hands back the id, so "Add subtask" works
+    /// without hitting Save first.
     private func ensurePersisted(onReady: (UUID) -> Void) {
         guard isValid else { return }
         if let id = persist() { onReady(id) }
     }
 
-    /// Saves the form through the repository, which applies the app's rules (no repeating
-    /// job with subtasks, category spelling, when a repeat schedule restarts).
+    /// Saves through the repository so its rules apply.
     @discardableResult
     private func persist() -> UUID? {
         let edit = JobEdit(

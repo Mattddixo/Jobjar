@@ -2,7 +2,7 @@
 
 _Last updated: 22 October 2026_
 
-Job Jar is a to-do app that runs entirely on your phone.
+Job Jar is a to-do app that runs entirely on your phone. This page covers what it does with your data.
 
 ## What Job Jar stores
 

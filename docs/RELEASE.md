@@ -7,7 +7,7 @@ before) and set `versionName` to what users should see, e.g. `1.3`.
 
 ## 2. Signing (one-time setup)
 
-Create an upload key once and keep it safe - a password manager plus an offline copy:
+Create an upload key once and keep it somewhere safe (password manager plus an offline copy):
 
 ```bash
 keytool -genkeypair -v -keystore jobjar-upload.jks -keyalg RSA -keysize 4096 -validity 10000 -alias upload
@@ -23,7 +23,7 @@ keyPassword=...
 ```
 
 Enrol in **Play App Signing** when creating the app in Play Console: Google holds the actual
-app-signing key, and this upload key can be reset through Google if it's ever lost.
+app signing key, and the upload key can be reset through Google if you lose it.
 
 ## 3. Build
 
@@ -32,8 +32,8 @@ app-signing key, and this upload key can be reset through Google if it's ever lo
 ```
 
 The signed bundle is `app/build/outputs/bundle/release/app-release.aab`. Release builds are
-shrunk with R8 - install the release build on a phone and click through every screen before
-uploading, since shrinking problems only show up there.
+shrunk with R8, so install the release build on a phone and go through every screen before
+uploading. Shrinking problems only show up in release builds.
 
 Before the first upload of a new database version, also run the migration tests on a device or
 emulator: `./gradlew connectedDebugAndroidTest`. Commit the new file Room writes to
@@ -45,11 +45,11 @@ emulator: `./gradlew connectedDebugAndroidTest`. Commit the new file Room writes
   file's own GitHub URL if the repository is public) and paste the link.
 - **Data safety form:** no data collected, no data shared; data isn't encrypted in transit
   because it's never transmitted; users can request deletion by deleting jobs/uninstalling.
-- **Permissions declaration:** Calendar (read + write) - "to add jobs the user schedules to
-  their calendar, and to confirm an event belongs to the app before changing it."
+- **Permissions declaration:** Calendar (read + write): "Adds jobs the user schedules to their
+  calendar, and checks an event belongs to the app before changing it."
 - **Content rating:** complete the questionnaire (utility app, no user-generated content shared).
 - **Target audience:** 13+ (or 18+), not designed for children.
-- **Store listing:** short and full description, icon (512×512), feature graphic (1024×500),
-  at least 2 phone screenshots.
+- **Store listing:** short and full description, icon (`docs/play-icon-512.png`), feature
+  graphic (1024×500), at least 2 phone screenshots.
 - Start with an **internal testing** track, then closed testing, before production. New personal
   developer accounts must run a closed test with testers for 14 days before production access.

@@ -1,8 +1,7 @@
 import SwiftData
 import SwiftUI
 
-/// App-wide "Undo" for completing and deleting jobs. Whichever screen made the change offers
-/// the repository's snapshot here; the toast at the bottom of the app (UndoToast) shows it.
+/// Undo for complete and delete. A screen offers the snapshot and UndoToast shows it.
 @Observable
 @MainActor
 final class UndoCenter {
@@ -24,11 +23,11 @@ final class UndoCenter {
     }
 
     func offerCompleted(_ title: String, _ snapshot: UndoSnapshot) {
-        offer("Completed “\(title)”", snapshot)
+        offer("Done: \(title)", snapshot)
     }
 
     func offerDeleted(_ title: String, _ snapshot: UndoSnapshot) {
-        offer("Deleted “\(title)”", snapshot)
+        offer("Deleted \(title)", snapshot)
     }
 }
 

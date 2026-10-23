@@ -12,21 +12,14 @@ import kotlinx.coroutines.withContext
 import java.util.TimeZone
 
 /**
- * Talks to the device's own Calendar Provider (`CalendarContract`) rather than Google's Calendar
- * API directly - a scheduled job still ends up on the user's real Google Calendar, since the
- * device's own Google account sync adapter picks up anything written here and pushes it to the
- * cloud automatically, but this app never needs a sign-in flow, an API key, or a network call to
- * make that happen. The tradeoff, by design: this is one-directional. Job Jar writes events; it
- * never reads calendar-side changes back.
+ * Writes scheduled jobs to the phone's calendar through CalendarContract. The phone's own sync
+ * takes them to Google Calendar, so there's no sign-in or network code here. One-way only:
+ * changes made in the calendar app aren't read back.
  *
- * Every provider call is a blocking disk/IPC call, so all of it runs on [Dispatchers.IO]. Every
- * event this app writes is tagged with its package and a per-job URI ([jobUri]), and an existing
- * event is only ever changed or deleted once that tag proves it's ours (see [CalendarGateway]).
- * Events written before tagging existed are recognised by still matching the job's exact title
- * and start time, and get tagged the next time they're updated.
+ * Events are tagged with our package name and a per-job URI, and we only edit or delete an event
+ * after checking the tag. Older untagged events are matched on title + start time instead.
  */
 class CalendarScheduler(private val context: Context) : CalendarGateway {
-
     private val resolver get() = context.contentResolver
 
     fun hasPermission(): Boolean =
@@ -43,8 +36,7 @@ class CalendarScheduler(private val context: Context) : CalendarGateway {
             put(CalendarContract.Events.DTEND, endMillis)
             put(CalendarContract.Events.EVENT_TIMEZONE, TimeZone.getDefault().id)
         }
-        // Some calendar providers reject the custom-app columns; an untagged event is still far
-        // better than no event, and is recognised later by its title and start time instead.
+        // Some providers reject the custom app columns. An untagged event is better than none.
         val uri = runCatching { resolver.insert(CalendarContract.Events.CONTENT_URI, values.tagged(job)) }.getOrNull()
             ?: runCatching { resolver.insert(CalendarContract.Events.CONTENT_URI, values) }.getOrNull()
         uri?.let { ContentUris.parseId(it) }
@@ -97,20 +89,13 @@ class CalendarScheduler(private val context: Context) : CalendarGateway {
             if (pkg != null || appUri != null) {
                 return pkg == context.packageName && appUri == jobUri(owner.id)
             }
-            // Untagged - either one of the user's own events that happens to share this id
-            // (e.g. after a restore onto a new phone) or one this app wrote before tagging
-            // existed. Only the latter still looks exactly like what was written.
+            // No tag: either someone else's event that happens to have this id, or one of ours from
+            // before tagging. Only ours would still match exactly.
             return it.getString(0) == owner.title && !it.isNull(1) && it.getLong(1) == owner.scheduledDate
         }
     }
 
-    /**
-     * Prefers the device's primary calendar; falls back to the first calendar this app can
-     * actually write events to, since not every device has exactly one obvious "the" calendar
-     * (work + personal Google accounts, a local-only calendar, etc). CAL_ACCESS_CONTRIBUTOR is
-     * the minimum access level the platform documents as sufficient to insert/update/delete
-     * events.
-     */
+    /** Primary calendar if there is one, otherwise the first one we're allowed to write to. */
     private fun findWritableCalendarId(): Long? {
         val projection = arrayOf(
             CalendarContract.Calendars._ID,
@@ -137,7 +122,6 @@ class CalendarScheduler(private val context: Context) : CalendarGateway {
     }
 
     companion object {
-        /** Stored on every event this app writes, identifying the exact job it belongs to. */
         fun jobUri(jobId: Long) = "jobjar://job/$jobId"
     }
 }

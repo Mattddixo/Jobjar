@@ -1,9 +1,6 @@
 import SwiftUI
 
-/// A jar-shaped fill meter: how much of the jar still has jobs left in it. `available` and
-/// `completed` are real counts (every job and subtask, split by `Job.isPending`) - the fill
-/// level is available/(available+completed), not a canned animation, so it visibly drains as
-/// jobs get done and refills as repeating ones come back due or new ones get added.
+/// Jar picture. Fills by available / (available + done).
 struct JarSummaryCard: View {
     let available: Int
     let completed: Int
@@ -17,10 +14,10 @@ struct JarSummaryCard: View {
                 .frame(width: 68, height: 92)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(available) available").font(.title3.weight(.semibold))
-                Text("\(completed) completed").font(.subheadline).foregroundStyle(.secondary)
+                Text("\(countLabel(available, "job", "jobs")) in the jar").font(.title3.weight(.semibold))
+                Text("\(completed) done").font(.subheadline).foregroundStyle(.secondary)
                 if total > 0 {
-                    Text("Jar is \(Int((fraction * 100).rounded()))% full")
+                    Text("\(Int((fraction * 100).rounded()))% full")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

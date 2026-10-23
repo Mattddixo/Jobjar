@@ -97,8 +97,7 @@ fun StatsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             } else {
-                // Sorted descending by totalMinutes already, so the first entry is the max -
-                // used to scale each bar relative to your biggest time sink.
+                // Already sorted biggest first, so the first one sets the bar scale.
                 val maxMinutes = state.categoryStats.first().totalMinutes.coerceAtLeast(1)
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
                     items(state.categoryStats, key = { it.category }) { stat ->

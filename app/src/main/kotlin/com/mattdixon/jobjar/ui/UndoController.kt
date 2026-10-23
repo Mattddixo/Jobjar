@@ -24,19 +24,16 @@ data class UndoEvent(
     val kind: UndoKind,
     val title: String,
     val snapshot: UndoSnapshot,
-    /** True when the screen that caused it is about to close (deleting from a job's own page),
-     * so only the Jobs list - where you land - should show it. */
+    /** Set when deleting from a job's own page: that page is closing, so the Jobs list shows it. */
     val showOnListOnly: Boolean = false
 )
 
 /**
- * App-wide "Undo" for completing and deleting jobs. Whichever screen made the change offers the
- * repository's [UndoSnapshot] here; whichever screen is showing picks it up and shows a snackbar
- * (see [UndoSnackbarEffect]). The undo itself runs in [scope] - the whole app's - so leaving the
- * screen right after tapping Undo can't cancel it halfway.
+ * Undo for complete and delete. A screen offers the snapshot, whichever screen is showing puts
+ * up the snackbar. The undo runs in the app-wide [scope] so leaving the screen can't cut it off.
  */
 class UndoController(private val repository: JobRepository, private val scope: CoroutineScope) {
-    /** For a change that must finish even though its screen is closing (deleting from a job's own page). */
+    /** For work that has to finish even though the screen is closing. */
     fun launchInApp(block: suspend () -> Unit) {
         scope.launch { block() }
     }
@@ -59,8 +56,6 @@ class UndoController(private val repository: JobRepository, private val scope: C
 
 val LocalUndoController = staticCompositionLocalOf<UndoController> { error("No UndoController provided") }
 
-/** Shows pending undo offers in [snackbarHostState]. [isJobList] marks the Jobs list, the one
- * screen that also shows offers from a screen that has just closed. */
 @Composable
 fun UndoSnackbarEffect(snackbarHostState: SnackbarHostState, isJobList: Boolean = false) {
     val controller = LocalUndoController.current

@@ -81,10 +81,8 @@ fun JobDetailScreen(
     onOpenJob: (Long) -> Unit,
     onBack: () -> Unit
 ) {
-    // remember()'d so recompositions (e.g. toggling a dialog) reuse the same Flow instance
-    // instead of Room starting a brand-new query/subscription on every recomposition.
-    // Wrapped so "still loading" (null) is distinguishable from "loaded, and gone" (Loaded(null)) -
-    // otherwise "Job not found" flashes for a moment every time a job is opened.
+    // Loaded() wrapper so "still loading" and "deleted" look different, otherwise the deleted
+    // message flashes on every open.
     val jobFlow = remember(repository, jobId) { repository.jobById(jobId).map { Loaded(it) } }
     val loadedJob by jobFlow.collectAsState(initial = null)
     val job = loadedJob?.value
@@ -113,8 +111,7 @@ fun JobDetailScreen(
     }
     val parent by parentFlow.collectAsState(initial = null)
 
-    // Siblings under the same parent, only needed to resolve this job's own dependsOnSubtaskId
-    // (if it's a subtask) into a title for the "Waiting on" indicator below.
+    // Only needed to show which sibling a subtask is waiting on.
     val siblingsFlow = remember(currentJob?.parentId) {
         currentJob?.parentId?.let { repository.subtasksOf(it) } ?: flowOf(emptyList())
     }
@@ -170,10 +167,7 @@ fun JobDetailScreen(
             ) {
                 Text(currentJob.title, style = MaterialTheme.typography.headlineMedium)
 
-                // Placed right under the title (rather than lower, among plain info text) and
-                // with a trailing chevron - the same "this leads somewhere" cue
-                // SubtasksSection's own rows already use - so it reads unmistakably as
-                // navigation to the parent, not just another label.
+                // Chevron so it reads as a link to the parent.
                 parent?.let { parentJob ->
                     TextButton(
                         onClick = { onOpenJob(parentJob.id) },
@@ -258,13 +252,9 @@ fun JobDetailScreen(
                     Text(currentJob.notes, style = MaterialTheme.typography.bodyLarge)
                 }
 
-                // Only offered while the job is actually pending - a resting repeating job (not
-                // due yet) or an already-done job has nothing to "start." Starting itself needs
-                // no guard dialog the way completing does: nothing gets silently left behind by
-                // picking a job up, so it's a plain toggle either way.
+                // Nothing to start on a done job or a resting repeating one.
                 if (currentJob.isPending()) {
-                    // Scheduling is out of scope for repeating jobs (see SchedulePickerDialog's
-                    // doc comment) - those keep the original full-width Start/Move-to-jar button.
+                    // Repeating jobs can't be scheduled, so Start gets the full width.
                     if (currentJob.recurrenceDays == null) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -363,8 +353,8 @@ fun JobDetailScreen(
                         TextButton(onClick = {
                             val id = currentJob.id
                             val title = currentJob.title
-                            // Runs app-wide: this screen closes straight away, which would
-                            // otherwise cancel the delete halfway. The Jobs list offers the undo.
+                            // App scope: this screen is about to close and would cancel the delete. The Jobs list
+                            // shows the undo.
                             undo.launchInApp {
                                 repository.deleteJob(id)?.let { snapshot ->
                                     undo.offer(UndoEvent(UndoKind.DELETED, title, snapshot, showOnListOnly = true))
@@ -410,5 +400,4 @@ fun JobDetailScreen(
     }
 }
 
-/** "Loaded, possibly empty" - see the job flow in [JobDetailScreen]. */
 private class Loaded<T>(val value: T)

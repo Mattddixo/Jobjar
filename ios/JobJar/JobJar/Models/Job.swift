@@ -1,8 +1,7 @@
 import Foundation
 import SwiftData
 
-/// The threshold, in minutes, at which a job is treated as "long" - the "4+ hrs" option on
-/// both the job form and the draw screen. Mirrors LONG_JOB_MINUTES in the Android app.
+/// "4+ hrs" on the form and the Jar.
 let longJobMinutes = 240
 
 enum Priority: String, Codable, CaseIterable, Identifiable {
@@ -18,8 +17,7 @@ enum Priority: String, Codable, CaseIterable, Identifiable {
         }
     }
 
-    /// Declaration order, used for "priority" sort (high first) - Codable's rawValue alone
-    /// doesn't sort that way alphabetically.
+    /// For the priority sort (high first).
     var ordinal: Int {
         switch self {
         case .low: return 0
@@ -29,16 +27,11 @@ enum Priority: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-/// A job can optionally be a subtask of another job via [parentId]. Subtasks are one level
-/// deep only - a job that already has a parent cannot itself have subtasks. Only a top-level
-/// job (one that isn't itself a subtask) can repeat, and a repeating job can't have subtasks.
+/// A job, or a subtask if `parentId` is set (one level only). Repeating jobs can't be subtasks
+/// or have subtasks.
 ///
-/// A repeating job (non-nil [recurrenceDays]) never persists [isDone] = true - completing it
-/// instead advances [nextDueAt] and bumps [completionCount] (see JobRepository), so the same
-/// row just cycles rather than piling up a new "done" row per occurrence. [nextDueAt] is the
-/// schedule: nil means due right now; once completed it's set to that moment plus
-/// [recurrenceDays] days, i.e. the schedule is relative to when you actually did it - unless
-/// [repeatWeekdays] pins it to specific days of the week instead (see Recurrence.swift).
+/// Repeating jobs never stay done: completing one moves `nextDueAt` on and bumps
+/// `completionCount`. Nil `nextDueAt` means it's due now.
 @Model
 final class Job: Identifiable {
     var id: UUID = UUID()
@@ -53,13 +46,11 @@ final class Job: Identifiable {
     var timesDrawn: Int = 0
     var parentId: UUID?
     var recurrenceDays: Int?
-    /// Non-nil = repeats on these weekdays ("Mon, Thu") instead of every N days. A bitmask in
-    /// the same encoding the Android app and export files use: Monday is bit 0, Sunday bit 6.
+    /// Set = repeats on these weekdays. Monday is bit 0, same as Android and the export file.
     var repeatWeekdays: Int?
     var nextDueAt: Date?
     var completionCount: Int = 0
-    /// Only meaningful when this is itself a subtask: the sibling subtask (same parentId)
-    /// that must be done first, if any.
+    /// Subtasks only: a sibling that has to be done first.
     var dependsOnSubtaskId: UUID?
 
     init(
@@ -100,8 +91,7 @@ final class Job: Identifiable {
 }
 
 extension Job {
-    /// Is this job something you could act on right now? For a repeating job that's a
-    /// due-date check, not isDone (which a repeating job never persists as true).
+    /// Due now? For repeating jobs that's about `nextDueAt`, not `isDone`.
     func isPending(now: Date = .now) -> Bool {
         if recurrenceDays != nil {
             guard let nextDueAt else { return true }
@@ -110,9 +100,7 @@ extension Job {
         return !isDone
     }
 
-    /// A blocked subtask (prerequisite not yet done) is only excluded from the random draw
-    /// pool - it's still fully completable by hand at any time, out of order if you want.
-    /// [siblingsById] should map every subtask sharing this job's parentId by id.
+    /// Is the prerequisite done? Only affects the draw, you can still tick it off.
     func isUnblocked(siblingsById: [UUID: Job]) -> Bool {
         guard let prerequisiteId = dependsOnSubtaskId else { return true }
         return siblingsById[prerequisiteId]?.isDone ?? true
@@ -123,15 +111,12 @@ extension Job {
     }
 }
 
-/// Minutes still "owed" against a parent's estimate: estimatedMinutes minus time already
-/// accounted for by completed subtasks. Not clamped to zero, matching the Android version.
+/// Parent estimate minus finished subtasks. Can go negative.
 func remainingMinutesOf(estimatedMinutes: Int, subtasks: [Job]) -> Int {
     estimatedMinutes - subtasks.filter { $0.isDone }.reduce(0) { $0 + $1.estimatedMinutes }
 }
 
-/// Which of [siblings] (subtasks sharing the same parent) [excludingSelfId] could validly
-/// depend on, without creating a cycle. A candidate is excluded if it already (transitively)
-/// depends on the subtask being edited, since linking to it would close a loop.
+/// Siblings that `excludingSelfId` could depend on without making a loop.
 func subtasksAvailableAsDependency(siblings: [Job], excludingSelfId: UUID?) -> [Job] {
     let byId = Dictionary(uniqueKeysWithValues: siblings.map { ($0.id, $0) })
     func eventuallyDependsOn(startId: UUID, targetId: UUID) -> Bool {

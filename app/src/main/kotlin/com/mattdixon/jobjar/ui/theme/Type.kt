@@ -6,13 +6,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-/**
- * A deliberate type scale rather than the Material3 stock defaults for whatever wasn't touched.
- * The identity: titles and headlines pull tracking slightly negative (a tighter, more "designed"
- * feel at larger sizes) while labels and small text open up their tracking a little (so tiny
- * text doesn't read as cramped) - a small but consistent signature across every size step,
- * instead of most of the scale silently being generic Material3 Roboto defaults.
- */
+/** Type scale. Headings are tracked in a little, small text out a little. */
 val Typography = Typography(
     headlineMedium = TextStyle(
         fontFamily = FontFamily.Default,

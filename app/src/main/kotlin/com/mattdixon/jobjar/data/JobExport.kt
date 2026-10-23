@@ -5,8 +5,8 @@ import org.json.JSONException
 import org.json.JSONObject
 
 /**
- * The backup file format behind Settings' Export/Import: plain JSON, one object per job, every
- * column included, so a file written today can be read back by any later version.
+ * Backup file for Settings > Export/Import. Plain JSON with every column, so newer versions can
+ * still read old files. The iOS app reads and writes the same format.
  *
  * ```json
  * { "format": "job-jar", "version": 1, "exportedAt": 1761000000000, "jobs": [ { "id": 1, ... } ] }
@@ -35,11 +35,8 @@ object JobExport {
     enum class Reason { NOT_A_BACKUP, NEWER_VERSION, CORRUPT }
 
     /**
-     * Reads a file written by [write]. Beyond the JSON itself, the jobs are made consistent with
-     * this app's rules before anything is imported, so a hand-edited or partly broken file can't
-     * produce states the app never creates on its own: subtasks pointing at a missing or nested
-     * parent become top-level jobs, a repeating job's subtasks are detached (repeating jobs can't
-     * have subtasks), and dependencies on anything but a sibling are dropped.
+     * Also fixes up anything the app itself would never save, in case the file was edited by hand:
+     * missing or nested parents, subtasks under a repeating job, dependencies on non-siblings.
      */
     fun parse(text: String): ParseResult {
         val root = try {
@@ -63,7 +60,7 @@ object JobExport {
 
     private fun sanitize(jobs: List<Job>): List<Job> {
         val byId = jobs.associateBy { it.id }
-        // Pass 1: a parent must exist, be top-level itself, and not repeat.
+        // Parents first: must exist, be top level and not repeat.
         val withValidParents = jobs.map { job ->
             val parent = job.parentId?.let { byId[it] }
             if (job.parentId != null && (parent == null || parent.parentId != null || parent.recurrenceDays != null)) {
@@ -73,7 +70,6 @@ object JobExport {
             }
         }
         val fixedById = withValidParents.associateBy { it.id }
-        // Pass 2: per-kind rules, now that parent links are final.
         return withValidParents.map { job ->
             val dependency = job.dependsOnSubtaskId?.let { fixedById[it] }
             val validDependency = job.parentId != null && dependency != null &&

@@ -1,8 +1,7 @@
 import Foundation
 import SwiftData
 
-/// The fields the add/edit form owns. The repository applies these onto a job and enforces the
-/// rules around them, rather than each view setting properties directly.
+/// The fields from the add/edit form. The repository applies them and enforces the rules.
 struct JobEdit {
     var title: String
     var notes: String
@@ -14,7 +13,7 @@ struct JobEdit {
     var dependsOnSubtaskId: UUID?
 }
 
-/// A plain value copy of a job, for undo snapshots and imports.
+/// Plain copy of a job, for undo and import.
 struct JobRecord: Equatable {
     var id: UUID
     var title: String
@@ -100,14 +99,13 @@ struct JobRecord: Equatable {
     }
 }
 
-/// Exactly the jobs a change touched, as they were just before it - see JobRepository.undo.
+/// The jobs a change touched, as they were before it.
 struct UndoSnapshot: Equatable {
     let records: [JobRecord]
 }
 
-/// The single seam between Views and SwiftData for anything beyond a plain read - mirrors the
-/// Android app's JobRepository and its rules. Reads themselves go through @Query in each View,
-/// so most methods take the caller's current `allJobs` snapshot rather than fetching again.
+/// All the job rules live here (same as the Android repository). Views read through @Query
+/// and pass their `allJobs` in.
 @MainActor
 struct JobRepository {
     let modelContext: ModelContext
@@ -120,9 +118,7 @@ struct JobRepository {
         try? modelContext.save()
     }
 
-    /// "home" and "Home" are the same category: a typed category adopts the spelling other
-    /// jobs already use. The job being saved doesn't count, so re-casing a category only it
-    /// has still sticks.
+    /// Match the spelling other jobs already use ("home" -> "Home"). Ignores the job itself.
     private func canonicalCategory(_ raw: String, excluding jobId: UUID?, allJobs: [Job]) -> String {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "" }
@@ -135,8 +131,7 @@ struct JobRepository {
         return mask
     }
 
-    /// A parent's estimate is a floor, not a ceiling: if its subtasks now add up to more than
-    /// it does, the parent grows to match. This never shrinks the parent back down.
+    /// Parent estimate grows to cover its subtasks. Never shrinks.
     private func growParentToFitSubtasks(parentId: UUID, allJobs: [Job]) {
         guard let parent = allJobs.first(where: { $0.id == parentId }) else { return }
         let subtaskTotal = allJobs.filter { $0.parentId == parentId }.reduce(0) { $0 + $1.estimatedMinutes }
@@ -145,9 +140,7 @@ struct JobRepository {
         }
     }
 
-    /// Returns nil (and saves nothing) if the parent can't take subtasks: it's gone, is itself
-    /// a subtask, or repeats - a repeating job can't have subtasks, since a subtask is finished
-    /// on its own timeline while the parent cycles on another. The views never offer that.
+    /// Nil if the parent can't take subtasks (missing, a subtask itself, or repeating).
     @discardableResult
     func addJob(_ edit: JobEdit, parentId: UUID?, allJobs: [Job]) -> Job? {
         if let parentId {
@@ -177,10 +170,8 @@ struct JobRepository {
         return job
     }
 
-    /// Applies the form's fields onto `job`, enforcing: a job with subtasks can't repeat;
-    /// turning repeat on clears a done flag (repeating jobs never persist isDone); changing
-    /// *how* it repeats restarts the cycle, while only tweaking an interval keeps the current
-    /// due date.
+    /// Saves the form onto `job`. Jobs with subtasks can't repeat, turning repeat on clears done,
+    /// and switching repeat type restarts the cycle.
     func updateJob(_ job: Job, with edit: JobEdit, allJobs: [Job]) {
         let hasSubtasks = allJobs.contains { $0.parentId == job.id }
         let repeats = edit.recurrenceDays != nil && job.parentId == nil && !hasSubtasks
@@ -214,9 +205,8 @@ struct JobRepository {
         save()
     }
 
-    /// Deleting a parent takes its subtasks with it. Deleting a single subtask instead clears
-    /// dependsOnSubtaskId on any sibling that pointed at it. Returns what's needed to put it
-    /// all back via `undo`.
+    /// Deletes the job (and its subtasks if it's a parent). Siblings that depended on a deleted
+    /// subtask lose the dependency. Returns an undo snapshot.
     @discardableResult
     func deleteJob(_ job: Job, allJobs: [Job]) -> UndoSnapshot {
         let removed = job.parentId == nil ? [job] + allJobs.filter { $0.parentId == job.id } : [job]
@@ -232,7 +222,7 @@ struct JobRepository {
         return snapshot
     }
 
-    /// Puts every job in `snapshot` back exactly as it was, re-creating any that were deleted.
+    /// Puts the jobs back, re-creating deleted ones.
     func undo(_ snapshot: UndoSnapshot) {
         let current = Dictionary(fetchAll().map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         for record in snapshot.records {
@@ -245,12 +235,9 @@ struct JobRepository {
         save()
     }
 
-    /// A repeating job never persists isDone = true: "completing" it cycles it forward instead,
-    /// and toggling a resting one makes it due again right away. A one-off job keeps the plain
-    /// isDone flip. Completing a top-level job also completes its open subtasks, stamping them
-    /// with the parent's exact completion time; reopening the parent reopens only the subtasks
-    /// carrying that stamp - ones finished by hand stay done. Returns the jobs as they were
-    /// before, for `undo`.
+    /// Done / not done. Repeating jobs cycle instead (or wake up if resting). A parent takes its
+    /// open subtasks with it, stamped with its own completedAt; reopening it reopens just those.
+    /// Returns an undo snapshot.
     @discardableResult
     func toggleDone(_ job: Job, allJobs: [Job]) -> UndoSnapshot {
         let family: [Job]
@@ -303,23 +290,22 @@ struct JobRepository {
         guard !siblings.isEmpty, siblings.allSatisfy({ $0.isDone }) else { return }
         guard let parent = allJobs.first(where: { $0.id == parentId }),
               !parent.isDone, parent.recurrenceDays == nil else { return }
-        // Strictly later than every subtask's own completion, so reopening the parent never
-        // mistakes a hand-finished subtask for one the parent's completion swept closed.
+        // A hair after the last subtask, so the parent never shares a timestamp with one you ticked
+        // yourself.
         let latest = siblings.compactMap(\.completedAt).max() ?? now
         parent.isDone = true
         parent.completedAt = max(now, latest.addingTimeInterval(0.001))
     }
 
-    /// Reopening a subtask after its parent completed shouldn't leave the parent stuck done.
+    /// Reopening a subtask reopens its parent.
     private func reopenParentIfDone(parentId: UUID, allJobs: [Job]) {
         guard let parent = allJobs.first(where: { $0.id == parentId }), parent.isDone else { return }
         parent.isDone = false
         parent.completedAt = nil
     }
 
-    /// Housekeeping for data saved by older versions, run once per launch: subtasks of
-    /// repeating jobs are detached into ordinary jobs (kept, not deleted), and categories that
-    /// differ only by case are merged into whichever spelling most jobs use.
+    /// Runs on launch: detaches subtasks from repeating jobs (older data) and merges categories
+    /// that only differ by case.
     func applyLaunchRules() {
         let all = fetchAll()
         var changed = false
@@ -341,7 +327,7 @@ struct JobRepository {
         if changed { save() }
     }
 
-    /// Replaces everything with `records` (already validated by JobExport).
+    /// Import: replaces everything.
     func replaceAll(with records: [JobRecord]) {
         for job in fetchAll() {
             modelContext.delete(job)
@@ -352,13 +338,8 @@ struct JobRepository {
         save()
     }
 
-    /// Draws one random eligible job matching (optionally) `category`. By default this matches
-    /// jobs that *fit* `maxMinutes` (a ceiling). Pass `longOnly` = true to flip that to a floor
-    /// instead - only jobs needing `longJobMinutes` or more are eligible.
-    ///
-    /// Eligibility is `Job.isPending`, not just "not done": a repeating job that isn't due yet
-    /// is excluded. A subtask waiting on an unfinished sibling is excluded here too - that's the
-    /// only place the link matters, since it's still fully completable by hand.
+    /// Random job that fits `maxMinutes`, or with `longOnly` one of `longJobMinutes` or more.
+    /// Skips anything not due, and subtasks waiting on a sibling.
     func drawJob(allJobs: [Job], maxMinutes: Int, category: String?, excludeIds: Set<UUID>, longOnly: Bool) -> Job? {
         let subtasksByParent = Dictionary(grouping: allJobs.filter { $0.parentId != nil }) { $0.parentId! }
         let subtasksById = Dictionary(uniqueKeysWithValues: subtasksByParent.values.flatMap { $0 }.map { ($0.id, $0) })

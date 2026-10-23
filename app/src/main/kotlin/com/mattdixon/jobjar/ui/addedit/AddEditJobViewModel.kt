@@ -20,21 +20,21 @@ import java.time.LocalDate
 
 data class AddEditFormState(
     val id: Long? = null,
-    /** This job's own parent, once known - null means "not a subtask" (or not yet loaded). */
+    /** Null until loaded, or if it isn't a subtask. */
     val parentId: Long? = null,
     val title: String = "",
     val notes: String = "",
     val estimatedMinutes: Int = 15,
     val category: String = "",
     val priority: Priority = Priority.NORMAL,
-    /** Null = one-off job. Non-null = repeats (every this many days, unless [repeatWeekdays] is set). */
+    /** Null = doesn't repeat. */
     val recurrenceDays: Int? = null,
-    /** Non-null = repeats on these weekdays instead of every N days - see [Job.repeatWeekdays]. */
+    /** Set = repeats on these weekdays (see [Job.repeatWeekdays]). */
     val repeatWeekdays: Int? = null,
-    /** Only meaningful when [parentId] != null: the sibling subtask that must be done first, if any. */
+    /** Subtasks only. */
     val dependsOnSubtaskId: Long? = null,
     val isSaved: Boolean = false,
-    /** True once we're sure [parentId] reflects reality - false only while an existing job is still loading. */
+    /** False while an existing job is still loading. */
     val isLoaded: Boolean = false
 ) {
     val repeatsOnWeekdays: Boolean get() = recurrenceDays != null && repeatWeekdays != null
@@ -47,17 +47,13 @@ data class AddEditFormState(
         }
 }
 
-/**
- * The form lives in [savedState] as well as in memory, so a half-typed job survives Android
- * closing the app in the background (switching away to check something, then coming back).
- */
+/** Form state is mirrored into [savedState] so a half-typed job survives the app being killed in the background. */
 class AddEditJobViewModel(
     private val repository: JobRepository,
     private val jobId: Long?,
     private val parentId: Long?,
     private val savedState: SavedStateHandle
 ) : ViewModel() {
-
     private val _formState = MutableStateFlow(
         restore() ?: AddEditFormState(id = jobId, parentId = parentId, isLoaded = jobId == null)
     )
@@ -89,7 +85,7 @@ class AddEditJobViewModel(
                 }
             }
         } else if (!restored && parentId != null) {
-            // Prefill the new subtask's category from its parent, purely as a convenience.
+            // Handy default: same category as the parent.
             viewModelScope.launch {
                 val parent = repository.jobById(parentId).first()
                 if (parent != null && parent.category.isNotBlank() && _formState.value.category.isBlank()) {
@@ -138,7 +134,7 @@ class AddEditJobViewModel(
     fun setCategory(value: String) = update { it.copy(category = value) }
     fun setPriority(value: Priority) = update { it.copy(priority = value) }
 
-    /** Toggles repeating on/off. Turning it on defaults to weekly unless an interval was already set. */
+    /** Defaults to weekly. */
     fun setRecurring(enabled: Boolean) = update {
         it.copy(
             recurrenceDays = if (enabled) it.recurrenceDays ?: 7 else null,
@@ -148,10 +144,7 @@ class AddEditJobViewModel(
 
     fun setRecurrenceDays(days: Int) = update { it.copy(recurrenceDays = days) }
 
-    /**
-     * Switches between "every N days after I finish it" and "on these days of the week".
-     * Switching to weekdays starts from today's day, so there's always at least one picked.
-     */
+    /** Every N days <-> set weekdays. Switching to weekdays starts with today ticked. */
     fun setRepeatOnWeekdays(onWeekdays: Boolean) = update {
         if (onWeekdays) {
             it.copy(recurrenceDays = 7, repeatWeekdays = it.repeatWeekdays ?: weekdayBit(LocalDate.now().dayOfWeek))
@@ -177,12 +170,8 @@ class AddEditJobViewModel(
     }
 
     /**
-     * Ensures this job already exists in the database - inserting it now, using whatever's
-     * currently in the form, if it's still an unsaved draft - then invokes [onReady] with its
-     * id. This is what lets "Add subtask" work before you've explicitly hit Save: the job
-     * behind the form quietly becomes real the moment you need to attach something to it. An
-     * already-saved job is re-saved from the form too, so e.g. having just switched Repeat off
-     * is actually stored before a subtask is attached (a repeating job can't have subtasks).
+     * Saves the form (inserting it if it's new) and then hands back the id. Used by "Add subtask"
+     * so you don't have to hit Save first.
      */
     fun ensurePersisted(onReady: (Long) -> Unit) {
         if (!_formState.value.isValid) return
@@ -210,7 +199,6 @@ class AddEditJobViewModel(
             update { it.copy(id = newId) }
             return newId
         }
-        // The repository applies just the form's fields onto the job's current row.
         repository.updateJob(job)
         return state.id
     }

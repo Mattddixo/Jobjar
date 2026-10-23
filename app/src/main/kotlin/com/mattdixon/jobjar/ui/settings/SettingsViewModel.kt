@@ -15,7 +15,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** What the Settings screen should tell the user after an export or import attempt. */
 sealed interface DataMessage {
     data class Exported(val count: Int) : DataMessage
     data class Imported(val count: Int) : DataMessage
@@ -23,11 +22,10 @@ sealed interface DataMessage {
     data class ImportFailed(val reason: JobExport.Reason?) : DataMessage
 }
 
-/** An import that parsed fine and is waiting for the user to confirm replacing everything. */
+/** Parsed and waiting for the user to confirm. */
 data class PendingImport(val jobs: List<Job>, val currentCount: Int)
 
 class SettingsViewModel(private val repository: JobRepository) : ViewModel() {
-
     private val _message = MutableStateFlow<DataMessage?>(null)
     val message: StateFlow<DataMessage?> = _message.asStateFlow()
 
@@ -52,7 +50,7 @@ class SettingsViewModel(private val repository: JobRepository) : ViewModel() {
         }
     }
 
-    /** Reads and checks the file; nothing changes until [confirmImport]. */
+    /** Nothing changes until [confirmImport]. */
     fun readImport(resolver: ContentResolver, uri: Uri) {
         viewModelScope.launch {
             val text = withContext(Dispatchers.IO) {

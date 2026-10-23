@@ -2,13 +2,10 @@ package com.mattdixon.jobjar.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Clean and airy: a soft cool off-white page, bright white cards with hairline borders, and
-// exactly one calm accent (teal) for primary actions. The earlier all-grey palette made cards
-// and buttons read as heavy charcoal/grey blocks; this keeps the restraint (no rainbow of
-// colors) but lets the screens breathe. Dark mode is a soft blue-grey charcoal rather than
-// near-black, with surfaces stepping visibly lighter instead of disappearing into each other.
+// Light, white cards with a thin border, one teal accent, and honey for the drawn job.
+// Dark mode is a blue-grey, not black.
 
-// Teal - primary. Buttons, FAB, selected chips, switches.
+// Teal: buttons, FAB, selected chips, switches.
 val TealPrimaryLight = Color(0xFF1F7A6D)
 val TealOnPrimaryLight = Color(0xFFFFFFFF)
 val TealContainerLight = Color(0xFFD3EFE9)
@@ -19,7 +16,7 @@ val TealOnPrimaryDark = Color(0xFF00382F)
 val TealContainerDark = Color(0xFF1B5249)
 val TealOnContainerDark = Color(0xFFD3EFE9)
 
-// Slate - secondary, a cool blue-grey for badges/tags.
+// Slate: badges.
 val SlateSecondaryLight = Color(0xFF56636F)
 val SlateOnSecondaryLight = Color(0xFFFFFFFF)
 val SlateContainerLight = Color(0xFFE6EBF0)
@@ -30,8 +27,7 @@ val SlateOnSecondaryDark = Color(0xFF1F2A33)
 val SlateContainerDark = Color(0xFF38434E)
 val SlateOnContainerDark = Color(0xFFE6EBF0)
 
-// Honey - tertiary, reserved for a drawn job's card: the one warm spot, so whatever came out
-// of the jar stands apart from everything else on screen.
+// Honey: the drawn job's card.
 val HoneyTertiaryLight = Color(0xFF9A5F0E)
 val HoneyOnTertiaryLight = Color(0xFFFFFFFF)
 val HoneyContainerLight = Color(0xFFFFEFD6)
@@ -42,7 +38,7 @@ val HoneyOnTertiaryDark = Color(0xFF3B2600)
 val HoneyContainerDark = Color(0xFF55401C)
 val HoneyOnContainerDark = Color(0xFFFFE6BE)
 
-// Neutrals - background/surface family, a hair cool so the white cards and teal sit cleanly.
+// Backgrounds and surfaces.
 val NeutralBackgroundLight = Color(0xFFF5F7F9)
 val NeutralOnBackgroundLight = Color(0xFF1B1F24)
 val NeutralSurfaceVariantLight = Color(0xFFE2E7EC)
@@ -67,13 +63,13 @@ val NeutralSurfaceContainerHighestDark = Color(0xFF32383E)
 val NeutralOutlineDark = Color(0xFF878F98)
 val NeutralOutlineVariantDark = Color(0xFF353B42)
 
-// Cards - see AppColors in Theme.kt. White on the light page; a step lighter than the page in dark.
+// Cards (see AppColors in Theme.kt).
 val CardLight = Color(0xFFFFFFFF)
 val CardBorderLight = Color(0xFFE3E7EC)
 val CardDark = Color(0xFF23282D)
 val CardBorderDark = Color(0xFF2F353B)
 
-// Error - Material's default red family, reserved for destructive actions like delete.
+// Error: Material's reds, for delete.
 val ErrorLight = Color(0xFFBA1A1A)
 val OnErrorLight = Color(0xFFFFFFFF)
 val ErrorContainerLight = Color(0xFFFFDAD6)

@@ -15,10 +15,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Builds databases the way older app versions left them on real phones - by hand, with the same
- * SQL those versions ran - then opens them with the current [JobDatabase]. Room checks the
- * migrated schema against the current entities on open, so any mismatch fails here instead of
- * crashing on someone's phone.
+ * Builds old-version databases by hand (same SQL those versions ran) and opens them with the
+ * current schema. Room validates the result, so a bad migration fails here first.
  */
 @RunWith(AndroidJUnit4::class)
 class MigrationTest {
@@ -30,7 +28,7 @@ class MigrationTest {
         context.deleteDatabase(name)
     }
 
-    /** The jobs table exactly as v1 created it, plus every ALTER up to [version]. */
+    /** The jobs table as v1 created it, plus every ALTER up to [version]. */
     private fun createLegacyDatabase(version: Int) {
         context.deleteDatabase(name)
         val file = context.getDatabasePath(name).apply { parentFile?.mkdirs() }

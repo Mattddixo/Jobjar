@@ -11,16 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.mattdixon.jobjar.util.formatTodayLabel
 
-/**
- * A small "Aug 19"-style label meant to sit directly above a main tab's title, inside that same
- * title slot (see how DrawScreen/JobListScreen/StatsScreen stack it in a Column with the screen
- * title below) rather than off in the TopAppBar's separate navigationIcon area - putting the two
- * side by side on one line read as crowded, since navigationIcon reserves a fixed-width slot the
- * title then has to squeeze around regardless of how compact this label actually is. Tapping it
- * jumps straight into the device's own Calendar app on today - the same "launch the real Calendar
- * app rather than build one in this app" boundary already drawn for scheduling itself (see
- * SchedulePickerDialog's doc comment), just the way in rather than the way out.
- */
+/** Today's date above the screen title. Tap to open the calendar app. */
 @Composable
 fun TodayDateButton() {
     val context = LocalContext.current
@@ -33,12 +24,10 @@ fun TodayDateButton() {
                 .appendPath("time")
                 .appendPath(System.currentTimeMillis().toString())
                 .build()
-            // Not every device has a calendar app that handles this link - in that case the
-            // label just stays a label rather than crashing the app.
+            // Not every phone has a calendar app that handles this.
             try {
                 context.startActivity(Intent(Intent.ACTION_VIEW).setData(uri))
             } catch (e: ActivityNotFoundException) {
-                // Nothing to open.
             }
         }
     )

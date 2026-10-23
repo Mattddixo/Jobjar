@@ -14,7 +14,7 @@ import java.time.ZoneId
 import java.time.format.TextStyle
 import java.time.temporal.ChronoUnit
 
-/** "Weekly", "Every 3 days", "Mon, Thu", "Weekdays"... for a repeating job's schedule. */
+/** "Weekly", "Every 3 days", "Mon, Thu", "Weekdays" etc. */
 @Composable
 fun recurrenceLabel(recurrenceDays: Int, repeatWeekdays: Int? = null): String {
     if (repeatWeekdays != null && repeatWeekdays != 0) {
@@ -42,10 +42,7 @@ fun recurrenceLabel(recurrenceDays: Int, repeatWeekdays: Int? = null): String {
     }
 }
 
-/**
- * "Due now" if [nextDueAt] is null or already passed, otherwise when it comes back, counted in
- * calendar days ("tomorrow" means tomorrow's date, however many hours away that is).
- */
+/** "Due now", or how many calendar days until it's back. */
 @Composable
 fun dueStatusLabel(nextDueAt: Long?, now: Long = System.currentTimeMillis()): String {
     if (nextDueAt == null || nextDueAt <= now) return stringResource(R.string.due_now)

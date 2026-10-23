@@ -84,10 +84,8 @@ private val DarkColorScheme = darkColorScheme(
 )
 
 /**
- * The few app-specific colors Material's scheme has no role for. Material's filled Card
- * defaults to surfaceContainerHighest - the darkest grey in the light scheme - which is what
- * made every list read as a stack of muddy grey slabs. Cards here are instead a clean surface
- * (white in light mode) with a hairline border; use [appCardColors]/[appCardBorder].
+ * Colours Material doesn't have a slot for. Material's filled cards are a heavy grey, so cards
+ * here are white with a thin border instead: use [appCardColors] and [appCardBorder].
  */
 @Immutable
 data class AppColors(val card: Color, val cardBorder: Color)
@@ -107,9 +105,7 @@ fun appCardColors(): CardColors = CardDefaults.cardColors(containerColor = Local
 @Composable
 fun JobJarTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    // Off by default: Android 12+'s dynamic color pulls the whole palette from the phone's
-    // wallpaper, silently discarding every color chosen above. This app has a real designed
-    // palette (light and dark both), so it should actually be the one that renders.
+    // Off: dynamic colour would replace the palette with one taken from the wallpaper.
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {

@@ -31,10 +31,10 @@ struct JobDetailView: View {
             if let job = currentJob {
                 content(for: job)
             } else {
-                Text("Job not found.")
+                Text("This job has been deleted.")
             }
         }
-        .navigationTitle("Job details")
+        .navigationTitle("Job")
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button(action: onEdit) { Image(systemName: "pencil") }
@@ -57,8 +57,8 @@ struct JobDetailView: View {
             if let job = currentJob {
                 Text(
                     subtasks.isEmpty
-                        ? "\"\(job.title)\" will be removed."
-                        : "\"\(job.title)\" and its \(countLabel(subtasks.count, "subtask", "subtasks")) will be removed."
+                        ? "\(job.title) will be deleted."
+                        : "\(job.title) and its \(countLabel(subtasks.count, "subtask", "subtasks")) will be deleted."
                 )
             }
         }
@@ -69,7 +69,7 @@ struct JobDetailView: View {
             }
         } message: {
             let open = subtasks.filter { !$0.isDone }.count
-            Text("\(countLabel(open, "subtask is", "subtasks are")) still open. Completing this job will mark \(open == 1 ? "it" : "them") done too.")
+            Text(open == 1 ? "There's still 1 subtask open. It'll be marked done too." : "There are still \(open) subtasks open. They'll be marked done too.")
         }
     }
 
@@ -95,14 +95,14 @@ struct JobDetailView: View {
 
                 if job.recurrenceDays != nil {
                     let suffix = job.completionCount == 0 ? ""
-                        : job.completionCount == 1 ? " · completed once" : " · completed \(job.completionCount) times"
+                        : job.completionCount == 1 ? " · done once" : " · done \(job.completionCount) times"
                     Text(formatDueStatus(job.nextDueAt) + suffix)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
 
                 if let parent {
-                    Button("Part of: \(parent.title)") { onOpenJob(parent.id) }
+                    Button("Part of \(parent.title)") { onOpenJob(parent.id) }
                         .font(.footnote)
                 }
 
@@ -111,13 +111,13 @@ struct JobDetailView: View {
                    !prerequisite.isDone {
                     HStack(spacing: 6) {
                         Image(systemName: "lock.fill").foregroundStyle(.secondary)
-                        Text("Waiting on: \(prerequisite.title)")
+                        Text("Waiting on \(prerequisite.title)")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
                 }
 
-                Text("Priority: \(job.priority.displayName)").font(.body)
+                Text("\(job.priority.displayName) priority").font(.body)
 
                 if !job.notes.isEmpty {
                     Text(job.notes).font(.body)
@@ -157,7 +157,7 @@ struct JobDetailView: View {
         }
     }
 
-    /// Completing offers an Undo; reopening doesn't need one - it's its own undo.
+    /// Only completing offers Undo. Reopening is its own undo.
     private func toggleDone(_ job: Job) {
         let completing = job.isPending()
         let snapshot = repository.toggleDone(job, allJobs: allJobs)
@@ -165,8 +165,8 @@ struct JobDetailView: View {
     }
 
     private func buttonLabel(for job: Job) -> String {
-        if job.isPending() { return "Mark as done" }
-        if job.recurrenceDays != nil { return "Make available now" }
-        return "Mark as not done"
+        if job.isPending() { return "Mark done" }
+        if job.recurrenceDays != nil { return "Do it now" }
+        return "Mark not done"
     }
 }

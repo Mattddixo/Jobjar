@@ -4,10 +4,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 
-/**
- * In-memory [JobDao] mirroring the SQL in the real one, so [JobRepository]'s rules can be
- * tested on the JVM. Keep each method's behaviour identical to its @Query.
- */
+/** In-memory JobDao. Each method should do exactly what its @Query does. */
 class FakeJobDao : JobDao {
     private val rows = MutableStateFlow<Map<Long, Job>>(emptyMap())
     private var nextId = 1L
@@ -74,7 +71,7 @@ class FakeJobDao : JobDao {
     }
 }
 
-/** A calendar that tags events with their job id, like the real one does. */
+/** Fake calendar that tags events with the job id, like the real one. */
 class FakeCalendar : CalendarGateway {
     data class Event(val jobId: Long, val title: String, val start: Long, val end: Long)
 

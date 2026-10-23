@@ -16,7 +16,6 @@ class JobJarApplication : Application() {
         JobRepository(database.jobDao(), CalendarScheduler(this), RoomTransactionRunner(database))
     }
 
-    /** For app-wide housekeeping that shouldn't be tied to any one screen. */
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun onCreate() {

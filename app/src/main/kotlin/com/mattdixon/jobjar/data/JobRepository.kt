@@ -6,23 +6,15 @@ import java.time.ZoneId
 
 private const val MINUTE_MILLIS = 60L * 1000
 
-/**
- * Exactly the rows a change touched, as they were just before it - handed back by every
- * undoable action so the UI can offer "Undo" and pass it to [JobRepository.undo].
- */
+/** The rows a change touched, as they were before it. Pass to [JobRepository.undo]. */
 data class UndoSnapshot(val rows: List<Job>)
 
 /**
- * Every write follows the same three rules:
+ * All the job rules live here.
  *
- * 1. It starts by re-reading the rows it changes ([JobDao.getJob]) instead of trusting the copy a
- *    screen passed in, so an action on a card that's been on screen for a while can't write back
- *    stale fields (e.g. undo an edit made in the meantime).
- * 2. All of its database writes run in one transaction ([TransactionRunner]) - completing a
- *    parent and sweeping its subtasks either all happens or none of it does.
- * 3. Calendar changes ([CalendarGateway]) happen outside that transaction, after it commits: they
- *    are slow IPC calls to another app, and shouldn't hold the database or be "rolled back" half
- *    way. Deletions queued during a write run once it's committed (see [writeThenSync]).
+ * Writes always re-read the rows from the database rather than trusting whatever copy the
+ * screen passed in, and each write is one transaction. Calendar calls happen after the
+ * transaction commits (see [writeThenSync]) since they're slow and can't be rolled back.
  */
 class JobRepository(
     private val dao: JobDao,
@@ -31,8 +23,6 @@ class JobRepository(
     private val clock: () -> Long = { System.currentTimeMillis() },
     private val zone: () -> ZoneId = { ZoneId.systemDefault() }
 ) {
-
-    /** All rows, parents and subtasks. The single source of truth for stats, the draw candidate pool, and the Jobs list. */
     val allJobsFlat: Flow<List<Job>> = dao.getAllJobsFlow()
 
     val categories: Flow<List<String>> = dao.getCategories()
@@ -40,12 +30,8 @@ class JobRepository(
     fun jobById(id: Long): Flow<Job?> = dao.getJobById(id)
     fun subtasksOf(parentId: Long): Flow<List<Job>> = dao.getSubtasks(parentId)
 
-    /** Detaches [category] from every job that currently has it (they end up with no category,
-     * same as a fresh job before one's typed in) - there's no separate category entity to
-     * delete, so this is what "removing" a category actually means. */
     suspend fun removeCategory(category: String) = dao.clearCategory(category)
 
-    /** Calendar work to run once the current write has committed. */
     private class CalendarSync {
         val actions = mutableListOf<suspend (CalendarGateway) -> Unit>()
         fun deleteEvent(eventId: Long, owner: Job) {
@@ -60,19 +46,14 @@ class JobRepository(
         return result
     }
 
-    /**
-     * "home" and "Home" are the same category. A typed category adopts the spelling other jobs
-     * already use, so the filter and draw lists never show near-duplicates. The job being saved
-     * ([jobId]) doesn't count, so re-casing a category only one job has still sticks.
-     */
+    /** Match the spelling other jobs already use ("home" -> "Home"). Ignores [jobId] itself. */
     private suspend fun canonicalCategory(raw: String, jobId: Long = 0): String {
         val trimmed = raw.trim()
         if (trimmed.isEmpty()) return ""
         return dao.getCategoriesOfOtherJobs(jobId).firstOrNull { it.equals(trimmed, ignoreCase = true) } ?: trimmed
     }
 
-    /** One-time tidy-up for data saved before [canonicalCategory] existed: merges categories that
-     * differ only by case into whichever spelling most jobs use. Safe to run on every launch. */
+    /** Merges categories that only differ by case. Runs on every launch, cheap. */
     suspend fun mergeCategoryCase() = transactions.run {
         dao.getAllJobs()
             .filter { it.category.isNotBlank() }
@@ -87,11 +68,7 @@ class JobRepository(
             }
     }
 
-    /**
-     * A repeating job can't have subtasks: a subtask is completed on its own schedule, while its
-     * parent cycles on another, so the two never lined up. The add/edit and detail screens never
-     * offer the combination; this is the backstop.
-     */
+    /** Repeating jobs can't have subtasks. The UI never offers it; this is just a backstop. */
     suspend fun addJob(job: Job): Long = transactions.run {
         val parent = job.parentId?.let { dao.getJob(it) }
         require(job.parentId == null || parent != null) { "Parent job no longer exists" }
@@ -115,18 +92,13 @@ class JobRepository(
     }
 
     /**
-     * Saves the add/edit form's fields onto the job's *current* row - title, notes, estimate,
-     * category, priority, repeat settings, dependency - leaving everything else (done/in-progress
-     * state, schedule, counts) exactly as it is now.
+     * Saves the edit form onto the current row. Only the form's fields change; done/started/booked
+     * state is left alone.
      *
-     * Rules enforced here rather than trusted from the form:
-     * - A job with subtasks can't repeat (saved as one-off; the screen disables the switch, this
-     *   covers the moment before its subtask list has loaded).
-     * - Turning repeat on clears a done flag (a repeating job never persists isDone) and any
-     *   booked date (repeating jobs aren't scheduled).
-     * - Changing *how* it repeats restarts the cycle; only tweaking an interval's length keeps the
-     *   current due date.
-     * - A booked job's calendar event follows a new title or estimate.
+     * - Jobs with subtasks can't repeat.
+     * - Turning repeat on clears done and any booking.
+     * - Switching repeat type restarts the cycle. Changing the number of days doesn't.
+     * - If it's booked, the calendar event gets the new title/length.
      */
     suspend fun updateJob(edited: Job) = writeThenSync { sync ->
         val fresh = dao.getJob(edited.id) ?: return@writeThenSync
@@ -170,13 +142,7 @@ class JobRepository(
         }
     }
 
-    /**
-     * A parent's estimate is a floor, not a ceiling: if its subtasks now add up to more than
-     * it does, the parent grows to match. This never shrinks the parent back down (deleting or
-     * shrinking a subtask doesn't erase the original estimate), and it's what makes a rough
-     * "4+ hours" starting estimate self-correct into an accurate total as the job gets broken
-     * into real subtasks, instead of quietly understating how much is left.
-     */
+    /** Parent estimate grows to cover its subtasks. Never shrinks. */
     private suspend fun growParentToFitSubtasks(parentId: Long) {
         val parent = dao.getJob(parentId) ?: return
         val subtaskTotal = dao.getSubtasksSnapshot(parentId).sumOf { it.estimatedMinutes }
@@ -186,11 +152,9 @@ class JobRepository(
     }
 
     /**
-     * Deleting a parent takes its subtasks with it - there's no meaningful orphan state for
-     * them. Deleting a single subtask instead clears [Job.dependsOnSubtaskId] on any sibling
-     * that pointed at it, so nothing is left depending on a subtask that no longer exists. A
-     * deleted job's calendar event (if it had one) is deleted too. Returns everything needed to
-     * put it all back via [undo], or null if the job was already gone.
+     * Deletes the job (and its subtasks, if it's a parent) plus any calendar events. Siblings that
+     * depended on a deleted subtask lose the dependency. Returns an undo snapshot, or null if the
+     * job was already gone.
      */
     suspend fun deleteJob(jobId: Long): UndoSnapshot? = writeThenSync { sync ->
         val job = dao.getJob(jobId) ?: return@writeThenSync null
@@ -208,10 +172,7 @@ class JobRepository(
         UndoSnapshot(removed + dependents)
     }
 
-    /**
-     * Puts every row in [snapshot] back exactly as it was, then re-creates any calendar event the
-     * undone change removed (a completed or deleted job that had been booked).
-     */
+    /** Puts the rows back and re-adds any calendar events the change removed. */
     suspend fun undo(snapshot: UndoSnapshot) {
         transactions.run { dao.upsertAll(snapshot.rows) }
         snapshot.rows.forEach { row ->
@@ -224,7 +185,7 @@ class JobRepository(
         }
     }
 
-    /** The rows [toggleDone] can touch for [job]: itself, plus its subtasks or its parent and siblings. */
+    /** Rows [toggleDone] might change: the job plus its subtasks, or its parent and siblings. */
     private suspend fun familyOf(job: Job): List<Job> =
         if (job.parentId == null) {
             listOf(job) + dao.getSubtasksSnapshot(job.id)
@@ -233,16 +194,13 @@ class JobRepository(
         }
 
     /**
-     * A repeating job never persists isDone = true: "completing" it instead cycles it forward
-     * via [cycleRepeatingJob]. If it's currently resting (not due yet) - shown as "done" in the
-     * Jobs list - tapping it again means "make it available right now" instead. A one-off job
-     * keeps the plain isDone flip; completing a scheduled one clears its schedule first - a
-     * finished job has nothing left to keep booked on the calendar for. Completing a top-level
-     * job also completes any of its own subtasks that aren't done yet (see
-     * [completeOpenSubtasks]); reopening it undoes exactly that sweep (see
-     * [reopenSubtasksCompletedWith]).
+     * Done/not done.
      *
-     * Returns the rows as they were before, for [undo]; null if the job no longer exists.
+     * - Repeating: completes the cycle, or if it's resting, makes it due now.
+     * - Otherwise flips isDone. Completing clears any booking, and a parent takes its open subtasks
+     *   with it. Reopening the parent reopens just those (see [reopenSubtasksCompletedWith]).
+     *
+     * Returns an undo snapshot, or null if the job doesn't exist.
      */
     suspend fun toggleDone(jobId: Long): UndoSnapshot? = writeThenSync { sync ->
         val job = dao.getJob(jobId) ?: return@writeThenSync null
@@ -279,13 +237,8 @@ class JobRepository(
     }
 
     /**
-     * Completes every one of [parentId]'s own subtasks that isn't done yet, same as completing
-     * each individually would (unscheduling first if it was booked). Subtasks can't themselves
-     * repeat or have subtasks of their own, so this never needs to recurse.
-     *
-     * Each swept subtask is stamped with the parent's own [completedAt], exactly. That shared
-     * timestamp is how [reopenSubtasksCompletedWith] later tells "closed by this sweep" apart
-     * from "finished by hand" without needing a column of its own.
+     * Ticks off the parent's open subtasks. They get the parent's exact completedAt, which is how
+     * [reopenSubtasksCompletedWith] knows which ones to put back.
      */
     private suspend fun completeOpenSubtasks(parentId: Long, completedAt: Long, sync: CalendarSync) {
         dao.getSubtasksSnapshot(parentId)
@@ -297,11 +250,8 @@ class JobRepository(
     }
 
     /**
-     * Undoes [completeOpenSubtasks] when its parent is reopened: only subtasks carrying the
-     * parent's exact [completedAt] were closed by that sweep and go back to open. Ones finished
-     * by hand keep their own (earlier) timestamp and stay done - that work really happened. A
-     * parent that auto-completed from its last subtask (see [autoCompleteParentIfFinished])
-     * never shares a timestamp with any of them, so reopening it leaves every subtask done.
+     * Reopens the subtasks that were ticked off by the parent (same completedAt). Ones you'd
+     * finished yourself stay done.
      */
     private suspend fun reopenSubtasksCompletedWith(parentId: Long, completedAt: Long) {
         dao.getSubtasksSnapshot(parentId)
@@ -309,12 +259,7 @@ class JobRepository(
             .forEach { dao.markNotDone(it.id) }
     }
 
-    /**
-     * Advances a repeating job to its next occurrence: bumps [Job.completionCount], records
-     * [Job.completedAt] as this moment, and sets [Job.nextDueAt] from its schedule (see
-     * [nextDueAfterCompletion]). isDone stays false - the job isn't finished, it's cycling - and
-     * isInProgress is cleared, since the fresh cycle hasn't been started yet.
-     */
+    /** Next cycle: bump the count, set the next due date, clear in-progress. */
     private suspend fun cycleRepeatingJob(job: Job, now: Long) {
         val nextDue = nextDueAfterCompletion(job.recurrenceDays!!, job.repeatWeekdays, now, zone())
         dao.cycleRepeating(job.id, completedAt = now, nextDueAt = nextDue)
@@ -326,28 +271,19 @@ class JobRepository(
         val parent = dao.getJob(parentId) ?: return
         if (parent.isDone || parent.recurrenceDays != null) return
 
-        // Strictly later than every subtask's own completion, even within the same millisecond
-        // as the one just ticked - otherwise reopenSubtasksCompletedWith would mistake that
-        // hand-finished subtask for one the parent's completion swept closed.
+        // +1ms past the last subtask, so the parent never shares a timestamp with one you ticked
+        // yourself (see reopenSubtasksCompletedWith).
         val latestSubtask = siblings.maxOf { it.completedAt ?: 0L }
         dao.markDone(parentId, maxOf(now, latestSubtask + 1))
     }
 
-    /**
-     * The other half of [autoCompleteParentIfFinished]: reopening one subtask after its parent
-     * auto- or force-completed shouldn't leave the parent stuck done with a subtask now open
-     * again under it.
-     */
+    /** Reopening a subtask reopens its parent. */
     private suspend fun reopenParentIfDone(parentId: Long) {
         val parent = dao.getJob(parentId) ?: return
         if (parent.isDone) dao.markNotDone(parentId)
     }
 
-    /**
-     * Flips a job's in-progress flag. Starting doesn't touch [Job.isDone] and is the only place
-     * that sets it true; starting a scheduled job clears its schedule first, since you're now
-     * actually working it rather than planning to later. Stopping just puts it back in the jar.
-     */
+    /** Start/stop. Starting a booked job unbooks it. */
     suspend fun toggleInProgress(jobId: Long) = writeThenSync { sync ->
         val job = dao.getJob(jobId) ?: return@writeThenSync
         if (job.isInProgress) {
@@ -359,15 +295,10 @@ class JobRepository(
     }
 
     /**
-     * Books a job for [dateTimeMillis], with a duration matching its own estimate - excluding it
-     * from the random draw immediately (see [Job.isAvailableToDraw]) - and writes a matching
-     * event to the device calendar. Rescheduling moves that same event rather than creating a
-     * second one; if it can't (deleted on the calendar side, or not provably ours), a fresh one
-     * is written. Scheduling clears in-progress: booking it for later says you're not working it
-     * right now.
+     * Books a job and writes a calendar event for it (moving the existing event if there is one).
+     * Booked jobs stay out of the jar and aren't in progress. Repeating jobs can't be booked.
      *
-     * Returns whether a calendar event was written - the job is booked in the app either way.
-     * Repeating jobs can't be scheduled (their own cycle already covers "when").
+     * Returns whether a calendar event was written. The booking is saved either way.
      */
     suspend fun scheduleJob(jobId: Long, dateTimeMillis: Long): Boolean {
         val job = dao.getJob(jobId) ?: return false
@@ -384,34 +315,25 @@ class JobRepository(
             if (current != null) dao.setSchedule(jobId, dateTimeMillis, eventId)
             current != null
         }
-        // Deleted while the calendar call was in flight - don't leave its event behind.
+        // Deleted while we were talking to the calendar, so clean up the event.
         if (!stillExists && eventId != null) {
             calendar.deleteEvent(eventId, job.copy(scheduledDate = dateTimeMillis))
         }
         return stillExists && eventId != null
     }
 
-    /** Drops a job's schedule and deletes its calendar event, if it had one - back to a plain
-     * pending job, eligible for the random draw again. */
     suspend fun unscheduleJob(jobId: Long) = writeThenSync { sync ->
         val job = dao.getJob(jobId) ?: return@writeThenSync
         clearSchedule(job, sync)
     }
 
     /**
-     * Draws one random eligible job matching (optionally) [categories]. By default this matches
-     * jobs that *fit* [maxMinutes] (a ceiling - "what can I do with the time I have"). Pass
-     * [longOnly] = true to flip that to a floor instead - only jobs needing [LONG_JOB_MINUTES]
-     * or more are eligible, ignoring [maxMinutes] entirely.
+     * Picks a random job that fits [maxMinutes], or with [longOnly] a random job of
+     * [LONG_JOB_MINUTES] or more.
      *
-     * Eligibility is [Job.isAvailableToDraw]: not done, due if repeating, not in progress, not
-     * booked. A subtask is excluded two further ways, both only from this random pool - it stays
-     * fully completable by hand at any time regardless: [Job.isUnblocked] = false (waiting on a
-     * sibling), or [Job.isParentAvailable] = false (its parent is in progress).
-     *
-     * A top-level job with subtasks is matched by its *remaining* minutes, so it becomes eligible
-     * for shorter draws as its subtasks get knocked out. Returns the pick paired with how many
-     * minutes it counts against a time budget ([DrawPick.minutesUsed]).
+     * Skips anything done, not due, started or booked, plus subtasks whose prerequisite isn't done
+     * or whose parent has been started. Parents count by their remaining minutes, so a big job gets
+     * drawable for shorter slots as you chip away at it.
      */
     suspend fun drawJob(maxMinutes: Int, categories: Set<String>, excludeIds: List<Long>, longOnly: Boolean = false): DrawPick? {
         val now = clock()
@@ -443,13 +365,11 @@ class JobRepository(
             job.estimatedMinutes
         }
 
-    /** Every row, for [JobExport]. */
     suspend fun exportJobs(): List<Job> = dao.getAllJobs()
 
     /**
-     * Replaces everything with [jobs] (already validated by [JobExport.parse]), keeping their
-     * ids so parent/dependency links stay intact. Calendar events aren't touched: an imported
-     * event id is only ever acted on once it's proven to be this job's (see [CalendarGateway]).
+     * Import: replaces everything, keeping the ids so links survive. Calendar ids come along too;
+     * they're only ever used after the ownership check.
      */
     suspend fun replaceAllJobs(jobs: List<Job>) = transactions.run {
         dao.deleteAll()

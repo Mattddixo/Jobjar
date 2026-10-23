@@ -5,24 +5,20 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 
-/** [Job.repeatWeekdays] bit for [day]: Monday is bit 0, Sunday bit 6 (i.e. `DayOfWeek.value - 1`). */
+/** Monday = bit 0 ... Sunday = bit 6. */
 fun weekdayBit(day: DayOfWeek): Int = 1 shl (day.value - 1)
 
-/** Every day of the week [mask] includes, Monday first. */
 fun weekdaysOf(mask: Int): List<DayOfWeek> = DayOfWeek.entries.filter { mask and weekdayBit(it) != 0 }
 
-/** Monday to Friday, for the "Weekdays" shortcut. */
 const val WEEKDAYS_MASK: Int = 0b0011111
 
-/** Saturday and Sunday. */
 const val WEEKEND_MASK: Int = 0b1100000
 
-/** All seven days. */
 const val EVERY_DAY_MASK: Int = 0b1111111
 
 private fun LocalDate.startMillis(zone: ZoneId): Long = atStartOfDay(zone).toInstant().toEpochMilli()
 
-/** The first date strictly after [after] whose day of week is in [mask]. [mask] must be non-zero. */
+/** First date after [after] that falls on one of the days in [mask]. */
 private fun nextMatchingDate(after: LocalDate, mask: Int): LocalDate {
     require(mask and EVERY_DAY_MASK != 0) { "No weekdays selected" }
     var date = after.plusDays(1)
@@ -31,14 +27,10 @@ private fun nextMatchingDate(after: LocalDate, mask: Int): LocalDate {
 }
 
 /**
- * When a repeating job comes due again after being completed at [completedAt].
+ * Next due date after finishing at [completedAt].
  *
- * - Interval schedule ([repeatWeekdays] null): [recurrenceDays] calendar days later, at the same
- *   local time of day. Done in local time rather than by adding fixed 24-hour blocks, so a daily
- *   job doesn't drift an hour every time the clocks change.
- * - Weekday schedule: the start of the next matching day after the day it was completed - so
- *   finishing Monday's job (even late on Tuesday) brings it back the following Monday, not the
- *   next day.
+ * Every N days: N calendar days later, same time of day (so DST doesn't shift it).
+ * Set weekdays: start of the next chosen day, even if you were late this time.
  */
 fun nextDueAfterCompletion(recurrenceDays: Int, repeatWeekdays: Int?, completedAt: Long, zone: ZoneId): Long {
     val completed = Instant.ofEpochMilli(completedAt).atZone(zone)
@@ -50,10 +42,8 @@ fun nextDueAfterCompletion(recurrenceDays: Int, repeatWeekdays: Int?, completedA
 }
 
 /**
- * [Job.nextDueAt] for a weekday schedule that was just created or changed: null (due now) if
- * today is one of its days, otherwise the start of the next day that is - so a "Mondays" job
- * created on a Wednesday waits for Monday instead of landing in the jar straight away. Interval
- * schedules always start due now (null).
+ * Starting due date for a weekday schedule: now if today's one of the days, otherwise the next
+ * one. A "Mondays" job made on a Wednesday waits until Monday.
  */
 fun initialNextDue(repeatWeekdays: Int?, now: Long, zone: ZoneId): Long? {
     if (repeatWeekdays == null || repeatWeekdays == 0) return null

@@ -62,8 +62,7 @@ import java.time.format.TextStyle
 private val QUICK_DURATIONS = listOf(5, 15, 30, 45, 60, 90, 120, 180)
 private val RECURRENCE_PRESETS = listOf(1, 7, 14, 30)
 
-/** Generous enough for a real task phrase, short enough to always stay tidy in a list row, a
- * badge-heavy card, or a detail-screen header - the places a title actually has to fit. */
+/** Long enough for a real task, short enough to fit on a card. */
 private const val MAX_TITLE_LENGTH = 80
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -82,10 +81,7 @@ fun AddEditJobScreen(
     val state by viewModel.formState.collectAsState()
     val categories by repository.categories.collectAsState(initial = emptyList())
 
-    // Only meaningful for a subtask (state.parentId != null): its own parent, and every sibling
-    // sharing that parent. Hoisted here rather than fetched separately by each section that
-    // needs it (the live allocation summary next to the duration picker below, and the
-    // "Depends on" picker further down) - one subscription, not two.
+    // Subtasks only: the parent and siblings, for the time summary and the "Do this after" picker.
     val subtaskParentId = state.parentId
     val parentJobFlow = remember(repository, subtaskParentId) {
         subtaskParentId?.let { repository.jobById(it) } ?: flowOf(null)
@@ -96,12 +92,7 @@ fun AddEditJobScreen(
     }
     val siblings by siblingsFlow.collectAsState(initial = emptyList())
 
-    // The opposite direction: only meaningful for a job that ISN'T itself a subtask (it's the
-    // one this screen is editing, not its parent) and already has an id to have subtasks of its
-    // own - its own subtask list, purely for the live allocation summary next to its duration
-    // picker. SubtasksSection further down fetches this same job's subtasks independently for
-    // its own list rendering; not worth threading a pre-fetched list through it just to avoid
-    // one extra cheap Room query subscription.
+    // Parents only: this job's own subtasks, for the time summary next to the duration.
     val savedId = state.id
     val ownSubtasksFlow = remember(repository, savedId) {
         savedId?.let { repository.subtasksOf(it) } ?: flowOf(emptyList())
@@ -181,9 +172,7 @@ fun AddEditJobScreen(
                         )
                     }
                     item {
-                        // Long jobs don't have one "right" length, so this is a range, not an
-                        // exact value: selected whenever the estimate is 4hr or more, and tapping
-                        // it seeds 4hr as a starting point you can then fine-tune below.
+                        // Selected for anything 4hr+. Tapping it sets 4hr, which you can then adjust below.
                         FilterChip(
                             selected = state.estimatedMinutes >= LONG_JOB_MINUTES,
                             onClick = { viewModel.setEstimatedMinutes(LONG_JOB_MINUTES) },
@@ -202,11 +191,7 @@ fun AddEditJobScreen(
                     singleLine = true
                 )
 
-                // Only a subtask has a parent to allocate against. Live projection, not a
-                // straight sum of already-saved siblings: this subtask's own last-saved estimate
-                // (if it has one) is swapped out for whatever's currently typed above, so the
-                // summary tracks the duration picker as it's being used instead of only updating
-                // after a save.
+                // Uses what's typed right now for this subtask, not its saved estimate.
                 val currentParent = parentJob
                 if (state.isLoaded && subtaskParentId != null && currentParent != null) {
                     val otherSiblingsTotal = siblings.filter { it.id != state.id }.sumOf { it.estimatedMinutes }
@@ -216,12 +201,6 @@ fun AddEditJobScreen(
                     )
                 }
 
-                // The other direction: this job isn't a subtask, but already has subtasks of its
-                // own - shows here, next to its own duration picker, instead of above the
-                // subtask list further down (SubtasksSection's own summary line is off for this
-                // screen; see showRemainingSummary = false below), so both this screen and a
-                // subtask's own screen keep the same summary in the same relative spot: right
-                // where its own time gets chosen.
                 if (subtaskParentId == null && savedId != null && ownSubtasks.isNotEmpty()) {
                     AllocationSummary(
                         estimatedMinutes = state.estimatedMinutes,
@@ -266,10 +245,7 @@ fun AddEditJobScreen(
                 }
             }
 
-            // The opposite gate from below: only a subtask can depend on another subtask, and
-            // only among its own siblings (same parent). subtaskParentId/siblings are the
-            // hoisted values from the top of this composable, shared with the allocation
-            // summary next to the duration picker above.
+            // Only subtasks can depend on something, and only on a sibling.
             if (state.isLoaded && subtaskParentId != null) {
                 HorizontalDivider()
 
@@ -301,11 +277,8 @@ fun AddEditJobScreen(
                 }
             }
 
-            // Only a job that isn't itself a subtask can repeat or have subtasks (one level
-            // deep). Gated on isLoaded so an existing subtask being edited never flashes either
-            // section before we know its real parentId. Repeating and having subtasks are also
-            // mutually exclusive (see JobRepository.addJob): the switch can't be turned on while
-            // this job has subtasks, and the subtask list is hidden while it repeats.
+            // Top-level jobs only. Repeat and subtasks are either/or (see JobRepository.addJob).
+            // Waits for isLoaded so a subtask doesn't flash these sections while it loads.
             if (state.isLoaded && state.parentId == null) {
                 val hasSubtasks = ownSubtasks.isNotEmpty()
                 HorizontalDivider()
@@ -428,7 +401,7 @@ fun AddEditJobScreen(
     }
 }
 
-/** One chip per day of the week, Monday first; any combination can be on. */
+/** Monday first. Any combination. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun WeekdayPicker(mask: Int, onToggle: (DayOfWeek) -> Unit) {

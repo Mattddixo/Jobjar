@@ -1,7 +1,6 @@
 import Foundation
 
-/// Extra context about the drawn job shown on its card: is it part of something bigger, or
-/// does it have subtasks of its own?
+/// Parent title or subtask progress, for the card.
 struct DrawnJobContext {
     var parentTitle: String? = nil
     var subtaskDone: Int = 0
@@ -12,8 +11,7 @@ struct DrawnJobContext {
 @Observable
 final class DrawViewModel {
     var availableMinutes: Int = 30
-    /// When true, ignore availableMinutes and draw only from jobs needing 4+ hours - an
-    /// explicit "give me a big one" instead of "what fits".
+    /// 4+ hrs mode: ignores the time.
     var longJobsOnly: Bool = false
     var selectedCategory: String? = nil
     var drawnJob: Job? = nil
@@ -35,8 +33,7 @@ final class DrawViewModel {
         selectedCategory = category
     }
 
-    /// Draws a random eligible job. Pass `excludeCurrent` = true to redraw without repeating
-    /// the job on screen.
+    /// `excludeCurrent` skips the job that's showing.
     @MainActor
     func draw(repository: JobRepository, allJobs: [Job], excludeCurrent: Bool = false) {
         let excludeSet: Set<UUID>
@@ -83,7 +80,6 @@ final class DrawViewModel {
         noMatchFound = false
     }
 
-    /// Returns the drawn job's title and the undo snapshot, for the Undo toast.
     @MainActor
     func completeDrawnJob(repository: JobRepository, allJobs: [Job]) -> (String, UndoSnapshot)? {
         guard let job = drawnJob else { return nil }

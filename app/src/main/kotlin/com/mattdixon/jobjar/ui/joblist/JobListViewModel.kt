@@ -26,23 +26,10 @@ enum class SortOrder(@StringRes val labelRes: Int) {
     CATEGORY(R.string.sort_category)
 }
 
-/** Which of the three top-level views the Jobs list is showing - replaces a plain
- * Active/Completed boolean now that a scheduled job needs a home of its own: it's neither
- * "active" in the everyday sense (it's deliberately excluded from the random draw, same
- * treatment as an in-progress job) nor "completed," so folding it into either would misplace it
- * rather than actually show it. */
+/** Tabs on the Jobs screen. Scheduled jobs get their own tab since they're neither to-do nor done. */
 enum class JobsView { ACTIVE, COMPLETED, SCHEDULED }
 
-/**
- * One row on the Jobs list - either a top-level job or a subtask, since both are independently
- * actionable (drawable, startable, completable) and both need to actually be findable here, not
- * just visible by drilling into a parent's detail page. [parentTitle] is non-null only for a
- * subtask row; [subtaskDone]/[subtaskTotal] are only meaningful for a top-level job that has
- * subtasks of its own (a subtask can't have subtasks - one level deep); [waitingOnTitle] is
- * non-null only for a subtask row that's blocked on an unfinished sibling; [scheduledDate] just
- * mirrors [Job.scheduledDate] - carried here too so the row doesn't need to reach back into the
- * job for something this list already displays and filters on.
- */
+/** One row: a job or a subtask (subtasks are listed too so they can be found and filtered). */
 data class JobListItem(
     val job: Job,
     val displayMinutes: Int,
@@ -56,21 +43,20 @@ data class JobListItem(
 data class JobListUiState(
     val items: List<JobListItem> = emptyList(),
     val categories: List<String> = emptyList(),
-    /** How many jobs (parents and subtasks alike) currently carry each category - shown in the "Manage categories" dialog so removing one can say how many jobs it'll clear. */
+    /** Jobs per category, for the Edit categories dialog. */
     val categoryCounts: Map<String, Int> = emptyMap(),
     val view: JobsView = JobsView.ACTIVE,
-    /** Empty = no category narrowing (all categories included). */
+    /** Empty = all. */
     val selectedCategories: Set<String> = emptySet(),
     val showRepeatingOnly: Boolean = false,
     val showInProgressOnly: Boolean = false,
     val sortOrder: SortOrder = SortOrder.NEWEST,
     val searchQuery: String = "",
-    /** Parent job IDs whose subtask group is currently expanded. Collapsed (not present) by default. */
+    /** Parents whose subtasks are showing. */
     val expandedParentIds: Set<Long> = emptySet(),
-    /** False only until the first load from the database - so the empty-list message doesn't flash on launch. */
+    /** False until the first load. */
     val isLoaded: Boolean = false
 ) {
-    /** Whether any *narrowing* filter (as opposed to the Active/Completed/Scheduled view or sort) is on - drives the "Clear" chip. */
     val hasActiveFilters: Boolean get() = selectedCategories.isNotEmpty() || showRepeatingOnly || showInProgressOnly
 }
 
@@ -91,7 +77,6 @@ private data class ListFilters(
 )
 
 class JobListViewModel(private val repository: JobRepository) : ViewModel() {
-
     private val view = MutableStateFlow(JobsView.ACTIVE)
     private val selectedCategories = MutableStateFlow<Set<String>>(emptySet())
     private val showRepeatingOnly = MutableStateFlow(false)
@@ -100,10 +85,7 @@ class JobListViewModel(private val repository: JobRepository) : ViewModel() {
     private val searchQuery = MutableStateFlow("")
     private val expandedParentIds = MutableStateFlow<Set<Long>>(emptySet())
 
-    // kotlinx.coroutines' typed combine() overloads only go up to 5 flows, and a vararg
-    // combine() would require every flow to share one type - not possible here with a mix of
-    // JobsView/Set<String>/SortOrder/String. Combining the four toggle-style filters first, then
-    // combining that with sort and search, keeps everything typed without that limitation.
+    // combine() only has typed overloads up to 5 flows, so the filters are combined in two steps.
     private val toggleFilters = combine(
         view,
         selectedCategories,
@@ -133,12 +115,7 @@ class JobListViewModel(private val repository: JobRepository) : ViewModel() {
         val allById = allFlat.associateBy { it.id }
         val subtasksByParent = allFlat.filter { it.parentId != null }.groupBy { it.parentId }
 
-        // Every row - parents and subtasks alike - is its own list item. A subtask is just as
-        // independently actionable (drawable, startable, completable) as a top-level job, so
-        // scoping this list to top-level jobs only would hide half the picture: you could start
-        // or complete a subtask from the Draw screen or its parent's detail page, but never see
-        // or filter for it here. This matches the population the Jar meter and Stats already use
-        // (repository.allJobsFlat) rather than disagreeing with them about what "all jobs" means.
+        // Subtasks get their own rows too, same as the Jar and Stats count them.
         val items = allFlat.map { job ->
             if (job.parentId == null) {
                 val subtasks = subtasksByParent[job.id].orEmpty()
@@ -165,14 +142,8 @@ class JobListViewModel(private val repository: JobRepository) : ViewModel() {
 
         val query = currentFilters.searchQuery.trim()
 
-        // A repeating job never persists isDone, so "completed" for it means "resting until its
-        // next cycle" - isPending() (not isDone) is what decides Active vs Completed for it, and
-        // for everything else it's equivalent to !isDone. When filtering to repeating jobs only,
-        // the Active/Completed split is bypassed entirely and both due and resting ones show
-        // together, so this is the one place you can see the full set regardless of state. The
-        // Scheduled view is its own thing entirely - scheduledDate != null - rather than a
-        // pending/done split, and a repeating job can never match it (scheduling isn't offered
-        // for one; its own nextDueAt cycling already covers "when").
+        // Repeating jobs never stay done, so isPending() decides To do vs Done. The Repeating filter
+        // ignores that split and shows them all. Scheduled is just scheduledDate != null.
         val filtered = items
             .filter { currentFilters.categories.isEmpty() || it.job.category in currentFilters.categories }
             .filter { !currentFilters.repeatingOnly || it.job.recurrenceDays != null }
@@ -198,12 +169,8 @@ class JobListViewModel(private val repository: JobRepository) : ViewModel() {
             SortOrder.CATEGORY -> entries.sortedBy { it.job.category }
         }
 
-        // Subtasks sort immediately under their own parent instead of scattering wherever the
-        // chosen sort would otherwise place them - that's the actual "messy" part of a flat list,
-        // not just the missing indent. A subtask whose own parent isn't in this filtered view
-        // (e.g. it matches In Progress or a search term but the parent doesn't) has no group to
-        // join, so it's treated like any other top-level entry for sorting purposes instead of
-        // being hidden or force-attached to an unrelated/invisible parent.
+        // Subtasks sit under their parent. If the parent is filtered out, the subtask sorts like a
+        // normal row.
         val visibleParentIds = filtered.filter { it.job.parentId == null }.mapTo(mutableSetOf()) { it.job.id }
         val subtasksByVisibleParent = filtered
             .filter { it.job.parentId != null && it.job.parentId in visibleParentIds }
@@ -213,10 +180,7 @@ class JobListViewModel(private val repository: JobRepository) : ViewModel() {
             it.job.parentId == null || it.job.parentId !in visibleParentIds
         }
 
-        // Subtask groups default to collapsed, but a search/filter that's actively narrowing the
-        // list should still surface a matching subtask even if its parent's group hasn't been
-        // manually expanded - otherwise a search hit could be hidden with no visible way to reach
-        // it. Plain narrowing by Active/Completed doesn't count, since every list view has that.
+        // Groups start collapsed, but searching or filtering opens them so matches aren't hidden.
         val hasActiveNarrowing = currentFilters.categories.isNotEmpty() ||
             currentFilters.repeatingOnly ||
             currentFilters.inProgressOnly ||
@@ -265,7 +229,7 @@ class JobListViewModel(private val repository: JobRepository) : ViewModel() {
         }
     }
 
-    /** [onCompleted] gets the undo snapshot when this *completed* the job (not when it reopened one). */
+    /** [onCompleted] only fires when this completed the job, not when it reopened it. */
     fun toggleDone(job: Job, onCompleted: (UndoSnapshot) -> Unit) {
         val completing = job.isPending()
         viewModelScope.launch {
@@ -274,7 +238,7 @@ class JobListViewModel(private val repository: JobRepository) : ViewModel() {
         }
     }
 
-    /** Starts or reverts a job's in-progress flag - the same toggle backs both the "Start" and "Move back to jar" row menu items, since only one is ever shown for a given job at a time. */
+    /** Start / Put back in jar. */
     fun toggleInProgress(job: Job) {
         viewModelScope.launch { repository.toggleInProgress(job.id) }
     }
@@ -291,9 +255,7 @@ class JobListViewModel(private val repository: JobRepository) : ViewModel() {
         viewModelScope.launch { repository.unscheduleJob(job.id) }
     }
 
-    /** Drops [category] from the active filter selection too, if it was one of the ones
-     * narrowing the list - otherwise a just-removed category could stay checked "invisibly"
-     * since it can no longer appear in the dropdown to be unchecked by hand. */
+    /** Also unticks it in the filter, since it won't be in the dropdown any more. */
     fun removeCategory(category: String) {
         viewModelScope.launch { repository.removeCategory(category) }
         selectedCategories.value = selectedCategories.value - category

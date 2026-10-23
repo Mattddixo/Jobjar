@@ -25,9 +25,7 @@ struct ContentView: View {
     }
 }
 
-/// Each top-level tab owns its own NavigationPath, mirroring the Android app's single NavHost
-/// with per-destination `popUpTo`/`saveState`/`restoreState`: switching tabs preserves whatever
-/// push stack you left behind in the other one.
+/// Each tab keeps its own navigation stack, so switching tabs doesn't lose your place.
 private struct DrawTab: View {
     @State private var path = NavigationPath()
 
@@ -59,8 +57,7 @@ private struct JobsTab: View {
     }
 }
 
-/// Shared push-destination resolver for both tabs that can navigate into job detail/add/edit -
-/// the equivalent of the Android app's NavHost composable() routes.
+/// Destinations shared by the Jar and Jobs tabs.
 private struct RouteDestination: View {
     let route: Route
     @Binding var path: NavigationPath
