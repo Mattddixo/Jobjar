@@ -25,7 +25,7 @@ enum JobsView: String, CaseIterable, Identifiable {
     var label: String {
         switch self {
         case .active: return "To do"
-        case .completed: return "Done"
+        case .completed: return "Completed"
         case .scheduled: return "Scheduled"
         }
     }
@@ -80,7 +80,7 @@ final class JobListViewModel {
         if hasActiveFilters { return "Nothing matches those filters." }
         switch view {
         case .scheduled: return "Nothing scheduled."
-        case .completed: return "Nothing done yet."
+        case .completed: return "Nothing completed yet."
         case .active: return "The jar's empty. Tap + to add a job."
         }
     }

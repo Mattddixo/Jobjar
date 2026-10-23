@@ -66,9 +66,9 @@ struct JobDetailView: View {
                 )
             }
         }
-        .alert("Mark as done?", isPresented: $showForceCompleteDialog) {
+        .alert("Mark as completed?", isPresented: $showForceCompleteDialog) {
             Button("Cancel", role: .cancel) {}
-            Button("Mark done") {
+            Button("Mark complete") {
                 if let job = currentJob { toggleDone(job) }
             }
         } message: {
@@ -111,7 +111,7 @@ struct JobDetailView: View {
 
                 if job.recurrenceDays != nil {
                     let suffix = job.completionCount == 0 ? ""
-                        : job.completionCount == 1 ? " · done once" : " · done \(job.completionCount) times"
+                        : job.completionCount == 1 ? " · completed once" : " · completed \(job.completionCount) times"
                     Text(formatDueStatus(job.nextDueAt) + suffix)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
@@ -212,8 +212,8 @@ struct JobDetailView: View {
     }
 
     private func buttonLabel(for job: Job) -> String {
-        if job.isPending() { return "Mark done" }
+        if job.isPending() { return "Mark complete" }
         if job.recurrenceDays != nil { return "Do it now" }
-        return "Mark not done"
+        return "Mark not complete"
     }
 }

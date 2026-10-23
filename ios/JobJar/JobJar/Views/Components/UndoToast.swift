@@ -23,7 +23,7 @@ final class UndoCenter {
     }
 
     func offerCompleted(_ title: String, _ snapshot: UndoSnapshot) {
-        offer("Done: \(title)", snapshot)
+        offer("Completed: \(title)", snapshot)
     }
 
     func offerDeleted(_ title: String, _ snapshot: UndoSnapshot) {

@@ -17,7 +17,7 @@ protocol CalendarGateway {
 
 /// What goes in the event's notes: the job's notes, then where the event came from.
 func eventDescription(_ notes: String) -> String {
-    let footer = "Scheduled from Job Jar. Mark it done in the app and this event goes away."
+    let footer = "Scheduled from Job Jar. Mark it complete in the app and this event goes away."
     let trimmed = notes.trimmingCharacters(in: .whitespacesAndNewlines)
     return trimmed.isEmpty ? footer : "\(trimmed)\n\n\(footer)"
 }

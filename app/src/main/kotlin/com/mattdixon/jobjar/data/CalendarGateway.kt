@@ -25,4 +25,4 @@ fun eventDescription(notes: String): String {
     return if (trimmed.isEmpty()) EVENT_FOOTER else "$trimmed\n\n$EVENT_FOOTER"
 }
 
-private const val EVENT_FOOTER = "Scheduled from Job Jar. Mark it done in the app and this event goes away."
+private const val EVENT_FOOTER = "Scheduled from Job Jar. Mark it complete in the app and this event goes away."

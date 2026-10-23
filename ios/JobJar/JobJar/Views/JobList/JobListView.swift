@@ -63,7 +63,7 @@ struct JobListView: View {
                             Button {
                                 requestToggleDone(item)
                             } label: {
-                                Label(item.job.isPending() ? "Mark done" : "Mark not done", systemImage: "checkmark")
+                                Label(item.job.isPending() ? "Mark complete" : "Mark not complete", systemImage: "checkmark")
                             }
                             .tint(.accentColor)
                         }
@@ -131,12 +131,12 @@ struct JobListView: View {
             )
         }
         .alert(
-            "Mark as done?",
+            "Mark as completed?",
             isPresented: Binding(get: { itemPendingForceComplete != nil }, set: { if !$0 { itemPendingForceComplete = nil } }),
             presenting: itemPendingForceComplete
         ) { item in
             Button("Cancel", role: .cancel) {}
-            Button("Mark done") { toggleDone(item.job) }
+            Button("Mark complete") { toggleDone(item.job) }
         } message: { item in
             Text(forceCompleteMessage(openSubtasks: item.subtaskTotal - item.subtaskDone))
         }
@@ -206,8 +206,8 @@ struct JobListView: View {
 
 func forceCompleteMessage(openSubtasks: Int) -> String {
     openSubtasks == 1
-        ? "There's still 1 subtask open. It'll be marked done too."
-        : "There are still \(openSubtasks) subtasks open. They'll be marked done too."
+        ? "There's still 1 subtask open. It'll be marked completed too."
+        : "There are still \(openSubtasks) subtasks open. They'll be marked completed too."
 }
 
 private struct JobRow: View {
@@ -238,7 +238,7 @@ private struct JobRow: View {
                     if job.isInProgress { InProgressBadge() }
                     TimeBadge(minutes: item.displayMinutes)
                     if !job.category.isEmpty { CategoryBadge(category: job.category) }
-                    if item.subtaskTotal > 0 { InfoBadge(text: "\(item.subtaskDone)/\(item.subtaskTotal) done") }
+                    if item.subtaskTotal > 0 { InfoBadge(text: "\(item.subtaskDone)/\(item.subtaskTotal) completed") }
                     if let days = job.recurrenceDays { InfoBadge(text: formatRecurrence(days: days, weekdays: job.repeatWeekdays)) }
                     if let scheduled = job.scheduledDate { ScheduledBadge(date: scheduled) }
                 }
@@ -270,7 +270,7 @@ private struct JobRow: View {
             Menu {
                 Button(action: onOpen) { Label("Open", systemImage: "pencil") }
                 Button(action: onToggleDone) {
-                    Label(job.isPending() ? "Mark done" : "Mark not done", systemImage: job.isPending() ? "circle" : "checkmark.circle.fill")
+                    Label(job.isPending() ? "Mark complete" : "Mark not complete", systemImage: job.isPending() ? "circle" : "checkmark.circle.fill")
                 }
                 if job.isInProgress {
                     Button(action: onToggleInProgress) { Label("Put back in jar", systemImage: "arrow.uturn.backward") }

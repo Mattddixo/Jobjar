@@ -18,7 +18,7 @@ struct StatsView: View {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: 12) {
                     StatCard(label: "To do", value: "\(stats.activeCount)")
-                    StatCard(label: "Done", value: "\(stats.completedCount)")
+                    StatCard(label: "Completed", value: "\(stats.completedCount)")
                     StatCard(label: "Time spent", value: formatMinutes(stats.totalMinutesCompleted))
                 }
 
@@ -37,7 +37,7 @@ struct StatsView: View {
                                 HStack {
                                     Text(stat.category).font(.body)
                                     Spacer()
-                                    Text("\(stat.completedCount) done · \(formatMinutes(stat.totalMinutes))")
+                                    Text("\(stat.completedCount) completed · \(formatMinutes(stat.totalMinutes))")
                                         .font(.subheadline)
                                 }
                                 ProgressView(value: Double(stat.totalMinutes), total: Double(maxMinutes))

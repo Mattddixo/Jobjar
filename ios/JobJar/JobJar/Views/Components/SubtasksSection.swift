@@ -22,7 +22,7 @@ struct SubtasksSection: View {
                 Text("Subtasks").font(.headline)
                 Spacer()
                 if !subtasks.isEmpty {
-                    Text("\(subtasks.filter { $0.isDone }.count)/\(subtasks.count) done")
+                    Text("\(subtasks.filter { $0.isDone }.count)/\(subtasks.count) completed")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }

@@ -132,7 +132,7 @@ struct AddEditJobView: View {
             if isLoaded, let subtaskParentId = resolvedParentId {
                 Section("Do this after") {
                     Text(
-                        "It won't be drawn until that one's done. You can still tick it off whenever you like."
+                        "It won't be drawn until that one's completed. You can still tick it off whenever you like."
                     )
                     .font(.footnote)
                     .foregroundStyle(.secondary)

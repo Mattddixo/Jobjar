@@ -246,7 +246,7 @@ private struct BatchJobCard: View {
                         Text("Part of \(parentTitle)").font(.caption).lineLimit(1)
                     }
                     if context.subtaskTotal > 0 {
-                        Text("\(context.subtaskDone) of \(context.subtaskTotal) subtasks done · \(formatMinutes(context.remainingMinutes ?? job.estimatedMinutes)) left")
+                        Text("\(context.subtaskDone) of \(context.subtaskTotal) subtasks completed · \(formatMinutes(context.remainingMinutes ?? job.estimatedMinutes)) left")
                             .font(.caption)
                             .lineLimit(1)
                     }
