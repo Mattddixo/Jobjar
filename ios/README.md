@@ -15,8 +15,11 @@ xcodegen generate
 open JobJar.xcodeproj
 ```
 
-Then run the `JobJar` scheme on an iOS 17 simulator or device. Regenerate after adding or
-moving files.
+Then run the `JobJar` scheme on an iOS 17 simulator or device (Cmd-U runs the tests).
+Regenerate after adding or moving files.
+
+No Mac? The `iOS` GitHub Actions workflow builds it, runs the tests, and can publish an unsigned
+`JobJar.ipa` for sideloading. See [docs/IPHONE.md](../docs/IPHONE.md).
 
 No XcodeGen? Make a new SwiftUI + SwiftData app in Xcode (iOS 17, bundle id
 `com.mattdixon.jobjar`) and drag in everything under `JobJar/`, replacing the generated
@@ -29,19 +32,22 @@ JobJar/
 ├── JobJarApp.swift / ContentView.swift   App, tabs, navigation
 ├── Models/Job.swift                      The SwiftData model
 ├── Data/JobRepository.swift              All the job rules, undo
+├── Data/CalendarGateway.swift            Writes scheduled jobs to the calendar (EventKit)
 ├── Data/JobExport.swift                  Backup file (same as Android)
-├── Util/                                 Duration and repeat formatting
+├── Util/                                 Duration, repeat and date formatting
 ├── Views/                                Jar, Jobs, Job, Add/edit, Stats, Settings, shared bits
 └── Assets.xcassets                       Icon, accent colour, drawn-card colour
+JobJarTests/                              Repository and backup tests (in-memory store, fake calendar)
 ```
 
 Views read with `@Query`; anything that changes data goes through `JobRepository`.
 
 ## Compared with Android
 
-Has: the jar with time and category, subtasks with dependencies, repeating jobs (every N days or
-set weekdays), undo, stats, light/dark/auto, export/import.
+Same features: the jar (time, how many, several categories), starting jobs, scheduling them into
+the calendar, subtasks with dependencies, repeating jobs (every N days or set weekdays), search
+and filters, undo, stats, light/dark/auto, export/import.
 
-Not yet: in-progress jobs, calendar scheduling, and drawing more than one job at a time. The
-model would need `isInProgress` and `scheduledDate` first; SwiftData picks up new optional
-properties on its own.
+Calendar events are tagged with a `jobjar://job/<id>` URL and the app only ever edits or deletes
+events carrying its own tag. Event ids aren't put in backups, since they only mean something on
+the phone that made them.

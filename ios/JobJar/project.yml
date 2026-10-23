@@ -31,3 +31,23 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         ENABLE_PREVIEWS: YES
+  JobJarTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: JobJarTests
+    dependencies:
+      - target: JobJar
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mattdixon.jobjar.tests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  JobJar:
+    build:
+      targets:
+        JobJar: all
+        JobJarTests: [test]
+    test:
+      targets:
+        - JobJarTests

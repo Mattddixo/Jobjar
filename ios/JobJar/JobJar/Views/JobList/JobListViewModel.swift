@@ -136,10 +136,10 @@ final class JobListViewModel {
         // normal row.
         let visibleParentIds = Set(filtered.filter { !$0.isSubtask }.map(\.id))
         let subtasksByVisibleParent = Dictionary(
-            grouping: filtered.filter { $0.job.parentId.map(visibleParentIds.contains) == true }
+            grouping: filtered.filter { $0.job.parentId.map { visibleParentIds.contains($0) } == true }
         ) { $0.job.parentId! }
             .mapValues { $0.sorted { $0.job.createdAt < $1.job.createdAt } }
-        let topLevelAndStandalone = filtered.filter { $0.job.parentId.map(visibleParentIds.contains) != true }
+        let topLevelAndStandalone = filtered.filter { $0.job.parentId.map { visibleParentIds.contains($0) } != true }
 
         // Groups start collapsed, but searching or filtering opens them so matches aren't hidden.
         let narrowing = hasActiveFilters || !query.isEmpty

@@ -4,9 +4,8 @@ A to-do app for people who'd rather not stare at a list. You put jobs in the jar
 time estimate, then when you've got a spare half hour you draw something that fits.
 
 There's an Android app (Kotlin, Jetpack Compose, Room) in `app/` and an iOS version (SwiftUI,
-SwiftData) in `ios/`. They follow the same rules and use the same backup format, but the iOS one
-is behind: no in-progress jobs, calendar scheduling or multi-job draws yet. See
-[ios/README.md](ios/README.md).
+SwiftData) in `ios/`. They have the same features, follow the same rules and use the same backup
+format. See [ios/README.md](ios/README.md).
 
 ## What it does
 

@@ -45,6 +45,17 @@ jobs:
             -sdk iphonesimulator \
             CODE_SIGNING_ALLOWED=NO
 
+      - name: Run tests
+        run: |
+          # Whichever iPhone simulator this runner's Xcode ships with.
+          device=$(xcrun simctl list devices available | grep -m1 -oE 'iPhone [^(]+' | sed 's/ *$//')
+          echo "Testing on $device"
+          xcodebuild test \
+            -project JobJar.xcodeproj \
+            -scheme JobJar \
+            -destination "platform=iOS Simulator,name=$device" \
+            CODE_SIGNING_ALLOWED=NO
+
       # Unsigned: Sideloadly / AltStore sign it with your own Apple ID when installing.
       - name: Build unsigned IPA
         run: |
