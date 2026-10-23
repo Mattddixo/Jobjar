@@ -247,6 +247,73 @@ class JobRepositoryTest {
     }
 
     @Test
+    fun deletingABookedJobDeletesItsEvent() = runTest {
+        val job = add("Dentist")
+        repo.scheduleJob(job, now + 3_600_000)
+        repo.deleteJob(job)
+        assertTrue(calendar.events.isEmpty())
+    }
+
+    @Test
+    fun deletingAParentDeletesItsBookedSubtasksEventsAndUndoBringsThemBack() = runTest {
+        val parent = add("Garage", 60)
+        val sub = add("Sweep", 20, parentId = parent)
+        repo.scheduleJob(sub, now + 3_600_000)
+        val snapshot = repo.deleteJob(parent)!!
+        assertTrue(calendar.events.isEmpty())
+        repo.undo(snapshot)
+        val event = calendar.events.getValue(dao.row(sub).calendarEventId!!)
+        assertEquals(now + 3_600_000, event.start)
+    }
+
+    @Test
+    fun editingNotesOfABookedJobUpdatesItsEvent() = runTest {
+        val job = add("Dentist")
+        repo.scheduleJob(job, now + 3_600_000)
+        repo.updateJob(dao.row(job).copy(notes = "Bring the forms"))
+        assertEquals("Bring the forms", calendar.events.values.single().notes)
+    }
+
+    @Test
+    fun importDeletesEventsOfJobsItReplaces() = runTest {
+        val job = add("Dentist")
+        repo.scheduleJob(job, now + 3_600_000)
+        repo.replaceAllJobs(listOf(Job(id = 1, title = "Something else", estimatedMinutes = 10)))
+        assertTrue(calendar.events.isEmpty())
+    }
+
+    @Test
+    fun importingTheSameBookingKeepsItsEvent() = runTest {
+        val job = add("Dentist")
+        repo.scheduleJob(job, now + 3_600_000)
+        val eventId = dao.row(job).calendarEventId
+        repo.replaceAllJobs(listOf(dao.row(job)))
+        assertEquals(setOf(eventId), calendar.events.keys)
+        assertEquals(eventId, dao.row(job).calendarEventId)
+    }
+
+    @Test
+    fun importWritesEventsForUpcomingBookingsOnly() = runTest {
+        repo.replaceAllJobs(
+            listOf(
+                Job(id = 1, title = "Upcoming", estimatedMinutes = 30, scheduledDate = now + 3_600_000, calendarEventId = 777),
+                Job(id = 2, title = "Already past", estimatedMinutes = 30, scheduledDate = now - 3_600_000)
+            )
+        )
+        val event = calendar.events.values.single()
+        assertEquals("Upcoming", event.title)
+        assertEquals(now + 3_600_000 + 30 * 60_000, event.end)
+        assertNotNull(dao.row(1).calendarEventId)
+        assertNull(dao.row(2).calendarEventId)
+    }
+
+    @Test
+    fun eventDescriptionHasNotesThenWhereItCameFrom() {
+        assertTrue(eventDescription("").startsWith("Scheduled from Job Jar"))
+        assertTrue(eventDescription(" Bring the forms ").startsWith("Bring the forms\n\nScheduled from Job Jar"))
+    }
+
+    @Test
     fun schedulingWithoutCalendarPermissionStillBooksInApp() = runTest {
         calendar.permissionGranted = false
         val job = add("Dentist")

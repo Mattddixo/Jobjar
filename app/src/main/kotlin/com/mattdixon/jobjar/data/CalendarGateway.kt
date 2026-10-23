@@ -12,9 +12,17 @@ interface CalendarGateway {
     suspend fun insertEvent(job: Job, startMillis: Long, endMillis: Long): Long?
 
     /** [owner] is the job as it was before this change. */
-    suspend fun updateEvent(eventId: Long, owner: Job, title: String, startMillis: Long, endMillis: Long): Boolean
+    suspend fun updateEvent(eventId: Long, owner: Job, title: String, notes: String, startMillis: Long, endMillis: Long): Boolean
 
     suspend fun deleteEvent(eventId: Long, owner: Job): Boolean
 
     suspend fun ownsEvent(eventId: Long, owner: Job): Boolean
 }
+
+/** What goes in the event's description: the job's notes, then where the event came from. */
+fun eventDescription(notes: String): String {
+    val trimmed = notes.trim()
+    return if (trimmed.isEmpty()) EVENT_FOOTER else "$trimmed\n\n$EVENT_FOOTER"
+}
+
+private const val EVENT_FOOTER = "Scheduled from Job Jar. Mark it done in the app and this event goes away."

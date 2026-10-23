@@ -98,7 +98,7 @@ class JobRepository(
      * - Jobs with subtasks can't repeat.
      * - Turning repeat on clears done and any booking.
      * - Switching repeat type restarts the cycle. Changing the number of days doesn't.
-     * - If it's booked, the calendar event gets the new title/length.
+     * - If it's booked, the calendar event gets the new title, length and notes.
      */
     suspend fun updateJob(edited: Job) = writeThenSync { sync ->
         val fresh = dao.getJob(edited.id) ?: return@writeThenSync
@@ -136,9 +136,10 @@ class JobRepository(
 
         val eventId = merged.calendarEventId
         val start = merged.scheduledDate
-        if (eventId != null && start != null && (merged.title != fresh.title || merged.estimatedMinutes != fresh.estimatedMinutes)) {
+        val eventChanged = merged.title != fresh.title || merged.estimatedMinutes != fresh.estimatedMinutes || merged.notes != fresh.notes
+        if (eventId != null && start != null && eventChanged) {
             val end = start + merged.estimatedMinutes * MINUTE_MILLIS
-            sync.actions += { it.updateEvent(eventId, fresh, merged.title, start, end) }
+            sync.actions += { it.updateEvent(eventId, fresh, merged.title, merged.notes, start, end) }
         }
     }
 
@@ -305,7 +306,7 @@ class JobRepository(
         if (job.recurrenceDays != null) return false
         val end = dateTimeMillis + job.estimatedMinutes * MINUTE_MILLIS
         val existing = job.calendarEventId
-        val eventId = if (existing != null && calendar.updateEvent(existing, job, job.title, dateTimeMillis, end)) {
+        val eventId = if (existing != null && calendar.updateEvent(existing, job, job.title, job.notes, dateTimeMillis, end)) {
             existing
         } else {
             calendar.insertEvent(job, dateTimeMillis, end)
@@ -368,12 +369,34 @@ class JobRepository(
     suspend fun exportJobs(): List<Job> = dao.getAllJobs()
 
     /**
-     * Import: replaces everything, keeping the ids so links survive. Calendar ids come along too;
-     * they're only ever used after the ownership check.
+     * Import: replaces everything, keeping the ids so links survive. Then the calendar is brought
+     * in line: events for jobs that are gone (or no longer booked) are deleted, and upcoming
+     * bookings that don't have an event on this phone get one. Calendar ids in the file are only
+     * ever used after the ownership check.
      */
-    suspend fun replaceAllJobs(jobs: List<Job>) = transactions.run {
-        dao.deleteAll()
-        dao.upsertAll(jobs)
+    suspend fun replaceAllJobs(jobs: List<Job>) {
+        val old = transactions.run {
+            val previous = dao.getAllJobs()
+            dao.deleteAll()
+            dao.upsertAll(jobs)
+            previous
+        }
+        val keptEvents = jobs.mapNotNullTo(mutableSetOf()) { job ->
+            job.calendarEventId?.takeIf { job.scheduledDate != null }?.let { job.id to it }
+        }
+        old.forEach { row ->
+            val eventId = row.calendarEventId ?: return@forEach
+            if ((row.id to eventId) !in keptEvents) calendar.deleteEvent(eventId, row)
+        }
+        val now = clock()
+        jobs.forEach { row ->
+            val start = row.scheduledDate?.takeIf { it > now } ?: return@forEach
+            val eventId = row.calendarEventId
+            if (eventId == null || !calendar.ownsEvent(eventId, row)) {
+                val newId = calendar.insertEvent(row, start, start + row.estimatedMinutes * MINUTE_MILLIS)
+                if (newId != eventId) dao.setCalendarEventId(row.id, newId)
+            }
+        }
     }
 }
 

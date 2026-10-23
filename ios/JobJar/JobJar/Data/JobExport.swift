@@ -11,8 +11,8 @@ import UniformTypeIdentifiers
 ///
 /// Ids in the file are numbers. UUIDs get numbered 1, 2, 3... on export and new UUIDs are made
 /// on import. Dates are epoch ms. Calendar event ids only mean something on the phone that made
-/// them, so they're left out; a booked job comes back booked and a new event is written the next
-/// time it's rescheduled.
+/// them, so they're left out. On import, upcoming bookings get a new event on this phone (see
+/// JobRepository.replaceAll).
 enum JobExport {
     static let version = 1
     private static let format = "job-jar"

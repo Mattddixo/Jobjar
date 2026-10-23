@@ -73,7 +73,7 @@ class FakeJobDao : JobDao {
 
 /** Fake calendar that tags events with the job id, like the real one. */
 class FakeCalendar : CalendarGateway {
-    data class Event(val jobId: Long, val title: String, val start: Long, val end: Long)
+    data class Event(val jobId: Long, val title: String, val start: Long, val end: Long, val notes: String = "")
 
     val events = mutableMapOf<Long, Event>()
     private var nextId = 100L
@@ -82,13 +82,13 @@ class FakeCalendar : CalendarGateway {
     override suspend fun insertEvent(job: Job, startMillis: Long, endMillis: Long): Long? {
         if (!permissionGranted) return null
         val id = nextId++
-        events[id] = Event(job.id, job.title, startMillis, endMillis)
+        events[id] = Event(job.id, job.title, startMillis, endMillis, job.notes)
         return id
     }
 
-    override suspend fun updateEvent(eventId: Long, owner: Job, title: String, startMillis: Long, endMillis: Long): Boolean {
+    override suspend fun updateEvent(eventId: Long, owner: Job, title: String, notes: String, startMillis: Long, endMillis: Long): Boolean {
         if (!ownsEvent(eventId, owner)) return false
-        events[eventId] = Event(owner.id, title, startMillis, endMillis)
+        events[eventId] = Event(owner.id, title, startMillis, endMillis, notes)
         return true
     }
 

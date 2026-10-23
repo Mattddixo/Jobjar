@@ -11,6 +11,7 @@ final class FakeCalendar: CalendarGateway {
         var title: String
         var start: Date
         var end: Date
+        var notes: String = ""
     }
 
     var events: [String: Event] = [:]
@@ -21,13 +22,13 @@ final class FakeCalendar: CalendarGateway {
         guard hasAccess else { return nil }
         let id = "event-\(nextId)"
         nextId += 1
-        events[id] = Event(ownerId: job.id, title: job.title, start: start, end: end)
+        events[id] = Event(ownerId: job.id, title: job.title, start: start, end: end, notes: job.notes)
         return id
     }
 
-    func updateEvent(_ eventId: String, owner: Job, title: String, start: Date, end: Date) -> Bool {
+    func updateEvent(_ eventId: String, owner: Job, title: String, notes: String, start: Date, end: Date) -> Bool {
         guard ownsEvent(eventId, owner: owner) else { return false }
-        events[eventId] = Event(ownerId: owner.id, title: title, start: start, end: end)
+        events[eventId] = Event(ownerId: owner.id, title: title, start: start, end: end, notes: notes)
         return true
     }
 
@@ -187,6 +188,47 @@ final class JobRepositoryTests: XCTestCase {
         XCTAssertNil(second.dependsOnSubtaskId)
         repository.undo(snapshot)
         XCTAssertEqual(second.dependsOnSubtaskId, firstId)
+    }
+
+    func testDeletingAParentDeletesItsBookedSubtasksEventsAndUndoBringsThemBack() throws {
+        let parent = add("Garage", minutes: 60)
+        let sub = add("Sweep", minutes: 20, parent: parent)
+        repository.scheduleJob(sub, at: clock + 3600)
+        let subId = sub.id
+        let snapshot = repository.deleteJob(parent, allJobs: all)
+        XCTAssertTrue(calendar.events.isEmpty)
+        repository.undo(snapshot)
+        let restored = try XCTUnwrap(job(subId))
+        XCTAssertEqual(calendar.events[try XCTUnwrap(restored.calendarEventId)]?.start, clock + 3600)
+    }
+
+    func testEditingNotesOfABookedJobUpdatesItsEvent() {
+        let target = add("Dentist")
+        repository.scheduleJob(target, at: clock + 3600)
+        var withNotes = edit("Dentist")
+        withNotes.notes = "Bring the forms"
+        repository.updateJob(target, with: withNotes, allJobs: all)
+        XCTAssertEqual(calendar.events.values.first?.notes, "Bring the forms")
+    }
+
+    func testImportDeletesOldEventsAndBooksUpcomingJobs() {
+        let target = add("Dentist")
+        repository.scheduleJob(target, at: clock + 3600)
+        repository.replaceAll(with: [
+            JobRecord(id: UUID(), title: "Upcoming", estimatedMinutes: 30, scheduledDate: clock + 7200),
+            JobRecord(id: UUID(), title: "Already past", estimatedMinutes: 30, scheduledDate: clock - 7200)
+        ])
+        XCTAssertEqual(calendar.events.count, 1)
+        let event = calendar.events.values.first
+        XCTAssertEqual(event?.title, "Upcoming")
+        XCTAssertEqual(event?.end, clock + 7200 + 30 * 60)
+        XCTAssertNotNil(all.first { $0.title == "Upcoming" }?.calendarEventId)
+        XCTAssertNil(all.first { $0.title == "Already past" }?.calendarEventId)
+    }
+
+    func testEventDescriptionHasNotesThenWhereItCameFrom() {
+        XCTAssertTrue(eventDescription("").hasPrefix("Scheduled from Job Jar"))
+        XCTAssertTrue(eventDescription(" Bring the forms ").hasPrefix("Bring the forms\n\nScheduled from Job Jar"))
     }
 
     func testDeletingABookedJobRemovesItsEvent() {

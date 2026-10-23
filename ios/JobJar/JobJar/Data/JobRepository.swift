@@ -192,7 +192,7 @@ struct JobRepository {
     /// - Jobs with subtasks can't repeat.
     /// - Turning repeat on clears done and any booking.
     /// - Switching repeat type restarts the cycle. Changing the number of days doesn't.
-    /// - If it's booked, the calendar event gets the new title/length.
+    /// - If it's booked, the calendar event gets the new title, length and notes.
     func updateJob(_ job: Job, with edit: JobEdit, allJobs: [Job]) {
         let before = JobRecord(job)
         let hasSubtasks = allJobs.contains { $0.parentId == job.id }
@@ -229,8 +229,8 @@ struct JobRepository {
         }
 
         if let eventId = job.calendarEventId, let start = job.scheduledDate,
-           job.title != before.title || job.estimatedMinutes != before.estimatedMinutes {
-            _ = calendar.updateEvent(eventId, owner: job, title: job.title, start: start, end: end(of: job, startingAt: start))
+           job.title != before.title || job.estimatedMinutes != before.estimatedMinutes || job.notes != before.notes {
+            _ = calendar.updateEvent(eventId, owner: job, title: job.title, notes: job.notes, start: start, end: end(of: job, startingAt: start))
         }
         save()
     }
@@ -376,7 +376,7 @@ struct JobRepository {
         let finish = end(of: job, startingAt: start)
         var eventId: String?
         if let existing = job.calendarEventId,
-           calendar.updateEvent(existing, owner: job, title: job.title, start: start, end: finish) {
+           calendar.updateEvent(existing, owner: job, title: job.title, notes: job.notes, start: start, end: finish) {
             eventId = existing
         } else {
             eventId = calendar.insertEvent(for: job, start: start, end: finish)
@@ -433,13 +433,22 @@ struct JobRepository {
         if changed { save() }
     }
 
-    /// Import: replaces everything.
+    /// Import: replaces everything. The old jobs' calendar events go with them, and upcoming
+    /// bookings in the file get new events on this phone (event ids aren't kept in backups).
     func replaceAll(with records: [JobRecord]) {
         for job in fetchAll() {
+            if let eventId = job.calendarEventId {
+                _ = calendar.deleteEvent(eventId, owner: job)
+            }
             modelContext.delete(job)
         }
+        let now = now()
         for record in records {
-            modelContext.insert(record.makeJob())
+            let job = record.makeJob()
+            modelContext.insert(job)
+            if let start = job.scheduledDate, start > now {
+                job.calendarEventId = calendar.insertEvent(for: job, start: start, end: end(of: job, startingAt: start))
+            }
         }
         save()
     }

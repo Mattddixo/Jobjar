@@ -10,9 +10,16 @@ import Foundation
 protocol CalendarGateway {
     /// Returns the new event's identifier, or nil if it couldn't be written.
     func insertEvent(for job: Job, start: Date, end: Date) -> String?
-    func updateEvent(_ eventId: String, owner: Job, title: String, start: Date, end: Date) -> Bool
+    func updateEvent(_ eventId: String, owner: Job, title: String, notes: String, start: Date, end: Date) -> Bool
     func deleteEvent(_ eventId: String, owner: Job) -> Bool
     func ownsEvent(_ eventId: String, owner: Job) -> Bool
+}
+
+/// What goes in the event's notes: the job's notes, then where the event came from.
+func eventDescription(_ notes: String) -> String {
+    let footer = "Scheduled from Job Jar. Mark it done in the app and this event goes away."
+    let trimmed = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? footer : "\(trimmed)\n\n\(footer)"
 }
 
 /// Writes scheduled jobs to the phone's calendar with EventKit. Every event gets a
@@ -47,6 +54,7 @@ final class DeviceCalendar: CalendarGateway {
         let event = EKEvent(eventStore: store)
         event.calendar = calendar
         event.title = job.title
+        event.notes = eventDescription(job.notes)
         event.startDate = start
         event.endDate = end
         event.url = Self.jobURL(job)
@@ -58,9 +66,10 @@ final class DeviceCalendar: CalendarGateway {
         }
     }
 
-    func updateEvent(_ eventId: String, owner: Job, title: String, start: Date, end: Date) -> Bool {
+    func updateEvent(_ eventId: String, owner: Job, title: String, notes: String, start: Date, end: Date) -> Bool {
         guard let event = ownedEvent(eventId, owner: owner) else { return false }
         event.title = title
+        event.notes = eventDescription(notes)
         event.startDate = start
         event.endDate = end
         return (try? store.save(event, span: .thisEvent)) != nil

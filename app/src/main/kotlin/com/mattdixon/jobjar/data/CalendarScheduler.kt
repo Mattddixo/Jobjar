@@ -32,6 +32,7 @@ class CalendarScheduler(private val context: Context) : CalendarGateway {
         val values = ContentValues().apply {
             put(CalendarContract.Events.CALENDAR_ID, calendarId)
             put(CalendarContract.Events.TITLE, job.title)
+            put(CalendarContract.Events.DESCRIPTION, eventDescription(job.notes))
             put(CalendarContract.Events.DTSTART, startMillis)
             put(CalendarContract.Events.DTEND, endMillis)
             put(CalendarContract.Events.EVENT_TIMEZONE, TimeZone.getDefault().id)
@@ -42,12 +43,13 @@ class CalendarScheduler(private val context: Context) : CalendarGateway {
         uri?.let { ContentUris.parseId(it) }
     }
 
-    override suspend fun updateEvent(eventId: Long, owner: Job, title: String, startMillis: Long, endMillis: Long): Boolean =
+    override suspend fun updateEvent(eventId: Long, owner: Job, title: String, notes: String, startMillis: Long, endMillis: Long): Boolean =
         withContext(Dispatchers.IO) {
             if (!hasPermission() || !isOurs(eventId, owner)) return@withContext false
             val uri = ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, eventId)
             val values = ContentValues().apply {
                 put(CalendarContract.Events.TITLE, title)
+                put(CalendarContract.Events.DESCRIPTION, eventDescription(notes))
                 put(CalendarContract.Events.DTSTART, startMillis)
                 put(CalendarContract.Events.DTEND, endMillis)
             }
