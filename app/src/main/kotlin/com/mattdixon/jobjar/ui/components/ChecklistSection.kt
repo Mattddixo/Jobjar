@@ -16,6 +16,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
@@ -45,7 +47,6 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import com.mattdixon.jobjar.R
-import com.mattdixon.jobjar.data.CHECKLIST_COLLAPSED_ITEMS
 import com.mattdixon.jobjar.data.ChecklistItem
 import com.mattdixon.jobjar.ui.theme.Spacing
 import com.mattdixon.jobjar.ui.theme.appCardBorder
@@ -53,8 +54,8 @@ import com.mattdixon.jobjar.ui.theme.appCardColors
 
 /**
  * A job's checklist on its page. With no items it's just a small "Add checklist" link; once
- * there are items it's a card of tick boxes that grows with the list, collapsing after
- * [CHECKLIST_COLLAPSED_ITEMS]. Every change goes to [onChange] as an edit to apply to the saved
+ * there are items it's a card that starts collapsed to its header ("Checklist · 2 of 5") and
+ * opens to the full list of tick boxes when tapped. Every change goes to [onChange] as an edit to apply to the saved
  * list, so quick changes in a row can't overwrite each other. [onDelete] removes the whole list
  * (the caller offers Undo).
  */
@@ -65,12 +66,12 @@ fun ChecklistSection(
     onDelete: () -> Unit
 ) {
     var adding by rememberSaveable { mutableStateOf(false) }
-    var showAll by rememberSaveable { mutableStateOf(false) }
+    var expanded by rememberSaveable { mutableStateOf(false) }
     var editingIndex by rememberSaveable { mutableStateOf<Int?>(null) }
     var menuOpen by remember { mutableStateOf(false) }
 
     if (items.isEmpty() && !adding) {
-        TextButton(onClick = { adding = true }, contentPadding = PaddingValues(horizontal = Spacing.sm)) {
+        TextButton(onClick = { adding = true; expanded = true }, contentPadding = PaddingValues(horizontal = Spacing.sm)) {
             Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(Spacing.xs))
             Text(stringResource(R.string.checklist_add))
@@ -80,7 +81,22 @@ fun ChecklistSection(
 
     Card(colors = appCardColors(), border = appCardBorder(), modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(start = Spacing.sm, end = Spacing.xs, top = Spacing.xs, bottom = Spacing.sm)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            // The whole header opens and closes the list.
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.clickable {
+                    expanded = !expanded
+                    if (!expanded) {
+                        adding = false
+                        editingIndex = null
+                    }
+                }
+            ) {
+                Icon(
+                    if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                    contentDescription = stringResource(if (expanded) R.string.cd_collapse_checklist else R.string.cd_expand_checklist),
+                    modifier = Modifier.padding(start = Spacing.sm)
+                )
                 Text(
                     if (items.isEmpty()) {
                         stringResource(R.string.checklist_title)
@@ -90,7 +106,7 @@ fun ChecklistSection(
                     style = MaterialTheme.typography.titleSmall,
                     modifier = Modifier
                         .weight(1f)
-                        .padding(start = Spacing.md)
+                        .padding(start = Spacing.sm)
                 )
                 Box {
                     IconButton(onClick = { menuOpen = true }) {
@@ -119,65 +135,55 @@ fun ChecklistSection(
                 }
             }
 
-            val collapsed = !showAll && !adding && items.size > CHECKLIST_COLLAPSED_ITEMS
-            val visible = if (collapsed) items.take(CHECKLIST_COLLAPSED_ITEMS) else items
-            visible.forEachIndexed { index, item ->
-                if (editingIndex == index) {
-                    ItemEditor(
-                        initialText = item.text,
-                        onCommit = { text ->
-                            editingIndex = null
-                            val trimmed = text.trim()
-                            onChange { list ->
-                                if (trimmed.isEmpty()) list.filterIndexed { i, _ -> i != index }
-                                else list.mapIndexed { i, it -> if (i == index) it.copy(text = trimmed) else it }
+            if (expanded) {
+                items.forEachIndexed { index, item ->
+                    if (editingIndex == index) {
+                        ItemEditor(
+                            initialText = item.text,
+                            onCommit = { text ->
+                                editingIndex = null
+                                val trimmed = text.trim()
+                                onChange { list ->
+                                    if (trimmed.isEmpty()) list.filterIndexed { i, _ -> i != index }
+                                    else list.mapIndexed { i, it -> if (i == index) it.copy(text = trimmed) else it }
+                                }
+                            },
+                            onRemove = {
+                                editingIndex = null
+                                onChange { list -> list.filterIndexed { i, _ -> i != index } }
                             }
-                        },
-                        onRemove = {
-                            editingIndex = null
-                            onChange { list -> list.filterIndexed { i, _ -> i != index } }
-                        }
+                        )
+                    } else {
+                        ItemRow(
+                            item = item,
+                            onCheckedChange = { checked ->
+                                onChange { list -> list.mapIndexed { i, it -> if (i == index) it.copy(checked = checked) else it } }
+                            },
+                            onEdit = {
+                                adding = false
+                                editingIndex = index
+                            }
+                        )
+                    }
+                }
+
+                if (adding) {
+                    NewItemField(
+                        onAdd = { text -> onChange { list -> list + ChecklistItem(text) } },
+                        onFinished = { adding = false }
                     )
                 } else {
-                    ItemRow(
-                        item = item,
-                        onCheckedChange = { checked ->
-                            onChange { list -> list.mapIndexed { i, it -> if (i == index) it.copy(checked = checked) else it } }
+                    TextButton(
+                        onClick = {
+                            editingIndex = null
+                            adding = true
                         },
-                        onEdit = {
-                            adding = false
-                            editingIndex = index
-                        }
-                    )
-                }
-            }
-
-            if (collapsed) {
-                TextButton(onClick = { showAll = true }) {
-                    Text(stringResource(R.string.checklist_show_all, items.size))
-                }
-            } else if (showAll && !adding && items.size > CHECKLIST_COLLAPSED_ITEMS) {
-                TextButton(onClick = { showAll = false }) {
-                    Text(stringResource(R.string.checklist_show_less))
-                }
-            }
-
-            if (adding) {
-                NewItemField(
-                    onAdd = { text -> onChange { list -> list + ChecklistItem(text) } },
-                    onFinished = { adding = false }
-                )
-            } else {
-                TextButton(
-                    onClick = {
-                        editingIndex = null
-                        adding = true
-                    },
-                    contentPadding = PaddingValues(horizontal = Spacing.md)
-                ) {
-                    Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(Spacing.xs))
-                    Text(stringResource(R.string.checklist_add_item))
+                        contentPadding = PaddingValues(horizontal = Spacing.md)
+                    ) {
+                        Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(Spacing.xs))
+                        Text(stringResource(R.string.checklist_add_item))
+                    }
                 }
             }
         }

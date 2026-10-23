@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// A job's checklist on its page. With no items it's just a small "Add checklist" link; once
-/// there are items it's a card of tick boxes that grows with the list, collapsing after
-/// `checklistCollapsedItems`. Changes go to `onChange` as an edit to apply to the saved list;
+/// there are items it's a card that starts collapsed to its header ("Checklist · 2 of 5") and
+/// opens to the full list of tick boxes when tapped. Changes go to `onChange` as an edit to apply to the saved list;
 /// `onDelete` removes the whole list (the caller offers Undo).
 struct ChecklistSection: View {
     let items: [ChecklistItem]
@@ -10,7 +10,7 @@ struct ChecklistSection: View {
     let onDelete: () -> Void
 
     @State private var adding = false
-    @State private var showAll = false
+    @State private var expanded = false
     @State private var editingIndex: Int? = nil
     @State private var editText = ""
     @State private var newText = ""
@@ -18,11 +18,10 @@ struct ChecklistSection: View {
 
     private enum Field: Hashable { case new, edit }
 
-    private var collapsed: Bool { !showAll && !adding && items.count > checklistCollapsedItems }
-
     var body: some View {
         if items.isEmpty && !adding {
             Button {
+                expanded = true
                 adding = true
             } label: {
                 Label("Add checklist", systemImage: "plus")
@@ -36,9 +35,27 @@ struct ChecklistSection: View {
     private var card: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack {
-                Text(items.isEmpty ? "Checklist" : "Checklist · \(items.filter(\.checked).count) of \(items.count)")
-                    .font(.subheadline.weight(.semibold))
-                Spacer()
+                // The whole header opens and closes the list.
+                Button {
+                    if expanded {
+                        commitEdit()
+                        finishAdding()
+                    }
+                    withAnimation(.easeInOut(duration: 0.15)) { expanded.toggle() }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .rotationEffect(.degrees(expanded ? 90 : 0))
+                            .foregroundStyle(.secondary)
+                        Text(items.isEmpty ? "Checklist" : "Checklist · \(items.filter(\.checked).count) of \(items.count)")
+                            .font(.subheadline.weight(.semibold))
+                        Spacer()
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint(expanded ? "Hides the checklist" : "Shows the checklist")
                 Menu {
                     if items.contains(where: \.checked) {
                         Button("Untick all") {
@@ -59,40 +76,8 @@ struct ChecklistSection: View {
                 .accessibilityLabel("Checklist options")
             }
 
-            ForEach(Array((collapsed ? Array(items.prefix(checklistCollapsedItems)) : items).enumerated()), id: \.offset) { index, item in
-                if editingIndex == index {
-                    editorRow
-                } else {
-                    itemRow(item, index: index)
-                }
-            }
-
-            if collapsed {
-                Button("Show all \(items.count)") { showAll = true }
-                    .font(.subheadline)
-                    .padding(.vertical, 6)
-            } else if showAll && !adding && items.count > checklistCollapsedItems {
-                Button("Show less") { showAll = false }
-                    .font(.subheadline)
-                    .padding(.vertical, 6)
-            }
-
-            if adding {
-                TextField("Add item", text: $newText)
-                    .focused($focus, equals: .new)
-                    .submitLabel(.next)
-                    .onSubmit(addNewItem)
-                    .padding(.vertical, 8)
-                    .onAppear { DispatchQueue.main.async { focus = .new } }
-            } else {
-                Button {
-                    commitEdit()
-                    adding = true
-                } label: {
-                    Label("Add item", systemImage: "plus")
-                        .font(.subheadline)
-                }
-                .padding(.vertical, 6)
+            if expanded {
+                expandedContent
             }
         }
         .padding(.horizontal, 14)
@@ -108,6 +93,35 @@ struct ChecklistSection: View {
                 if old == .edit { commitEdit() }
                 if old == .new { finishAdding() }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var expandedContent: some View {
+        ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+            if editingIndex == index {
+                editorRow
+            } else {
+                itemRow(item, index: index)
+            }
+        }
+
+        if adding {
+            TextField("Add item", text: $newText)
+                .focused($focus, equals: .new)
+                .submitLabel(.next)
+                .onSubmit(addNewItem)
+                .padding(.vertical, 8)
+                .onAppear { DispatchQueue.main.async { focus = .new } }
+        } else {
+            Button {
+                commitEdit()
+                adding = true
+            } label: {
+                Label("Add item", systemImage: "plus")
+                    .font(.subheadline)
+            }
+            .padding(.vertical, 6)
         }
     }
 

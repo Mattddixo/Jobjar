@@ -4,9 +4,6 @@ import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 
-/** Collapsed to this many items on the job page, with "Show all" for the rest. */
-const val CHECKLIST_COLLAPSED_ITEMS = 8
-
 /**
  * One line of a job's checklist. Checklists are lighter than subtasks: no time, no cost, never
  * drawn, and ticking them doesn't finish the job.

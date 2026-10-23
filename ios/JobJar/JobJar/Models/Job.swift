@@ -111,9 +111,6 @@ final class Job: Identifiable {
     }
 }
 
-/// Collapsed to this many items on the job page, with "Show all" for the rest.
-let checklistCollapsedItems = 8
-
 /// One line of a job's checklist. Checklists are lighter than subtasks: no time, no cost, never
 /// drawn, and ticking them doesn't finish the job.
 struct ChecklistItem: Codable, Equatable, Hashable {
