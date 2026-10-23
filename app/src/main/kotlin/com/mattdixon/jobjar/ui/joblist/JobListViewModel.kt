@@ -11,6 +11,7 @@ import com.mattdixon.jobjar.data.UndoSnapshot
 import com.mattdixon.jobjar.data.isPending
 import com.mattdixon.jobjar.data.isUnblocked
 import com.mattdixon.jobjar.data.remainingMinutes
+import com.mattdixon.jobjar.data.totalCostCents
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -37,7 +38,9 @@ data class JobListItem(
     val subtaskDone: Int = 0,
     val subtaskTotal: Int = 0,
     val waitingOnTitle: String? = null,
-    val scheduledDate: Long? = null
+    val scheduledDate: Long? = null,
+    /** A parent's includes its subtasks. Null = no cost anywhere. */
+    val costCents: Long? = null
 )
 
 data class JobListUiState(
@@ -124,7 +127,8 @@ class JobListViewModel(private val repository: JobRepository) : ViewModel() {
                     displayMinutes = if (subtasks.isEmpty()) job.estimatedMinutes else job.remainingMinutes(subtasks),
                     subtaskDone = subtasks.count { it.isDone },
                     subtaskTotal = subtasks.size,
-                    scheduledDate = job.scheduledDate
+                    scheduledDate = job.scheduledDate,
+                    costCents = totalCostCents(job, subtasks)
                 )
             } else {
                 val siblingsById = subtasksByParent[job.parentId].orEmpty().associateBy { it.id }
@@ -135,7 +139,8 @@ class JobListViewModel(private val repository: JobRepository) : ViewModel() {
                     waitingOnTitle = job.dependsOnSubtaskId
                         ?.takeUnless { job.isUnblocked(siblingsById) }
                         ?.let { siblingsById[it]?.title },
-                    scheduledDate = job.scheduledDate
+                    scheduledDate = job.scheduledDate,
+                    costCents = job.costCents
                 )
             }
         }

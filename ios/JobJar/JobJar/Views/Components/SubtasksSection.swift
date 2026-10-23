@@ -92,6 +92,7 @@ private struct SubtaskRow: View {
                         .foregroundStyle(blocked ? .secondary : .primary)
                     HStack(spacing: 6) {
                         TimeBadge(minutes: subtask.estimatedMinutes)
+                        if let cost = subtask.costCents { InfoBadge(text: formatCost(cost)) }
                         if let waitingOnTitle {
                             Image(systemName: "lock.fill")
                                 .font(.caption2)

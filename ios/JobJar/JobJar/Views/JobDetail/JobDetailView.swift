@@ -136,6 +136,12 @@ struct JobDetailView: View {
 
                 Text("\(job.priority.displayName) priority").font(.body)
 
+                // One line, only when there's a cost. A parent's total includes its subtasks.
+                if let total = totalCostCents(job, subtasks: subtasks) {
+                    Text(costLine(total: total, job: job))
+                        .font(.body)
+                }
+
                 if !job.notes.isEmpty {
                     Text(job.notes).font(.body)
                 }
@@ -209,6 +215,13 @@ struct JobDetailView: View {
         let title = job.title
         let snapshot = repository.toggleDone(job, allJobs: allJobs)
         if completing { undoCenter.offerCompleted(title, snapshot) }
+    }
+
+    private func costLine(total: Int, job: Job) -> String {
+        let subtaskCosts = subtasks.compactMap(\.costCents)
+        guard !subtaskCosts.isEmpty else { return "Cost \(formatCost(total))" }
+        guard let own = job.costCents else { return "Total cost \(formatCost(total)) from subtasks" }
+        return "Total cost \(formatCost(total)) · \(formatCost(own)) for this job, \(formatCost(subtaskCosts.reduce(0, +))) from subtasks"
     }
 
     private func buttonLabel(for job: Job) -> String {

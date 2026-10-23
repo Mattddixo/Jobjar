@@ -5,6 +5,7 @@ struct CategoryStat: Identifiable {
     let category: String
     let completedCount: Int
     let totalMinutes: Int
+    var spentCents: Int = 0
     var id: String { category }
 }
 
@@ -16,10 +17,25 @@ struct StatsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                HStack(spacing: 12) {
-                    StatCard(label: "To do", value: "\(stats.activeCount)")
-                    StatCard(label: "Completed", value: "\(stats.completedCount)")
-                    StatCard(label: "Time spent", value: formatMinutes(stats.totalMinutesCompleted))
+                // Spent only appears once something with a cost has been completed; then the cards
+                // go two by two so none of them gets squeezed.
+                if stats.spentCents > 0 {
+                    Grid(horizontalSpacing: 12, verticalSpacing: 12) {
+                        GridRow {
+                            StatCard(label: "To do", value: "\(stats.activeCount)")
+                            StatCard(label: "Completed", value: "\(stats.completedCount)")
+                        }
+                        GridRow {
+                            StatCard(label: "Time spent", value: formatMinutes(stats.totalMinutesCompleted))
+                            StatCard(label: "Spent", value: formatCost(stats.spentCents))
+                        }
+                    }
+                } else {
+                    HStack(spacing: 12) {
+                        StatCard(label: "To do", value: "\(stats.activeCount)")
+                        StatCard(label: "Completed", value: "\(stats.completedCount)")
+                        StatCard(label: "Time spent", value: formatMinutes(stats.totalMinutesCompleted))
+                    }
                 }
 
                 Text("By category").font(.headline)
@@ -37,7 +53,10 @@ struct StatsView: View {
                                 HStack {
                                     Text(stat.category).font(.body)
                                     Spacer()
-                                    Text("\(stat.completedCount) completed · \(formatMinutes(stat.totalMinutes))")
+                                    Text(
+                                        "\(stat.completedCount) completed · \(formatMinutes(stat.totalMinutes))" +
+                                            (stat.spentCents > 0 ? " · \(formatCost(stat.spentCents))" : "")
+                                    )
                                         .font(.subheadline)
                                 }
                                 ProgressView(value: Double(stat.totalMinutes), total: Double(maxMinutes))
@@ -75,6 +94,7 @@ private struct StatsSummary {
     let activeCount: Int
     let completedCount: Int
     let totalMinutesCompleted: Int
+    let spentCents: Int
     let categoryStats: [CategoryStat]
 }
 
@@ -116,13 +136,32 @@ private func computeStats(allJobs: [Job]) -> StatsSummary {
             )
         }
 
+    // Money is counted separately from time: a parent's own cost counts when the parent is
+    // completed, each subtask's when it is, and a repeating job's every time.
+    let spending: [(category: String, cents: Int)] = allJobs.compactMap { job in
+        guard let cost = job.costCents else { return nil }
+        let times: Int
+        if job.recurrenceDays != nil {
+            times = job.completionCount
+        } else if job.isDone, !(job.parentId.map { repeatingParentIds.contains($0) } ?? false) {
+            times = 1
+        } else {
+            times = 0
+        }
+        guard times > 0 else { return nil }
+        return (job.category.isEmpty ? "Uncategorized" : job.category, cost * times)
+    }
+    let spentByCategory = Dictionary(spending.map { ($0.category, $0.cents) }, uniquingKeysWith: +)
+
     let grouped = Dictionary(grouping: contributions) { $0.category }
-    let categoryStats = grouped
-        .map { category, items in
-            CategoryStat(
+    let categoryStats = Set(grouped.keys).union(spentByCategory.keys)
+        .map { category in
+            let items = grouped[category] ?? []
+            return CategoryStat(
                 category: category,
                 completedCount: items.reduce(0) { $0 + $1.count },
-                totalMinutes: items.reduce(0) { $0 + $1.minutes }
+                totalMinutes: items.reduce(0) { $0 + $1.minutes },
+                spentCents: spentByCategory[category] ?? 0
             )
         }
         .sorted { $0.totalMinutes > $1.totalMinutes }
@@ -131,6 +170,7 @@ private func computeStats(allJobs: [Job]) -> StatsSummary {
         activeCount: activeCount,
         completedCount: contributions.reduce(0) { $0 + $1.count },
         totalMinutesCompleted: contributions.reduce(0) { $0 + $1.minutes },
+        spentCents: spending.reduce(0) { $0 + $1.cents },
         categoryStats: categoryStats
     )
 }

@@ -36,6 +36,7 @@ import com.mattdixon.jobjar.ui.theme.Spacing
 import com.mattdixon.jobjar.ui.theme.appTopBarColors
 import com.mattdixon.jobjar.ui.theme.appCardBorder
 import com.mattdixon.jobjar.ui.theme.appCardColors
+import com.mattdixon.jobjar.util.formatCost
 import com.mattdixon.jobjar.util.formatMinutes
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -72,22 +73,24 @@ fun StatsScreen(
                 .padding(Spacing.xl),
             verticalArrangement = Arrangement.spacedBy(Spacing.xl)
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.lg)) {
-                StatCard(
-                    label = stringResource(R.string.stat_active_jobs),
-                    value = state.activeCount.toString(),
-                    modifier = Modifier.weight(1f)
-                )
-                StatCard(
-                    label = stringResource(R.string.stat_completed),
-                    value = state.completedCount.toString(),
-                    modifier = Modifier.weight(1f)
-                )
-                StatCard(
-                    label = stringResource(R.string.stat_time_invested),
-                    value = formatMinutes(state.totalMinutesCompleted),
-                    modifier = Modifier.weight(1f)
-                )
+            val toDo = stringResource(R.string.stat_active_jobs) to state.activeCount.toString()
+            val completed = stringResource(R.string.stat_completed) to state.completedCount.toString()
+            val time = stringResource(R.string.stat_time_invested) to formatMinutes(state.totalMinutesCompleted)
+            // Spent only appears once something with a cost has been completed; then the cards go
+            // two by two so none of them gets squeezed.
+            val rows = if (state.spentCents > 0) {
+                listOf(listOf(toDo, completed), listOf(time, stringResource(R.string.stat_spent) to formatCost(state.spentCents)))
+            } else {
+                listOf(listOf(toDo, completed, time))
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.lg)) {
+                rows.forEach { cards ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.lg)) {
+                        cards.forEach { (label, value) ->
+                            StatCard(label = label, value = value, modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
             }
 
             Text(stringResource(R.string.stats_by_category), style = MaterialTheme.typography.titleMedium)
@@ -116,7 +119,16 @@ fun StatsScreen(
                                 ) {
                                     Text(stat.category, style = MaterialTheme.typography.bodyLarge)
                                     Text(
-                                        stringResource(R.string.stats_category_summary, stat.completedCount, formatMinutes(stat.totalMinutes)),
+                                        if (stat.spentCents > 0) {
+                                            stringResource(
+                                                R.string.stats_category_summary_with_cost,
+                                                stat.completedCount,
+                                                formatMinutes(stat.totalMinutes),
+                                                formatCost(stat.spentCents)
+                                            )
+                                        } else {
+                                            stringResource(R.string.stats_category_summary, stat.completedCount, formatMinutes(stat.totalMinutes))
+                                        },
                                         style = MaterialTheme.typography.bodyMedium
                                     )
                                 }

@@ -247,6 +247,15 @@ class JobRepositoryTest {
     }
 
     @Test
+    fun editingAJobSavesItsCost() = runTest {
+        val job = add("Paint fence")
+        repo.updateJob(dao.row(job).copy(costCents = 4500))
+        assertEquals(4500L, dao.row(job).costCents)
+        repo.updateJob(dao.row(job).copy(costCents = null))
+        assertNull(dao.row(job).costCents)
+    }
+
+    @Test
     fun deletingABookedJobDeletesItsEvent() = runTest {
         val job = add("Dentist")
         repo.scheduleJob(job, now + 3_600_000)

@@ -84,6 +84,7 @@ object JobExport {
                 isInProgress = job.isInProgress && !(job.isDone && !repeats),
                 scheduledDate = if (repeats) null else job.scheduledDate,
                 calendarEventId = if (repeats || job.scheduledDate == null) null else job.calendarEventId,
+                costCents = job.costCents?.takeIf { it >= 0 },
                 estimatedMinutes = job.estimatedMinutes.coerceAtLeast(1),
                 title = job.title.ifBlank { "Untitled job" }
             )
@@ -110,6 +111,7 @@ object JobExport {
         .put("dependsOnSubtaskId", dependsOnSubtaskId ?: JSONObject.NULL)
         .put("scheduledDate", scheduledDate ?: JSONObject.NULL)
         .put("calendarEventId", calendarEventId ?: JSONObject.NULL)
+        .put("costCents", costCents ?: JSONObject.NULL)
 
     private fun JSONObject.longOrNull(key: String): Long? = if (has(key) && !isNull(key)) getLong(key) else null
     private fun JSONObject.intOrNull(key: String): Int? = if (has(key) && !isNull(key)) getInt(key) else null
@@ -133,6 +135,7 @@ object JobExport {
         completionCount = optInt("completionCount", 0),
         dependsOnSubtaskId = longOrNull("dependsOnSubtaskId"),
         scheduledDate = longOrNull("scheduledDate"),
-        calendarEventId = longOrNull("calendarEventId")
+        calendarEventId = longOrNull("calendarEventId"),
+        costCents = longOrNull("costCents")
     )
 }

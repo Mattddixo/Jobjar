@@ -9,7 +9,7 @@ import androidx.room.withTransaction
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [Job::class], version = 10, exportSchema = true)
+@Database(entities = [Job::class], version = 11, exportSchema = true)
 @TypeConverters(Converters::class)
 abstract class JobDatabase : RoomDatabase() {
     abstract fun jobDao(): JobDao
@@ -117,10 +117,16 @@ abstract class JobDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE jobs ADD COLUMN costCents INTEGER DEFAULT NULL")
+            }
+        }
+
         /** Also used by MigrationTest. */
         val ALL_MIGRATIONS = arrayOf(
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
-            MIGRATION_6_9, MIGRATION_7_9, MIGRATION_8_9, MIGRATION_9_10
+            MIGRATION_6_9, MIGRATION_7_9, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11
         )
 
         fun getInstance(context: Context): JobDatabase =

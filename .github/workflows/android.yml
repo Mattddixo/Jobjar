@@ -28,6 +28,16 @@ jobs:
         run: ./gradlew --no-daemon assembleDebug
       - name: Build release (shrunk, unsigned)
         run: ./gradlew --no-daemon assembleRelease
+      # Room writes app/schemas/<version>.json while compiling. A new database version needs its
+      # file committed; this prints it so it can be copied in.
+      - name: Check the database schema file is committed
+        run: |
+          if [ -n "$(git status --porcelain app/schemas)" ]; then
+            git status --porcelain app/schemas
+            for f in $(git ls-files --others --exclude-standard app/schemas); do echo "== $f"; cat "$f"; done
+            git diff app/schemas
+            exit 1
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:

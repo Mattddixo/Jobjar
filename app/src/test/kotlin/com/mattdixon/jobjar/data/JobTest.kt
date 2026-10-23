@@ -2,10 +2,23 @@ package com.mattdixon.jobjar.data
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class JobTest {
+    @Test
+    fun totalCostAddsUpTheJobAndItsSubtasks() {
+        val parent = Job(id = 1, title = "Garage", estimatedMinutes = 60, costCents = 4000)
+        val subtasks = listOf(
+            Job(id = 2, title = "Paint", estimatedMinutes = 30, parentId = 1, costCents = 2550),
+            Job(id = 3, title = "Sweep", estimatedMinutes = 30, parentId = 1)
+        )
+        assertEquals(6550L, totalCostCents(parent, subtasks))
+        assertEquals(2550L, totalCostCents(parent.copy(costCents = null), subtasks))
+        assertNull(totalCostCents(parent.copy(costCents = null), subtasks.map { it.copy(costCents = null) }))
+    }
+
     @Test
     fun pendingForOneOffAndRepeating() {
         assertTrue(Job(title = "a", estimatedMinutes = 5).isPending())

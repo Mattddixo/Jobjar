@@ -237,6 +237,7 @@ private struct JobRow: View {
                 FlowLayout {
                     if job.isInProgress { InProgressBadge() }
                     TimeBadge(minutes: item.displayMinutes)
+                    if let cost = item.costCents { InfoBadge(text: formatCost(cost)) }
                     if !job.category.isEmpty { CategoryBadge(category: job.category) }
                     if item.subtaskTotal > 0 { InfoBadge(text: "\(item.subtaskDone)/\(item.subtaskTotal) completed") }
                     if let days = job.recurrenceDays { InfoBadge(text: formatRecurrence(days: days, weekdays: job.repeatWeekdays)) }

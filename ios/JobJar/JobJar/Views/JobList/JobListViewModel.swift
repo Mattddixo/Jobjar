@@ -40,6 +40,8 @@ struct JobListItem: Identifiable {
     var subtaskDone: Int = 0
     var subtaskTotal: Int = 0
     var waitingOnTitle: String? = nil
+    /// A parent's includes its subtasks. Nil = no cost anywhere.
+    var costCents: Int? = nil
 
     var isSubtask: Bool { job.parentId != nil }
 }
@@ -102,7 +104,8 @@ final class JobListViewModel {
                     job: job,
                     displayMinutes: job.estimatedMinutes,
                     parentTitle: byId[parentId]?.title,
-                    waitingOnTitle: waitingOn
+                    waitingOnTitle: waitingOn,
+                    costCents: job.costCents
                 )
             }
             let subtasks = subtasksByParent[job.id] ?? []
@@ -111,7 +114,8 @@ final class JobListViewModel {
                 job: job,
                 displayMinutes: subtasks.isEmpty ? job.estimatedMinutes : job.remainingMinutes(subtasks: subtasks),
                 subtaskDone: subtasks.filter { $0.isDone }.count,
-                subtaskTotal: subtasks.count
+                subtaskTotal: subtasks.count,
+                costCents: totalCostCents(job, subtasks: subtasks)
             )
         }
 

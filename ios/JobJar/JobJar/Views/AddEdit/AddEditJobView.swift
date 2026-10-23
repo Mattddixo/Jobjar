@@ -20,6 +20,8 @@ struct AddEditJobView: View {
     @State private var estimatedMinutes = 15
     @State private var category = ""
     @State private var priority: Priority = .normal
+    /// As typed. Blank = no cost.
+    @State private var costText = ""
     @State private var recurrenceDays: Int? = nil
     @State private var repeatWeekdays: Int? = nil
     @State private var dependsOnSubtaskId: UUID? = nil
@@ -32,6 +34,7 @@ struct AddEditJobView: View {
 
     private var isValid: Bool {
         guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, estimatedMinutes > 0 else { return false }
+        guard parseCostInput(costText) != .invalid else { return false }
         guard let days = recurrenceDays else { return true }
         if let mask = repeatWeekdays { return mask & everyDayMask != 0 }
         return days > 0
@@ -41,6 +44,20 @@ struct AddEditJobView: View {
     private var hasSubtasks: Bool {
         guard let savedJobId else { return false }
         return allJobs.contains { $0.parentId == savedJobId }
+    }
+
+    /// A typo hint, or for a job with subtasks, what they add so the total isn't a surprise.
+    @ViewBuilder
+    private var costFooter: some View {
+        let input = parseCostInput(costText)
+        let subtaskCosts = savedJobId.map { id in allJobs.filter { $0.parentId == id }.compactMap(\.costCents) } ?? []
+        if input == .invalid {
+            Text("Enter an amount, like 12.50").foregroundStyle(.red)
+        } else if !subtaskCosts.isEmpty {
+            let subtaskTotal = subtaskCosts.reduce(0, +)
+            let own: Int = { if case .valid(let cents) = input { return cents } else { return 0 } }()
+            Text("Subtasks add \(formatCost(subtaskTotal)) · \(formatCost(own + subtaskTotal)) in total")
+        }
     }
 
     private var navTitle: String {
@@ -126,6 +143,18 @@ struct AddEditJobView: View {
                     }
                 }
                 .pickerStyle(.segmented)
+            }
+
+            Section {
+                HStack(spacing: 4) {
+                    Text(currencySymbol()).foregroundStyle(.secondary)
+                    TextField("Optional", text: $costText)
+                        .keyboardType(.decimalPad)
+                }
+            } header: {
+                Text("Cost")
+            } footer: {
+                costFooter
             }
 
             // Only subtasks can depend on something, and only on a sibling.
@@ -279,6 +308,7 @@ struct AddEditJobView: View {
             estimatedMinutes = job.estimatedMinutes
             category = job.category
             priority = job.priority
+            costText = costInputText(job.costCents)
             recurrenceDays = job.recurrenceDays
             repeatWeekdays = job.repeatWeekdays
             dependsOnSubtaskId = job.dependsOnSubtaskId
@@ -317,7 +347,8 @@ struct AddEditJobView: View {
             priority: priority,
             recurrenceDays: recurrenceDays,
             repeatWeekdays: recurrenceDays == nil ? nil : repeatWeekdays,
-            dependsOnSubtaskId: dependsOnSubtaskId
+            dependsOnSubtaskId: dependsOnSubtaskId,
+            costCents: { if case .valid(let cents) = parseCostInput(costText) { return cents } else { return nil } }()
         )
         if let id = savedJobId, let job = allJobs.first(where: { $0.id == id }) {
             repository.updateJob(job, with: edit, allJobs: allJobs)

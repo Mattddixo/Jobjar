@@ -7,7 +7,7 @@ import org.junit.Test
 
 class JobExportTest {
     private val jobs = listOf(
-        Job(id = 1, title = "Garage", estimatedMinutes = 120, category = "Home", priority = Priority.HIGH, createdAt = 10),
+        Job(id = 1, title = "Garage", estimatedMinutes = 120, category = "Home", priority = Priority.HIGH, createdAt = 10, costCents = 4000),
         Job(id = 2, title = "Sweep", estimatedMinutes = 30, parentId = 1, isDone = true, completedAt = 20, createdAt = 11),
         Job(id = 3, title = "Haul", estimatedMinutes = 45, parentId = 1, dependsOnSubtaskId = 2, scheduledDate = 99, calendarEventId = 7, createdAt = 12),
         Job(id = 4, title = "Bins", estimatedMinutes = 5, recurrenceDays = 7, repeatWeekdays = WEEKDAYS_MASK, nextDueAt = 50, completionCount = 3, createdAt = 13)

@@ -11,12 +11,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
-data class CategoryStat(val category: String, val completedCount: Int, val totalMinutes: Int)
+data class CategoryStat(val category: String, val completedCount: Int, val totalMinutes: Int, val spentCents: Long = 0)
 
 data class StatsUiState(
     val activeCount: Int = 0,
     val completedCount: Int = 0,
     val totalMinutesCompleted: Int = 0,
+    /** Cost of everything completed. 0 hides it, so people who don't track costs never see it. */
+    val spentCents: Long = 0,
     val categoryStats: List<CategoryStat> = emptyList()
 )
 
@@ -67,13 +69,28 @@ private fun toUiState(allJobs: List<Job>): StatsUiState {
         )
     }
 
-    val categoryStats = contributions
-        .groupBy { it.category }
-        .map { (category, items) ->
+    // Money is counted separately from time: a parent's own cost counts when the parent is
+    // completed, each subtask's when it is, and a repeating job's every time.
+    val spending = allJobs.mapNotNull { job ->
+        val cost = job.costCents ?: return@mapNotNull null
+        val times = when {
+            job.recurrenceDays != null -> job.completionCount
+            job.isDone && job.parentId !in repeatingParentIds -> 1
+            else -> 0
+        }
+        if (times == 0) null else job.category.ifBlank { "Uncategorized" } to cost * times
+    }
+    val spentByCategory = spending.groupBy({ it.first }, { it.second }).mapValues { it.value.sum() }
+
+    val byCategory = contributions.groupBy { it.category }
+    val categoryStats = (byCategory.keys + spentByCategory.keys)
+        .map { category ->
+            val items = byCategory[category].orEmpty()
             CategoryStat(
                 category = category,
                 completedCount = items.sumOf { it.count },
-                totalMinutes = items.sumOf { it.minutes }
+                totalMinutes = items.sumOf { it.minutes },
+                spentCents = spentByCategory[category] ?: 0
             )
         }
         .sortedByDescending { it.totalMinutes }
@@ -82,6 +99,7 @@ private fun toUiState(allJobs: List<Job>): StatsUiState {
         activeCount = activeCount,
         completedCount = contributions.sumOf { it.count },
         totalMinutesCompleted = contributions.sumOf { it.minutes },
+        spentCents = spending.sumOf { it.second },
         categoryStats = categoryStats
     )
 }

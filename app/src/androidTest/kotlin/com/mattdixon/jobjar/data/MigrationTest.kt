@@ -48,7 +48,9 @@ class MigrationTest {
         db.execSQL("ALTER TABLE jobs ADD COLUMN isInProgress INTEGER NOT NULL DEFAULT 0")
         db.execSQL("ALTER TABLE jobs ADD COLUMN scheduledDate INTEGER DEFAULT NULL")
         db.execSQL("ALTER TABLE jobs ADD COLUMN calendarEventId INTEGER DEFAULT NULL")
-        if (version >= 8) db.execSQL("ALTER TABLE jobs ADD COLUMN linkedTrackerJobId INTEGER DEFAULT NULL")
+        // Only version 8 had the tracker link; 9 dropped it again.
+        if (version == 8) db.execSQL("ALTER TABLE jobs ADD COLUMN linkedTrackerJobId INTEGER DEFAULT NULL")
+        if (version >= 10) db.execSQL("ALTER TABLE jobs ADD COLUMN repeatWeekdays INTEGER DEFAULT NULL")
 
         val insert = "INSERT INTO jobs (id, title, notes, estimatedMinutes, category, priority, isDone, createdAt, " +
             "timesDrawn, parentId, recurrenceDays, dependsOnSubtaskId) VALUES (?, ?, '', ?, 'Home', 'NORMAL', ?, 1, 0, ?, ?, ?)"
@@ -72,6 +74,19 @@ class MigrationTest {
     @Test
     fun upgradesFromVersion6() = runTest { checkUpgraded(6) }
 
+    @Test
+    fun upgradesFromVersion10() = runTest {
+        createLegacyDatabase(10)
+        val db = openCurrent()
+        try {
+            val jobs = db.jobDao().getAllJobs()
+            assertEquals(5, jobs.size)
+            assertTrue("nobody has a cost yet", jobs.all { it.costCents == null })
+        } finally {
+            db.close()
+        }
+    }
+
     private suspend fun checkUpgraded(fromVersion: Int) {
         createLegacyDatabase(fromVersion)
         val db = openCurrent()
@@ -89,6 +104,7 @@ class MigrationTest {
             }
             assertFalse("tracker link column is gone", "linkedTrackerJobId" in columns)
             assertTrue("repeatWeekdays", "repeatWeekdays" in columns)
+            assertTrue("costCents", "costCents" in columns)
         } finally {
             db.close()
         }

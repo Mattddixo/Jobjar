@@ -34,6 +34,7 @@ import com.mattdixon.jobjar.data.unallocatedMinutesOf
 import com.mattdixon.jobjar.ui.theme.Spacing
 import com.mattdixon.jobjar.ui.theme.appCardBorder
 import com.mattdixon.jobjar.ui.theme.appCardColors
+import com.mattdixon.jobjar.util.formatCost
 import com.mattdixon.jobjar.util.formatMinutes
 import kotlinx.coroutines.launch
 
@@ -145,6 +146,7 @@ private fun SubtaskRow(
                 Text(subtask.title, style = MaterialTheme.typography.bodyLarge, color = contentColor)
                 Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm), verticalAlignment = Alignment.CenterVertically) {
                     TimeBucketBadge(minutes = subtask.estimatedMinutes)
+                    subtask.costCents?.let { InfoBadge(text = formatCost(it)) }
                     if (waitingOnTitle != null) {
                         Icon(
                             Icons.Filled.Lock,

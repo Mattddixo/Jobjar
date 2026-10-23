@@ -11,6 +11,7 @@ struct JobEdit {
     var recurrenceDays: Int?
     var repeatWeekdays: Int?
     var dependsOnSubtaskId: UUID?
+    var costCents: Int? = nil
 }
 
 /// Plain copy of a job, for undo and import.
@@ -34,13 +35,15 @@ struct JobRecord: Equatable {
     var dependsOnSubtaskId: UUID?
     var scheduledDate: Date?
     var calendarEventId: String?
+    var costCents: Int?
 
     init(
         id: UUID, title: String, notes: String = "", estimatedMinutes: Int, category: String = "",
         priority: Priority = .normal, isDone: Bool = false, isInProgress: Bool = false, createdAt: Date = .now,
         completedAt: Date? = nil, timesDrawn: Int = 0, parentId: UUID? = nil, recurrenceDays: Int? = nil,
         repeatWeekdays: Int? = nil, nextDueAt: Date? = nil, completionCount: Int = 0,
-        dependsOnSubtaskId: UUID? = nil, scheduledDate: Date? = nil, calendarEventId: String? = nil
+        dependsOnSubtaskId: UUID? = nil, scheduledDate: Date? = nil, calendarEventId: String? = nil,
+        costCents: Int? = nil
     ) {
         self.id = id
         self.title = title
@@ -61,6 +64,7 @@ struct JobRecord: Equatable {
         self.dependsOnSubtaskId = dependsOnSubtaskId
         self.scheduledDate = scheduledDate
         self.calendarEventId = calendarEventId
+        self.costCents = costCents
     }
 
     init(_ job: Job) {
@@ -71,7 +75,7 @@ struct JobRecord: Equatable {
             parentId: job.parentId, recurrenceDays: job.recurrenceDays, repeatWeekdays: job.repeatWeekdays,
             nextDueAt: job.nextDueAt, completionCount: job.completionCount,
             dependsOnSubtaskId: job.dependsOnSubtaskId, scheduledDate: job.scheduledDate,
-            calendarEventId: job.calendarEventId
+            calendarEventId: job.calendarEventId, costCents: job.costCents
         )
     }
 
@@ -94,6 +98,7 @@ struct JobRecord: Equatable {
         job.dependsOnSubtaskId = dependsOnSubtaskId
         job.scheduledDate = scheduledDate
         job.calendarEventId = calendarEventId
+        job.costCents = costCents
     }
 
     func makeJob() -> Job {
@@ -177,7 +182,8 @@ struct JobRepository {
             recurrenceDays: repeats ? edit.recurrenceDays : nil,
             repeatWeekdays: weekdays,
             nextDueAt: repeats ? initialNextDue(repeatWeekdays: weekdays, now: now()) : nil,
-            dependsOnSubtaskId: parentId != nil ? edit.dependsOnSubtaskId : nil
+            dependsOnSubtaskId: parentId != nil ? edit.dependsOnSubtaskId : nil,
+            costCents: edit.costCents.map { max($0, 0) }
         )
         modelContext.insert(job)
         if let parentId {
@@ -220,6 +226,7 @@ struct JobRepository {
         job.estimatedMinutes = edit.estimatedMinutes
         job.category = canonicalCategory(edit.category, excluding: job.id, allJobs: allJobs)
         job.priority = edit.priority
+        job.costCents = edit.costCents.map { max($0, 0) }
         job.recurrenceDays = newDays
         job.repeatWeekdays = newWeekdays
         job.nextDueAt = nextDue

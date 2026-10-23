@@ -58,6 +58,9 @@ final class Job: Identifiable {
     var scheduledDate: Date?
     /// The calendar event for `scheduledDate`, if one was written (EventKit's identifier).
     var calendarEventId: String?
+    /// What the job costs, in hundredths of the currency (cents). Nil = no cost entered. A
+    /// parent's own cost doesn't include its subtasks; see `totalCostCents`.
+    var costCents: Int?
 
     init(
         id: UUID = UUID(),
@@ -78,7 +81,8 @@ final class Job: Identifiable {
         completionCount: Int = 0,
         dependsOnSubtaskId: UUID? = nil,
         scheduledDate: Date? = nil,
-        calendarEventId: String? = nil
+        calendarEventId: String? = nil,
+        costCents: Int? = nil
     ) {
         self.id = id
         self.title = title
@@ -99,6 +103,7 @@ final class Job: Identifiable {
         self.dependsOnSubtaskId = dependsOnSubtaskId
         self.scheduledDate = scheduledDate
         self.calendarEventId = calendarEventId
+        self.costCents = costCents
     }
 }
 
@@ -131,6 +136,13 @@ extension Job {
     func remainingMinutes(subtasks: [Job]) -> Int {
         remainingMinutesOf(estimatedMinutes: estimatedMinutes, subtasks: subtasks)
     }
+}
+
+/// The job's cost plus its subtasks' costs. Nil if none of them has a cost, so jobs without
+/// costs don't show "$0" anywhere.
+func totalCostCents(_ job: Job, subtasks: [Job]) -> Int? {
+    let costs = ([job] + subtasks).compactMap(\.costCents)
+    return costs.isEmpty ? nil : costs.reduce(0, +)
 }
 
 /// Parent estimate minus finished subtasks. Can go negative.

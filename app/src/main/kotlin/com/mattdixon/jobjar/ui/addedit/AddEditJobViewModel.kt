@@ -10,6 +10,9 @@ import com.mattdixon.jobjar.data.Job
 import com.mattdixon.jobjar.data.JobRepository
 import com.mattdixon.jobjar.data.Priority
 import com.mattdixon.jobjar.data.weekdayBit
+import com.mattdixon.jobjar.util.CostInput
+import com.mattdixon.jobjar.util.costInputText
+import com.mattdixon.jobjar.util.parseCostInput
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -27,6 +30,8 @@ data class AddEditFormState(
     val estimatedMinutes: Int = 15,
     val category: String = "",
     val priority: Priority = Priority.NORMAL,
+    /** As typed. Blank = no cost. */
+    val costText: String = "",
     /** Null = doesn't repeat. */
     val recurrenceDays: Int? = null,
     /** Set = repeats on these weekdays (see [Job.repeatWeekdays]). */
@@ -39,8 +44,10 @@ data class AddEditFormState(
 ) {
     val repeatsOnWeekdays: Boolean get() = recurrenceDays != null && repeatWeekdays != null
 
+    val costInput: CostInput get() = parseCostInput(costText)
+
     val isValid: Boolean
-        get() = title.isNotBlank() && estimatedMinutes > 0 && when {
+        get() = title.isNotBlank() && estimatedMinutes > 0 && costInput != CostInput.Invalid && when {
             recurrenceDays == null -> true
             repeatWeekdays != null -> repeatWeekdays != 0
             else -> recurrenceDays > 0
@@ -74,6 +81,7 @@ class AddEditJobViewModel(
                             estimatedMinutes = job.estimatedMinutes,
                             category = job.category,
                             priority = job.priority,
+                            costText = costInputText(job.costCents),
                             recurrenceDays = job.recurrenceDays,
                             repeatWeekdays = job.repeatWeekdays,
                             dependsOnSubtaskId = job.dependsOnSubtaskId,
@@ -105,6 +113,7 @@ class AddEditJobViewModel(
         savedState[KEY_MINUTES] = next.estimatedMinutes
         savedState[KEY_CATEGORY] = next.category
         savedState[KEY_PRIORITY] = next.priority.name
+        savedState[KEY_COST] = next.costText
         savedState[KEY_RECURRENCE_DAYS] = next.recurrenceDays
         savedState[KEY_WEEKDAYS] = next.repeatWeekdays
         savedState[KEY_DEPENDS_ON] = next.dependsOnSubtaskId
@@ -121,6 +130,7 @@ class AddEditJobViewModel(
             estimatedMinutes = savedState[KEY_MINUTES] ?: 15,
             category = savedState[KEY_CATEGORY] ?: "",
             priority = Priority.entries.find { it.name == savedState.get<String>(KEY_PRIORITY) } ?: Priority.NORMAL,
+            costText = savedState[KEY_COST] ?: "",
             recurrenceDays = savedState[KEY_RECURRENCE_DAYS],
             repeatWeekdays = savedState[KEY_WEEKDAYS],
             dependsOnSubtaskId = savedState[KEY_DEPENDS_ON],
@@ -133,6 +143,7 @@ class AddEditJobViewModel(
     fun setEstimatedMinutes(value: Int) = update { it.copy(estimatedMinutes = value) }
     fun setCategory(value: String) = update { it.copy(category = value) }
     fun setPriority(value: Priority) = update { it.copy(priority = value) }
+    fun setCostText(value: String) = update { it.copy(costText = value) }
 
     /** Defaults to weekly. */
     fun setRecurring(enabled: Boolean) = update {
@@ -189,6 +200,7 @@ class AddEditJobViewModel(
             estimatedMinutes = state.estimatedMinutes,
             category = state.category.trim(),
             priority = state.priority,
+            costCents = (state.costInput as? CostInput.Valid)?.cents,
             parentId = state.parentId ?: parentId,
             recurrenceDays = state.recurrenceDays,
             repeatWeekdays = state.repeatWeekdays,
@@ -222,6 +234,7 @@ class AddEditJobViewModel(
         const val KEY_MINUTES = "form_minutes"
         const val KEY_CATEGORY = "form_category"
         const val KEY_PRIORITY = "form_priority"
+        const val KEY_COST = "form_cost"
         const val KEY_RECURRENCE_DAYS = "form_recurrence_days"
         const val KEY_WEEKDAYS = "form_weekdays"
         const val KEY_DEPENDS_ON = "form_depends_on"

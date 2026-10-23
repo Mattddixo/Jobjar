@@ -119,6 +119,7 @@ class JobRepository(
             estimatedMinutes = edited.estimatedMinutes,
             category = canonicalCategory(edited.category, fresh.id),
             priority = edited.priority,
+            costCents = edited.costCents,
             recurrenceDays = recurrenceDays,
             repeatWeekdays = weekdays,
             nextDueAt = nextDueAt,

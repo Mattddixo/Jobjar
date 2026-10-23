@@ -45,7 +45,12 @@ data class Job(
      */
     val scheduledDate: Long? = null,
     /** Calendar event for [scheduledDate], if one was written (permission can be off). */
-    val calendarEventId: Long? = null
+    val calendarEventId: Long? = null,
+    /**
+     * What the job costs, in hundredths of the currency (cents). Null = no cost entered. A
+     * parent's own cost doesn't include its subtasks; see [totalCostCents].
+     */
+    val costCents: Long? = null
 )
 
 /** Due now? For repeating jobs that's about [nextDueAt], not [isDone]. */
@@ -91,6 +96,15 @@ fun subtasksAvailableAsDependency(siblings: List<Job>, excludingSelfId: Long?): 
         candidate.id != excludingSelfId &&
             (excludingSelfId == null || !eventuallyDependsOn(candidate.id, excludingSelfId))
     }
+}
+
+/**
+ * The job's cost plus its subtasks' costs. Null if none of them has a cost, so jobs without
+ * costs don't show "$0" anywhere.
+ */
+fun totalCostCents(job: Job, subtasks: List<Job>): Long? {
+    val costs = (listOf(job) + subtasks).mapNotNull { it.costCents }
+    return if (costs.isEmpty()) null else costs.sum()
 }
 
 /** Parent estimate minus finished subtasks. Can go negative, which is fine. */

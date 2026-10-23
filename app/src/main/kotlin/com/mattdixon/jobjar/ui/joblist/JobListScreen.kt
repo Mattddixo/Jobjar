@@ -102,6 +102,7 @@ import com.mattdixon.jobjar.ui.theme.Spacing
 import com.mattdixon.jobjar.ui.theme.appTopBarColors
 import com.mattdixon.jobjar.ui.theme.appCardBorder
 import com.mattdixon.jobjar.ui.theme.appCardColors
+import com.mattdixon.jobjar.util.formatCost
 import com.mattdixon.jobjar.util.formatScheduledDateTime
 
 private val ScreenHPadding = Spacing.xl
@@ -581,6 +582,7 @@ private fun JobRow(
                 ) {
                     if (job.isInProgress) InfoBadge(text = stringResource(R.string.badge_in_progress))
                     TimeBucketBadge(minutes = item.displayMinutes)
+                    item.costCents?.let { InfoBadge(text = formatCost(it)) }
                     if (job.category.isNotBlank()) CategoryBadge(category = job.category)
                     if (item.subtaskTotal > 0) InfoBadge(text = stringResource(R.string.subtasks_done_count, item.subtaskDone, item.subtaskTotal))
                     job.recurrenceDays?.let { InfoBadge(text = recurrenceLabel(it, job.repeatWeekdays)) }

@@ -55,6 +55,9 @@ import com.mattdixon.jobjar.ui.components.SubtasksSection
 import com.mattdixon.jobjar.ui.components.recurrenceLabel
 import com.mattdixon.jobjar.ui.theme.Spacing
 import com.mattdixon.jobjar.ui.theme.appTopBarColors
+import com.mattdixon.jobjar.util.CostInput
+import com.mattdixon.jobjar.util.currencySymbol
+import com.mattdixon.jobjar.util.formatCost
 import com.mattdixon.jobjar.util.formatMinutes
 import kotlinx.coroutines.flow.flowOf
 import java.time.DayOfWeek
@@ -245,6 +248,33 @@ fun AddEditJobScreen(
                         ) { Text(priority.displayName) }
                     }
                 }
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
+                Text(stringResource(R.string.cost_label), style = MaterialTheme.typography.labelLarge)
+                val invalid = state.costInput == CostInput.Invalid
+                // For a job with subtasks, show what they add so the total isn't a surprise.
+                val subtaskCost = ownSubtasks.mapNotNull { it.costCents }.takeIf { it.isNotEmpty() }?.sum()
+                val ownCost = (state.costInput as? CostInput.Valid)?.cents ?: 0L
+                OutlinedTextField(
+                    value = state.costText,
+                    onValueChange = viewModel::setCostText,
+                    placeholder = { Text(stringResource(R.string.cost_placeholder)) },
+                    prefix = { Text(currencySymbol()) },
+                    isError = invalid,
+                    supportingText = when {
+                        invalid -> {
+                            { Text(stringResource(R.string.cost_invalid)) }
+                        }
+                        subtaskCost != null -> {
+                            { Text(stringResource(R.string.cost_with_subtasks, formatCost(subtaskCost), formatCost(ownCost + subtaskCost))) }
+                        }
+                        else -> null
+                    },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
 
             // Only subtasks can depend on something, and only on a sibling.

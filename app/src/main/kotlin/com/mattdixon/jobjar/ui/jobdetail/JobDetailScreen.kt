@@ -51,6 +51,7 @@ import com.mattdixon.jobjar.data.Job
 import com.mattdixon.jobjar.data.JobRepository
 import com.mattdixon.jobjar.data.isPending
 import com.mattdixon.jobjar.data.remainingMinutes
+import com.mattdixon.jobjar.data.totalCostCents
 import com.mattdixon.jobjar.ui.components.CategoryBadge
 import com.mattdixon.jobjar.ui.components.InfoBadge
 import com.mattdixon.jobjar.ui.components.SchedulePickerDialog
@@ -59,6 +60,7 @@ import com.mattdixon.jobjar.ui.components.TimeBucketBadge
 import com.mattdixon.jobjar.ui.theme.AppShapes
 import com.mattdixon.jobjar.ui.theme.Spacing
 import com.mattdixon.jobjar.ui.theme.appTopBarColors
+import com.mattdixon.jobjar.util.formatCost
 import com.mattdixon.jobjar.util.formatMinutes
 import com.mattdixon.jobjar.ui.LocalUndoController
 import com.mattdixon.jobjar.ui.UndoEvent
@@ -249,6 +251,25 @@ fun JobDetailScreen(
                     stringResource(R.string.priority_display, currentJob.priority.displayName),
                     style = MaterialTheme.typography.bodyMedium
                 )
+
+                // One line, only when there's a cost. A parent's total includes its subtasks.
+                totalCostCents(currentJob, subtasks)?.let { total ->
+                    val ownCost = currentJob.costCents
+                    val subtaskCost = subtasks.mapNotNull { it.costCents }.takeIf { it.isNotEmpty() }?.sum()
+                    Text(
+                        when {
+                            subtaskCost == null -> stringResource(R.string.cost_display, formatCost(total))
+                            ownCost == null -> stringResource(R.string.cost_display_subtasks_only, formatCost(total))
+                            else -> stringResource(
+                                R.string.cost_display_with_subtasks,
+                                formatCost(total),
+                                formatCost(ownCost),
+                                formatCost(subtaskCost)
+                            )
+                        },
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
 
                 if (currentJob.notes.isNotBlank()) {
                     Text(currentJob.notes, style = MaterialTheme.typography.bodyLarge)
