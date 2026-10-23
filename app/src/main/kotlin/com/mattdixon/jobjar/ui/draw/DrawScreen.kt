@@ -18,17 +18,18 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shuffle
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -41,7 +42,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -54,11 +55,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -66,25 +67,31 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.mattdixon.jobjar.data.Job
+import com.mattdixon.jobjar.R
 import com.mattdixon.jobjar.data.JobRepository
 import com.mattdixon.jobjar.data.LONG_JOB_MINUTES
 import com.mattdixon.jobjar.ui.components.CategoryBadge
 import com.mattdixon.jobjar.ui.components.InfoBadge
+import com.mattdixon.jobjar.ui.components.SchedulePickerDialog
 import com.mattdixon.jobjar.ui.components.TimeBucketBadge
+import com.mattdixon.jobjar.ui.components.TodayDateButton
+import com.mattdixon.jobjar.ui.theme.AppShapes
+import com.mattdixon.jobjar.ui.theme.Spacing
+import com.mattdixon.jobjar.ui.theme.appTopBarColors
+import com.mattdixon.jobjar.ui.theme.JarLid
+import com.mattdixon.jobjar.ui.theme.JarLidBand
+import com.mattdixon.jobjar.ui.theme.JarSlips
+import com.mattdixon.jobjar.ui.theme.LocalAppColors
+import com.mattdixon.jobjar.ui.theme.appCardBorder
+import com.mattdixon.jobjar.ui.theme.appCardColors
 import com.mattdixon.jobjar.util.formatMinutes
-import com.mattdixon.jobjar.util.formatRecurrenceInterval
+import com.mattdixon.jobjar.ui.components.plural
+import com.mattdixon.jobjar.ui.components.recurrenceLabel
+import kotlin.math.ceil
 
 private val TIME_PRESETS = listOf(15, 30, 45, 60, 90, 120)
 
-/** Shared rounding for every surface on this screen so they read as one design language. */
-private val PanelShape = RoundedCornerShape(20.dp)
-
-/**
- * Jobs pending at or above this count show the jar as visually full - a soft cap for the fill
- * glyph, not a limit on how many jobs you can actually have. Chosen to look "getting full" at a
- * realistic personal backlog size rather than needing dozens of jobs to register visually.
- */
+/** Jar looks full from this many jobs up. Only affects the picture. */
 private const val JAR_FILL_CAP = 15
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -92,20 +99,26 @@ private const val JAR_FILL_CAP = 15
 fun DrawScreen(
     repository: JobRepository,
     onOpenJob: (Long) -> Unit,
-    darkTheme: Boolean,
-    onToggleTheme: () -> Unit
+    onOpenSettings: () -> Unit
 ) {
-    val viewModel: DrawViewModel = viewModel(factory = DrawViewModel.Factory(repository))
+    val appContext = LocalContext.current.applicationContext
+    val viewModel: DrawViewModel = viewModel(factory = DrawViewModel.Factory(repository, appContext))
     val state by viewModel.uiState.collectAsState()
-    var forceCompleteJobId by remember { mutableStateOf<Long?>(null) }
+    var jobIdPendingSchedule by remember { mutableStateOf<Long?>(null) }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("The Job Jar") },
+                colors = appTopBarColors(),
+                title = {
+                    Column {
+                        TodayDateButton()
+                        Text(stringResource(R.string.draw_screen_title))
+                    }
+                },
                 actions = {
-                    TextButton(onClick = onToggleTheme) {
-                        Text(if (darkTheme) "Light" else "Dark")
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.cd_settings))
                     }
                 }
             )
@@ -115,46 +128,36 @@ fun DrawScreen(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
-                // The screen's header (jar + picker panel + button) is fixed, but the results
-                // below it can range from one card to ten - rather than squeezing that into
-                // whatever sliver of space happens to be left under the header (which is what a
-                // weight(1f) region does, and reads as "barely see anything"), the whole page is
-                // one scroll region. That's also the only sound option in Compose terms: a
-                // verticalScroll() container measures its content with unbounded height, so a
-                // weight()ed child inside it isn't just visually cramped, it's not a supported
-                // combination in the first place.
+                // One scroll for the whole page. The results can be anything from 1 to 10 cards, which
+                // doesn't fit in whatever space is left under the header.
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(horizontal = Spacing.xl, vertical = Spacing.lg),
+            verticalArrangement = Arrangement.spacedBy(Spacing.lg)
         ) {
-            JarHero(pendingCount = state.pendingCount)
+            JarHero(pendingCount = state.pendingCount, inProgressCount = state.inProgressCount, isLoaded = state.isLoaded)
 
             PickerPanel(
                 state = state,
                 onAvailableMinutesChange = viewModel::setAvailableMinutes,
                 onLongJobsOnly = viewModel::setLongJobsOnly,
-                onCategorySelect = viewModel::setCategory,
+                onToggleCategory = viewModel::toggleCategory,
                 onBatchSizeChange = viewModel::setBatchSize
             )
 
             Button(
                 onClick = { viewModel.draw() },
                 enabled = !state.isDrawing,
-                shape = RoundedCornerShape(16.dp),
+                shape = AppShapes.action,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp)
             ) {
                 Icon(Icons.Filled.Shuffle, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Draw a job", style = MaterialTheme.typography.titleSmall)
+                Spacer(modifier = Modifier.width(Spacing.md))
+                Text(stringResource(R.string.draw_button), style = MaterialTheme.typography.titleSmall)
             }
 
-            // Keyed on "is there anything drawn" rather than the drawn-jobs list itself, so a
-            // change to the batch (e.g. "Skip all" redrawing it) doesn't cause a jarring
-            // full-list crossfade for no reason - only empty<->populated transitions animate.
-            // The content lambda still reads state.drawnJobs live on every recomposition
-            // regardless of whether the crossfade itself re-triggers.
+            // Keyed on empty vs not, so a redraw doesn't crossfade the whole list.
             AnimatedContent(
                 targetState = state.drawnJobs.isNotEmpty(),
                 transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(120)) },
@@ -168,178 +171,157 @@ fun DrawScreen(
                         remainingMinutes = state.remainingMinutesAfterDraw,
                         isBusy = state.isDrawing,
                         onOpen = { jobId -> onOpenJob(jobId) },
-                        onDone = { jobId ->
-                            val entry = state.drawnJobs.find { it.job.id == jobId }
-                            val hasOpenSubtasks = entry?.context != null &&
-                                entry.context.subtaskDone < entry.context.subtaskTotal
-                            if (hasOpenSubtasks) {
-                                forceCompleteJobId = jobId
-                            } else {
-                                viewModel.completeJob(jobId)
-                            }
-                        },
-                        onSkipAll = { viewModel.draw(excludeCurrent = true) }
+                        onStart = { jobId -> viewModel.startJob(jobId) },
+                        onScheduleRequest = { jobId -> jobIdPendingSchedule = jobId },
+                        onRedraw = { viewModel.draw(excludeCurrent = true) },
+                        onCloseJar = { viewModel.clearDraw() }
                     )
                     state.noMatchFound -> EmptyStateText(
                         if (state.longJobsOnly) {
-                            "Nothing needs ${formatMinutes(LONG_JOB_MINUTES)}+ yet. Try a shorter time, or add a bigger job."
+                            stringResource(R.string.draw_no_match_long, formatMinutes(LONG_JOB_MINUTES))
                         } else {
-                            "No jobs fit that time and category. Try a longer time or add more jobs."
+                            stringResource(R.string.draw_no_match_short)
                         }
                     )
-                    else -> EmptyStateText("Set your time and tap \"Draw a job\" to pick something from the jar.")
+                    else -> EmptyStateText(stringResource(R.string.draw_empty_prompt))
                 }
             }
         }
     }
 
-    forceCompleteJobId?.let { jobId ->
-        val entry = state.drawnJobs.find { it.job.id == jobId }
-        val incompleteCount = (entry?.context?.subtaskTotal ?: 0) - (entry?.context?.subtaskDone ?: 0)
-        AlertDialog(
-            onDismissRequest = { forceCompleteJobId = null },
-            title = { Text("Mark as done?") },
-            text = {
-                Text("$incompleteCount subtask(s) are still open. They'll stay open, but this job will be marked done.")
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.completeJob(jobId)
-                    forceCompleteJobId = null
-                }) { Text("Mark done") }
-            },
-            dismissButton = {
-                TextButton(onClick = { forceCompleteJobId = null }) { Text("Cancel") }
+    jobIdPendingSchedule?.let { jobId ->
+        SchedulePickerDialog(
+            onDismiss = { jobIdPendingSchedule = null },
+            onConfirm = { dateTimeMillis ->
+                viewModel.scheduleJob(jobId, dateTimeMillis)
+                jobIdPendingSchedule = null
             }
         )
     }
 }
 
 /**
- * The screen's one decorative moment: a jar glyph plus how many jobs are actually in it right
- * now. Deliberately just a count, not a dashboard - a completed-vs-pending ratio was here before
- * and it decayed toward "always looks full" as lifetime completions piled up, which stopped
- * meaning anything after a while. Anyone who wants completion history has the Stats tab for
- * that; this is just "how full does my jar look today."
+ * Jar picture plus how many jobs are in it. Started jobs have left the jar so they get their own
+ * line (hidden when zero).
  */
 @Composable
-private fun JarHero(pendingCount: Int, modifier: Modifier = Modifier) {
-    val fraction = (pendingCount.toFloat() / JAR_FILL_CAP).coerceIn(0f, 1f)
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically
+private fun JarHero(pendingCount: Int, inProgressCount: Int, isLoaded: Boolean, modifier: Modifier = Modifier) {
+    val slips = if (pendingCount == 0) 0 else ceil(pendingCount * JAR_SLIPS.size / JAR_FILL_CAP.toFloat()).toInt().coerceIn(1, JAR_SLIPS.size)
+    Card(
+        shape = AppShapes.panel,
+        colors = appCardColors(),
+        border = appCardBorder(),
+        modifier = modifier.fillMaxWidth()
     ) {
-        JarGlyph(fraction = fraction, modifier = Modifier.size(width = 52.dp, height = 70.dp))
-        Spacer(modifier = Modifier.width(12.dp))
-        Text(
-            "$pendingCount in the jar",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.SemiBold
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.xl, vertical = Spacing.lg),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            JarGlyph(slips = slips, modifier = Modifier.size(width = 56.dp, height = 68.dp))
+            Spacer(modifier = Modifier.width(Spacing.xl))
+            Column {
+                Text(
+                    // Blank until loaded rather than flashing "0 jobs".
+                    if (isLoaded) plural(R.plurals.draw_jar_count, pendingCount, pendingCount) else "",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
+                if (inProgressCount > 0) {
+                    Text(
+                        plural(R.plurals.draw_in_progress_count, inProgressCount, inProgressCount),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
     }
 }
 
-/**
- * The jar-shaped fill glyph itself - purely the picture, no data logic of its own. [fraction]
- * (0f-1f) is however the caller wants to represent "how full," decided by [JarHero].
- */
+/** A job slip in the jar, in the app icon's 108-unit grid: centre, size, tilt. */
+private class Slip(val cx: Float, val cy: Float, val w: Float, val h: Float, val degrees: Float)
+
+// Bottom row first, so the jar fills from the bottom up.
+private val JAR_SLIPS = listOf(
+    Slip(42f, 77.5f, 13f, 7f, -6f),
+    Slip(60.5f, 77.5f, 16f, 7f, 10f),
+    Slip(50.5f, 66.5f, 18f, 8f, 5f),
+    Slip(68.5f, 66f, 8f, 8f, -12f),
+    Slip(46f, 55.5f, 15f, 8f, -10f),
+    Slip(63f, 54.5f, 16f, 8f, 8f)
+)
+
+/** The app icon's jar, without the background. Shows the first [slips] slips. */
 @Composable
-private fun JarGlyph(fraction: Float, modifier: Modifier = Modifier) {
-    val fillColor = MaterialTheme.colorScheme.primary
-    val outlineColor = MaterialTheme.colorScheme.outline
-    val trackColor = MaterialTheme.colorScheme.surfaceVariant
+private fun JarGlyph(slips: Int, modifier: Modifier = Modifier) {
+    val glass = LocalAppColors.current.jarGlass
+    val edge = LocalAppColors.current.jarGlassEdge
 
     Canvas(modifier = modifier) {
-        val neckWidth = size.width * 0.46f
-        val neckLeft = (size.width - neckWidth) / 2f
-        val bodyTop = size.height * 0.2f
-        val bodyCorner = size.width * 0.18f
+        // The jar sits in x 28..80, y 24..87 of the icon grid.
+        val scale = minOf(size.width / 52f, size.height / 63f)
+        val left = (size.width - 52f * scale) / 2f - 28f * scale
+        val top = (size.height - 63f * scale) / 2f - 24f * scale
+        fun at(x: Float, y: Float) = Offset(left + x * scale, top + y * scale)
+        fun dims(w: Float, h: Float) = Size(w * scale, h * scale)
+        val outline = Stroke(width = 1.5.dp.toPx())
 
-        val bodyPath = Path().apply {
-            addRoundRect(
-                RoundRect(
-                    left = 0f,
-                    top = bodyTop,
-                    right = size.width,
-                    bottom = size.height,
-                    cornerRadius = CornerRadius(bodyCorner, bodyCorner)
-                )
-            )
-        }
-        val neckPath = Path().apply {
-            addRoundRect(
-                RoundRect(
-                    left = neckLeft,
-                    top = 0f,
-                    right = neckLeft + neckWidth,
-                    bottom = bodyTop + bodyCorner,
-                    cornerRadius = CornerRadius(bodyCorner * 0.6f, bodyCorner * 0.6f)
-                )
-            )
-        }
+        drawRoundRect(glass, at(36f, 35f), dims(36f, 8f), CornerRadius(3f * scale))
+        drawRoundRect(edge, at(36f, 35f), dims(36f, 8f), CornerRadius(3f * scale), style = outline)
+        drawRoundRect(glass, at(30f, 41f), dims(48f, 44f), CornerRadius(11f * scale))
+        drawRoundRect(edge, at(30f, 41f), dims(48f, 44f), CornerRadius(11f * scale), style = outline)
 
-        clipPath(bodyPath) { drawRect(color = trackColor) }
-        drawPath(neckPath, color = trackColor)
-
-        val bodyHeight = size.height - bodyTop
-        val fillHeight = bodyHeight * fraction
-        if (fillHeight > 0f) {
-            clipPath(bodyPath) {
-                drawRect(
-                    color = fillColor,
-                    topLeft = Offset(0f, size.height - fillHeight),
-                    size = Size(size.width, fillHeight)
-                )
+        JAR_SLIPS.take(slips).forEachIndexed { i, slip ->
+            rotate(slip.degrees, pivot = at(slip.cx, slip.cy)) {
+                drawRect(JarSlips[i % JarSlips.size], at(slip.cx - slip.w / 2, slip.cy - slip.h / 2), dims(slip.w, slip.h))
             }
         }
 
-        val strokeWidth = 2.dp.toPx()
-        drawPath(bodyPath, color = outlineColor, style = Stroke(width = strokeWidth))
-        drawPath(neckPath, color = outlineColor, style = Stroke(width = strokeWidth))
+        drawRoundRect(JarLid, at(33f, 26f), dims(42f, 10f), CornerRadius(3.5f * scale))
+        drawRoundRect(JarLidBand, at(33f, 32f), dims(42f, 4f), CornerRadius(1.5f * scale))
     }
 }
 
-/**
- * The actually-functional part of the screen: time budget, how many jobs to try to draw, and
- * category filter. Each narrows down to a single dropdown chip - showing the current value
- * doubles as the control that changes it - instead of a whole row of preset chips each.
- */
+/** Time, how many, and category, each as a dropdown chip. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PickerPanel(
     state: DrawUiState,
     onAvailableMinutesChange: (Int) -> Unit,
     onLongJobsOnly: () -> Unit,
-    onCategorySelect: (String?) -> Unit,
+    onToggleCategory: (String) -> Unit,
     onBatchSizeChange: (DrawBatchSize) -> Unit
 ) {
     val dividerColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
     var timeMenuExpanded by remember { mutableStateOf(false) }
     var batchMenuExpanded by remember { mutableStateOf(false) }
     var categoryMenuExpanded by remember { mutableStateOf(false) }
+    val longJobLabel = stringResource(R.string.long_job_chip_label)
 
     Card(
-        shape = PanelShape,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        shape = AppShapes.panel,
+        colors = appCardColors(),
+        border = appCardBorder(),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.padding(Spacing.xl),
+            verticalArrangement = Arrangement.spacedBy(Spacing.md)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                SectionLabel("TIME AVAILABLE")
+                SectionLabel(stringResource(R.string.draw_section_time_available))
                 Box {
                     FilterChip(
                         selected = true,
                         onClick = { timeMenuExpanded = true },
                         label = {
-                            Text(if (state.longJobsOnly) "4+ hrs" else formatMinutes(state.availableMinutes))
+                            Text(if (state.longJobsOnly) longJobLabel else formatMinutes(state.availableMinutes))
                         },
                         trailingIcon = {
                             Icon(Icons.Filled.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -355,11 +337,9 @@ private fun PickerPanel(
                                 }
                             )
                         }
-                        // Not a duration like the presets above it - picking this flips the draw
-                        // from "fits this time" to "needs 4+ hours" and ignores the slider
-                        // entirely, but it's still just one more value this control can be set to.
+                        // Not a duration: switches to "4hr or longer" and the slider stops applying.
                         DropdownMenuItem(
-                            text = { Text("4+ hrs") },
+                            text = { Text(longJobLabel) },
                             onClick = {
                                 onLongJobsOnly()
                                 timeMenuExpanded = false
@@ -379,26 +359,21 @@ private fun PickerPanel(
                         thumbSize = DpSize(16.dp, 16.dp)
                     )
                 },
-                // The default inactive-track color derives from surfaceVariant, which in light
-                // theme is nearly the same tone as this panel's own card background - the track
-                // all but disappears. outlineVariant has real contrast against the card in both
-                // themes, so the unfilled part of the bar stays visibly a bar.
+                // Default inactive track nearly disappears on the white card.
                 colors = SliderDefaults.colors(
                     inactiveTrackColor = MaterialTheme.colorScheme.outlineVariant,
                     disabledInactiveTrackColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
                 )
             )
 
-            // "4+ hrs" always draws exactly one job (there's no remaining budget to keep
-            // filling after an open-ended pick), so this control only makes sense - and only
-            // shows - for a normal time-budget draw.
+            // 4+ hrs always draws one job, so "how many" only shows for normal draws.
             if (!state.longJobsOnly) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    SectionLabel("HOW MANY")
+                    SectionLabel(stringResource(R.string.draw_section_how_many))
                     Box {
                         FilterChip(
                             selected = state.batchSize != DrawBatchSize.ONE,
@@ -424,37 +399,41 @@ private fun PickerPanel(
             }
 
             if (state.categories.isNotEmpty()) {
-                HorizontalDivider(color = dividerColor, modifier = Modifier.padding(vertical = 2.dp))
+                HorizontalDivider(color = dividerColor, modifier = Modifier.padding(vertical = Spacing.xxs))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    SectionLabel("CATEGORY")
+                    SectionLabel(stringResource(R.string.draw_section_category))
                     Box {
+                        // Multi-select like the Jobs list. Label: "Any", the category name, or "N categories".
+                        val categoryLabel = when {
+                            state.selectedCategories.isEmpty() -> stringResource(R.string.draw_category_any)
+                            state.selectedCategories.size == 1 -> state.selectedCategories.first()
+                            else -> stringResource(R.string.draw_category_n_selected, state.selectedCategories.size)
+                        }
                         FilterChip(
-                            selected = state.selectedCategory != null,
+                            selected = state.selectedCategories.isNotEmpty(),
                             onClick = { categoryMenuExpanded = true },
-                            label = { Text(state.selectedCategory ?: "Any") },
+                            label = { Text(categoryLabel) },
                             trailingIcon = {
                                 Icon(Icons.Filled.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp))
-                            }
+                            },
+                            // Min width so the chip (and its menu) doesn't jump around as the label changes.
+                            modifier = Modifier.widthIn(min = 88.dp)
                         )
                         DropdownMenu(expanded = categoryMenuExpanded, onDismissRequest = { categoryMenuExpanded = false }) {
-                            DropdownMenuItem(
-                                text = { Text("Any") },
-                                onClick = {
-                                    onCategorySelect(null)
-                                    categoryMenuExpanded = false
-                                }
-                            )
                             state.categories.forEach { category ->
                                 DropdownMenuItem(
                                     text = { Text(category) },
-                                    onClick = {
-                                        onCategorySelect(category)
-                                        categoryMenuExpanded = false
-                                    }
+                                    leadingIcon = {
+                                        Checkbox(
+                                            checked = category in state.selectedCategories,
+                                            onCheckedChange = null
+                                        )
+                                    },
+                                    onClick = { onToggleCategory(category) }
                                 )
                             }
                         }
@@ -484,18 +463,13 @@ private fun EmptyStateText(text: String) {
         textAlign = TextAlign.Center,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 16.dp)
+            .padding(vertical = Spacing.xl)
     )
 }
 
 /**
- * The current draw's results: an optional "how much budget is left" summary (only worth
- * showing when more than one job was actually requested - for the default single-job draw it'd
- * just be noise), each card at its natural size (no inner scroll region or height cap of its
- * own - the whole screen is the one scroll owner, see [DrawScreen]), and one "Skip all" button
- * after the last card that redraws the whole batch. Each card is wrapped in `key(entry.job.id)`
- * so a card that gets replaced (e.g. after "Skip all" redraws the batch) is a genuinely fresh
- * composable instance rather than reusing whatever remembered state occupied that slot before.
+ * The drawn jobs, with a "time spare" line when you asked for more than one, then Draw again /
+ * Never mind. Drawing doesn't take anything out of the jar, so Never mind just clears the list.
  */
 @Composable
 private fun DrawnJobsBatch(
@@ -505,13 +479,21 @@ private fun DrawnJobsBatch(
     remainingMinutes: Int,
     isBusy: Boolean,
     onOpen: (Long) -> Unit,
-    onDone: (Long) -> Unit,
-    onSkipAll: () -> Unit
+    onStart: (Long) -> Unit,
+    onScheduleRequest: (Long) -> Unit,
+    onRedraw: () -> Unit,
+    onCloseJar: () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
         if (showBudgetSummary) {
             Text(
-                "${entries.size} job(s) · ${formatMinutes(remainingMinutes)} left of ${formatMinutes(availableMinutes)}",
+                plural(
+                    R.plurals.draw_budget_summary,
+                    entries.size,
+                    entries.size,
+                    formatMinutes(remainingMinutes),
+                    formatMinutes(availableMinutes)
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -522,48 +504,54 @@ private fun DrawnJobsBatch(
                     entry = entry,
                     isBusy = isBusy,
                     onOpen = { onOpen(entry.job.id) },
-                    onDone = { onDone(entry.job.id) }
+                    onStart = { onStart(entry.job.id) },
+                    onScheduleRequest = { onScheduleRequest(entry.job.id) }
                 )
             }
         }
-        OutlinedButton(
-            onClick = onSkipAll,
-            enabled = !isBusy,
-            shape = RoundedCornerShape(10.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(36.dp)
-        ) {
-            Text("Skip all", style = MaterialTheme.typography.labelMedium)
+        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.md)) {
+            OutlinedButton(
+                onClick = onRedraw,
+                enabled = !isBusy,
+                shape = AppShapes.control,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(36.dp)
+            ) {
+                Text(stringResource(R.string.draw_redraw), style = MaterialTheme.typography.labelMedium)
+            }
+            OutlinedButton(
+                onClick = onCloseJar,
+                enabled = !isBusy,
+                shape = AppShapes.control,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(36.dp)
+            ) {
+                Text(stringResource(R.string.draw_close_jar), style = MaterialTheme.typography.labelMedium)
+            }
         }
     }
 }
 
-/** Tighter rounding than [PanelShape] - drawn-job cards are meant to read as compact result
- * chips you skim through quickly, not another full-size panel like the picker above them. */
-private val BatchCardShape = RoundedCornerShape(14.dp)
-
 /**
- * A drawn job gets the app's one reserved accent (tertiary) - every other surface on this
- * screen is in the primary family, so this card reads as "the spotlight," not just another
- * panel. The whole card is tappable to open the job's detail page - a dedicated "View details"
- * button would just be redundant with that. "Skip all" (below the list) redraws the whole
- * batch. Notes are deliberately left off (available on the detail page) so a long description
- * can't grow a card unpredictably.
+ * A drawn job, on the honey card. Tap for details. Actions are Start and Schedule; finishing
+ * happens later from the job itself. Notes are left off to keep cards a predictable size.
  */
 @Composable
 private fun BatchJobCard(
     entry: DrawnJobEntry,
     isBusy: Boolean,
     onOpen: () -> Unit,
-    onDone: () -> Unit
+    onStart: () -> Unit,
+    onScheduleRequest: () -> Unit
 ) {
     val job = entry.job
     val context = entry.context
 
     Card(
         onClick = onOpen,
-        shape = BatchCardShape,
+        shape = AppShapes.card,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.tertiaryContainer,
             contentColor = MaterialTheme.colorScheme.onTertiaryContainer
@@ -571,8 +559,8 @@ private fun BatchJobCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(5.dp)
+            modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.md),
+            verticalArrangement = Arrangement.spacedBy(Spacing.xs)
         ) {
             Text(
                 job.title,
@@ -581,14 +569,14 @@ private fun BatchJobCard(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
                 TimeBucketBadge(minutes = context?.remainingMinutes ?: job.estimatedMinutes, compact = true)
                 if (job.category.isNotBlank()) CategoryBadge(category = job.category, compact = true)
-                job.recurrenceDays?.let { InfoBadge(text = formatRecurrenceInterval(it), compact = true) }
+                job.recurrenceDays?.let { InfoBadge(text = recurrenceLabel(it, job.repeatWeekdays), compact = true) }
             }
             if (context?.parentTitle != null) {
                 Text(
-                    "Part of: ${context.parentTitle}",
+                    stringResource(R.string.label_part_of, context.parentTitle),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onTertiaryContainer,
                     maxLines = 1,
@@ -597,28 +585,62 @@ private fun BatchJobCard(
             }
             if (context != null && context.subtaskTotal > 0) {
                 Text(
-                    "${context.subtaskDone}/${context.subtaskTotal} subtasks done · ${formatMinutes(context.remainingMinutes ?: job.estimatedMinutes)} left",
+                    stringResource(
+                        R.string.draw_subtasks_progress,
+                        context.subtaskDone,
+                        context.subtaskTotal,
+                        formatMinutes(context.remainingMinutes ?: job.estimatedMinutes)
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onTertiaryContainer,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            Button(
-                onClick = onDone,
-                enabled = !isBusy,
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.tertiary,
-                    contentColor = MaterialTheme.colorScheme.onTertiary
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(34.dp)
-            ) {
-                Text("Mark done", style = MaterialTheme.typography.labelMedium)
+            // No scheduling for repeating jobs.
+            if (job.recurrenceDays == null) {
+                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                    Button(
+                        onClick = onStart,
+                        enabled = !isBusy,
+                        shape = AppShapes.control,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.tertiary,
+                            contentColor = MaterialTheme.colorScheme.onTertiary
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(34.dp)
+                    ) {
+                        Text(stringResource(R.string.action_start), style = MaterialTheme.typography.labelMedium)
+                    }
+                    OutlinedButton(
+                        onClick = onScheduleRequest,
+                        enabled = !isBusy,
+                        shape = AppShapes.control,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(34.dp)
+                    ) {
+                        Text(stringResource(R.string.action_schedule), style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+            } else {
+                Button(
+                    onClick = onStart,
+                    enabled = !isBusy,
+                    shape = AppShapes.control,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.tertiary,
+                        contentColor = MaterialTheme.colorScheme.onTertiary
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(34.dp)
+                ) {
+                    Text(stringResource(R.string.action_start), style = MaterialTheme.typography.labelMedium)
+                }
             }
         }
     }
 }
-

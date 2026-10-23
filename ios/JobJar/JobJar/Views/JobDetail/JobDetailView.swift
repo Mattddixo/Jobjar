@@ -9,9 +9,11 @@ struct JobDetailView: View {
     var onBack: () -> Void
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(UndoCenter.self) private var undoCenter
     @Query private var allJobs: [Job]
     @State private var showDeleteDialog = false
     @State private var showForceCompleteDialog = false
+    @State private var jobToSchedule: Job? = nil
 
     private var repository: JobRepository { JobRepository(modelContext: modelContext) }
     private var currentJob: Job? { allJobs.first { $0.id == jobId } }
@@ -30,10 +32,13 @@ struct JobDetailView: View {
             if let job = currentJob {
                 content(for: job)
             } else {
-                Text("Job not found.")
+                Text("This job has been deleted.")
             }
         }
-        .navigationTitle("Job details")
+        .pageBackground()
+        .navigationTitle("Job")
+        .navigationBarTitleDisplayMode(.inline)
+        .scheduleSheet(for: $jobToSchedule) { job, date in repository.scheduleJob(job, at: date) }
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button(action: onEdit) { Image(systemName: "pencil") }
@@ -46,7 +51,9 @@ struct JobDetailView: View {
             Button("Cancel", role: .cancel) {}
             Button("Delete", role: .destructive) {
                 if let job = currentJob {
-                    repository.deleteJob(job, allJobs: allJobs)
+                    let title = job.title
+                    let snapshot = repository.deleteJob(job, allJobs: allJobs)
+                    undoCenter.offerDeleted(title, snapshot)
                 }
                 onBack()
             }
@@ -54,20 +61,19 @@ struct JobDetailView: View {
             if let job = currentJob {
                 Text(
                     subtasks.isEmpty
-                        ? "\"\(job.title)\" will be removed permanently."
-                        : "\"\(job.title)\" and its \(subtasks.count) subtask(s) will be removed permanently."
+                        ? "\(job.title) will be deleted."
+                        : "\(job.title) and its \(countLabel(subtasks.count, "subtask", "subtasks")) will be deleted."
                 )
             }
         }
-        .alert("Mark as done?", isPresented: $showForceCompleteDialog) {
+        .alert("Mark as completed?", isPresented: $showForceCompleteDialog) {
             Button("Cancel", role: .cancel) {}
-            Button("Mark done") {
-                if let job = currentJob {
-                    repository.toggleDone(job, allJobs: allJobs)
-                }
+            Button("Mark complete") {
+                if let job = currentJob { toggleDone(job) }
             }
         } message: {
-            Text("\(subtasks.filter { !$0.isDone }.count) subtask(s) are still open. They'll stay open, but this job will be marked done.")
+            let open = subtasks.filter { !$0.isDone }.count
+            Text(forceCompleteMessage(openSubtasks: open))
         }
     }
 
@@ -77,11 +83,23 @@ struct JobDetailView: View {
             VStack(alignment: .leading, spacing: 16) {
                 Text(job.title).font(.title.weight(.bold))
 
-                HStack(spacing: 8) {
+                // Chevron so it reads as a link to the parent.
+                if let parent {
+                    Button { onOpenJob(parent.id) } label: {
+                        HStack(spacing: 2) {
+                            Text("Part of \(parent.title)")
+                            Image(systemName: "chevron.right").font(.caption.weight(.semibold))
+                        }
+                    }
+                    .font(.subheadline)
+                }
+
+                FlowLayout(spacing: 8) {
+                    if job.isInProgress { InProgressBadge() }
                     let displayMinutes = subtasks.isEmpty ? job.estimatedMinutes : job.remainingMinutes(subtasks: subtasks)
                     TimeBadge(minutes: displayMinutes)
                     if !job.category.isEmpty { CategoryBadge(category: job.category) }
-                    if let days = job.recurrenceDays { InfoBadge(text: formatRecurrenceInterval(days)) }
+                    if let days = job.recurrenceDays { InfoBadge(text: formatRecurrence(days: days, weekdays: job.repeatWeekdays)) }
                 }
 
                 if !subtasks.isEmpty {
@@ -92,15 +110,17 @@ struct JobDetailView: View {
                 }
 
                 if job.recurrenceDays != nil {
-                    let suffix = job.completionCount > 0 ? " · completed \(job.completionCount) time(s)" : ""
+                    let suffix = job.completionCount == 0 ? ""
+                        : job.completionCount == 1 ? " · completed once" : " · completed \(job.completionCount) times"
                     Text(formatDueStatus(job.nextDueAt) + suffix)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
 
-                if let parent {
-                    Button("Part of: \(parent.title)") { onOpenJob(parent.id) }
+                if let scheduled = job.scheduledDate {
+                    Label("Scheduled \(formatScheduledDateTime(scheduled))", systemImage: "calendar")
                         .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
 
                 if let prerequisiteId = job.dependsOnSubtaskId,
@@ -108,22 +128,67 @@ struct JobDetailView: View {
                    !prerequisite.isDone {
                     HStack(spacing: 6) {
                         Image(systemName: "lock.fill").foregroundStyle(.secondary)
-                        Text("Waiting on: \(prerequisite.title)")
+                        Text("Waiting on \(prerequisite.title)")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
                 }
 
-                Text("Priority: \(job.priority.displayName)").font(.body)
+                Text("\(job.priority.displayName) priority").font(.body)
+
+                // One line, only when there's a cost. A parent's total includes its subtasks.
+                if let total = totalCostCents(job, subtasks: subtasks) {
+                    Text(costLine(total: total, job: job))
+                        .font(.body)
+                }
 
                 if !job.notes.isEmpty {
                     Text(job.notes).font(.body)
                 }
 
+                ChecklistSection(
+                    items: job.checklist,
+                    onChange: { change in repository.updateChecklist(job, change) },
+                    onDelete: {
+                        if let snapshot = repository.deleteChecklist(job) {
+                            undoCenter.offer("Deleted checklist", snapshot)
+                        }
+                    }
+                )
+
                 if job.timesDrawn > 0 {
-                    Text("Drawn from the jar \(job.timesDrawn) time(s)")
+                    Text(job.timesDrawn == 1 ? "Drawn from the jar once" : "Drawn from the jar \(job.timesDrawn) times")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                }
+
+                // Nothing to start on a done job or a resting repeating one.
+                if job.isPending() {
+                    HStack(spacing: 10) {
+                        Button { repository.toggleInProgress(job) } label: {
+                            Label(job.isInProgress ? "Put back in jar" : "Start", systemImage: job.isInProgress ? "arrow.uturn.backward" : "play.fill")
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 6)
+                        }
+                        // Repeating jobs can't be scheduled, so Start gets the full width.
+                        if job.recurrenceDays == nil {
+                            Button {
+                                if job.scheduledDate != nil {
+                                    repository.unscheduleJob(job)
+                                } else {
+                                    jobToSchedule = job
+                                }
+                            } label: {
+                                Label(
+                                    job.scheduledDate != nil ? "Unschedule" : "Schedule",
+                                    systemImage: job.scheduledDate != nil ? "calendar.badge.minus" : "calendar.badge.plus"
+                                )
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 6)
+                            }
+                        }
+                    }
+                    .buttonStyle(.bordered)
                 }
 
                 Button(action: {
@@ -131,7 +196,7 @@ struct JobDetailView: View {
                     if job.isPending() && incompleteSubtaskCount > 0 {
                         showForceCompleteDialog = true
                     } else {
-                        repository.toggleDone(job, allJobs: allJobs)
+                        toggleDone(job)
                     }
                 }) {
                     Text(buttonLabel(for: job))
@@ -140,7 +205,7 @@ struct JobDetailView: View {
                 }
                 .buttonStyle(.borderedProminent)
 
-                if job.parentId == nil {
+                if job.parentId == nil && job.recurrenceDays == nil {
                     Divider()
                     SubtasksSection(
                         parentId: job.id,
@@ -154,9 +219,24 @@ struct JobDetailView: View {
         }
     }
 
+    /// Only completing offers Undo. Reopening is its own undo.
+    private func toggleDone(_ job: Job) {
+        let completing = job.isPending()
+        let title = job.title
+        let snapshot = repository.toggleDone(job, allJobs: allJobs)
+        if completing { undoCenter.offerCompleted(title, snapshot) }
+    }
+
+    private func costLine(total: Int, job: Job) -> String {
+        let subtaskCosts = subtasks.compactMap(\.costCents)
+        guard !subtaskCosts.isEmpty else { return "Cost \(formatCost(total))" }
+        guard let own = job.costCents else { return "Total cost \(formatCost(total)) from subtasks" }
+        return "Total cost \(formatCost(total)) · \(formatCost(own)) for this job, \(formatCost(subtaskCosts.reduce(0, +))) from subtasks"
+    }
+
     private func buttonLabel(for job: Job) -> String {
-        if job.isPending() { return "Mark as done" }
-        if job.recurrenceDays != nil { return "Make available now" }
-        return "Mark as not done"
+        if job.isPending() { return "Mark complete" }
+        if job.recurrenceDays != nil { return "Do it now" }
+        return "Mark not complete"
     }
 }

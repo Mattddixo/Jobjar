@@ -1,12 +1,15 @@
 package com.mattdixon.jobjar.ui.draw
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.mattdixon.jobjar.data.DrawPick
+import com.mattdixon.jobjar.data.DrawPreferences
 import com.mattdixon.jobjar.data.Job
 import com.mattdixon.jobjar.data.JobRepository
-import com.mattdixon.jobjar.data.isPending
+import com.mattdixon.jobjar.data.SavedDrawSettings
+import com.mattdixon.jobjar.data.isAvailableToDraw
 import com.mattdixon.jobjar.data.remainingMinutes
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -15,7 +18,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-/** Extra context about a drawn job shown on its card: is it part of something bigger, or does it have subtasks of its own? */
+/** Parent title or subtask progress, for the card. */
 data class DrawnJobContext(
     val parentTitle: String? = null,
     val subtaskDone: Int = 0,
@@ -23,21 +26,13 @@ data class DrawnJobContext(
     val remainingMinutes: Int? = null
 )
 
-/**
- * One job in the current draw, paired with its display context and how many minutes it counted
- * against the time budget.
- */
 data class DrawnJobEntry(
     val job: Job,
     val context: DrawnJobContext?,
     val minutesUsed: Int
 )
 
-/**
- * How many jobs a single draw should try to pack into the time budget. [count] = null means
- * "as many as fit," capped at [MAX_BATCH_JOBS] so a budget full of many tiny jobs can't pull an
- * unbounded number of cards into one draw.
- */
+/** Jobs per draw. null = as many as fit, up to [MAX_BATCH_JOBS]. */
 enum class DrawBatchSize(val label: String, val count: Int?) {
     ONE("1", 1),
     TWO("2", 2),
@@ -50,75 +45,106 @@ const val MAX_BATCH_JOBS = 10
 
 data class DrawUiState(
     val availableMinutes: Int = 30,
-    /**
-     * When true, ignore availableMinutes and draw only from jobs needing 4+ hours - an explicit
-     * "give me a big one" instead of "what fits". Always draws exactly one job regardless of
-     * [batchSize]: there's no "remaining budget" left to fill after a single open-ended pick.
-     */
+    /** 4+ hrs mode: ignores the time and always draws a single job. */
     val longJobsOnly: Boolean = false,
-    val selectedCategory: String? = null,
+    /** Empty = any category. */
+    val selectedCategories: Set<String> = emptySet(),
     val categories: List<String> = emptyList(),
     val batchSize: DrawBatchSize = DrawBatchSize.ONE,
     val drawnJobs: List<DrawnJobEntry> = emptyList(),
-    /** Minutes of the budget left unused after the last draw - lets the UI explain a batch that came up short of the requested count. */
+    /** Unused minutes after the last draw. */
     val remainingMinutesAfterDraw: Int = 0,
     val excludedIds: List<Long> = emptyList(),
     val isDrawing: Boolean = false,
     val noMatchFound: Boolean = false,
-    /**
-     * How many jobs (parents and subtasks alike) are currently pending - i.e. actually in the
-     * jar right now, per [Job.isPending]. This drives the jar glyph's fill level. Deliberately
-     * just a count, not a ratio against completed work: that decays toward "always looks full"
-     * as your lifetime completed total grows, which stops meaning anything after a while. If you
-     * want completion history, that's what the Stats tab is for.
-     */
-    val pendingCount: Int = 0
+    /** Jobs that could be drawn right now. Drives the jar picture. */
+    val pendingCount: Int = 0,
+    val inProgressCount: Int = 0,
+    val isLoaded: Boolean = false
 )
 
-class DrawViewModel(private val repository: JobRepository) : ViewModel() {
-
-    private val _uiState = MutableStateFlow(DrawUiState())
-    val uiState: StateFlow<DrawUiState> = _uiState.asStateFlow()
+class DrawViewModel(
+    private val repository: JobRepository,
+    private val appContext: Context
+) : ViewModel() {
+    private val _uiState: MutableStateFlow<DrawUiState>
+    val uiState: StateFlow<DrawUiState>
 
     init {
+        val saved = DrawPreferences.load(appContext)
+        _uiState = MutableStateFlow(
+            DrawUiState(
+                availableMinutes = saved.availableMinutes,
+                longJobsOnly = saved.longJobsOnly,
+                selectedCategories = saved.selectedCategories,
+                batchSize = DrawBatchSize.entries.find { it.name == saved.batchSizeName } ?: DrawBatchSize.ONE
+            )
+        )
+        uiState = _uiState.asStateFlow()
+
         viewModelScope.launch {
             combine(repository.categories, repository.allJobsFlat) { categories, allJobs ->
                 categories to allJobs
             }.collect { (categories, allJobs) ->
+                // Drop categories that have been removed, or every draw would come up empty.
+                val previousSelection = _uiState.value.selectedCategories
+                val stillValidSelection = previousSelection.intersect(categories.toSet())
                 _uiState.value = _uiState.value.copy(
                     categories = categories,
-                    pendingCount = allJobs.count { it.isPending() }
+                    selectedCategories = stillValidSelection,
+                    pendingCount = allJobs.count { it.isAvailableToDraw() },
+                    inProgressCount = allJobs.count { it.isInProgress },
+                    isLoaded = true
                 )
+                if (stillValidSelection != previousSelection) {
+                    saveSettings(_uiState.value)
+                }
             }
         }
     }
 
+    /** Saves the panel settings (not the draw itself). */
+    private fun saveSettings(state: DrawUiState) {
+        DrawPreferences.save(
+            appContext,
+            SavedDrawSettings(
+                availableMinutes = state.availableMinutes,
+                longJobsOnly = state.longJobsOnly,
+                selectedCategories = state.selectedCategories,
+                batchSizeName = state.batchSize.name
+            )
+        )
+    }
+
     fun setAvailableMinutes(minutes: Int) {
         _uiState.value = _uiState.value.copy(availableMinutes = minutes, longJobsOnly = false)
+        saveSettings(_uiState.value)
     }
 
     fun setLongJobsOnly() {
         _uiState.value = _uiState.value.copy(longJobsOnly = true)
+        saveSettings(_uiState.value)
     }
 
-    fun setCategory(category: String?) {
-        _uiState.value = _uiState.value.copy(selectedCategory = category)
+    fun toggleCategory(category: String) {
+        _uiState.value = _uiState.value.copy(
+            selectedCategories = _uiState.value.selectedCategories.let {
+                if (category in it) it - category else it + category
+            }
+        )
+        saveSettings(_uiState.value)
     }
 
     fun setBatchSize(size: DrawBatchSize) {
         _uiState.value = _uiState.value.copy(batchSize = size)
+        saveSettings(_uiState.value)
     }
 
     /**
-     * Draws a fresh batch: greedily picks random eligible jobs against the time budget - draw
-     * one, subtract what it needs from the remaining budget, draw another that fits what's
-     * left, and so on - stopping once [DrawUiState.batchSize] is reached or nothing eligible
-     * fits the remaining budget anymore. "4+ hrs" mode always draws exactly one job regardless
-     * of batchSize (see its doc comment).
+     * Draws a batch: keep picking random jobs that fit what's left of the time until we have
+     * enough or nothing fits. 4+ hrs mode draws one.
      *
-     * Pass [excludeCurrent] = true (Skip) to redraw the whole batch fresh, excluding every job
-     * the current batch already showed - a plain draw has no exclusions and could in principle
-     * reshow the same batch by chance, same as the single-job version this replaced.
+     * [excludeCurrent] (Draw again) leaves out everything already shown.
      */
     fun draw(excludeCurrent: Boolean = false) {
         val current = _uiState.value
@@ -139,7 +165,7 @@ class DrawViewModel(private val repository: JobRepository) : ViewModel() {
             while (picks.size < maxJobs) {
                 val pick = repository.drawJob(
                     maxMinutes = remaining,
-                    category = current.selectedCategory,
+                    categories = current.selectedCategories,
                     excludeIds = excluded,
                     longOnly = current.longJobsOnly
                 ) ?: break
@@ -178,21 +204,32 @@ class DrawViewModel(private val repository: JobRepository) : ViewModel() {
         _uiState.value = _uiState.value.copy(drawnJobs = emptyList(), excludedIds = emptyList(), noMatchFound = false)
     }
 
-    /** Marks one job in the current batch done and drops it from the visible list - any other jobs in the batch stay put. */
-    fun completeJob(jobId: Long) {
+    /** Starts a drawn job and takes its card off the list. */
+    fun startJob(jobId: Long) {
         val entry = _uiState.value.drawnJobs.find { it.job.id == jobId } ?: return
         viewModelScope.launch {
-            repository.toggleDone(entry.job)
+            repository.toggleInProgress(entry.job.id)
             _uiState.value = _uiState.value.copy(
                 drawnJobs = _uiState.value.drawnJobs.filterNot { it.job.id == jobId }
             )
         }
     }
 
-    class Factory(private val repository: JobRepository) : ViewModelProvider.Factory {
+    /** Schedules a drawn job and takes its card off the list. */
+    fun scheduleJob(jobId: Long, dateTimeMillis: Long) {
+        val entry = _uiState.value.drawnJobs.find { it.job.id == jobId } ?: return
+        viewModelScope.launch {
+            repository.scheduleJob(entry.job.id, dateTimeMillis)
+            _uiState.value = _uiState.value.copy(
+                drawnJobs = _uiState.value.drawnJobs.filterNot { it.job.id == jobId }
+            )
+        }
+    }
+
+    class Factory(private val repository: JobRepository, private val appContext: Context) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return DrawViewModel(repository) as T
+            return DrawViewModel(repository, appContext) as T
         }
     }
 }

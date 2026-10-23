@@ -9,31 +9,41 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.mattdixon.jobjar.R
 import com.mattdixon.jobjar.data.JobRepository
+import com.mattdixon.jobjar.ui.components.TodayDateButton
+import com.mattdixon.jobjar.ui.theme.AppShapes
+import com.mattdixon.jobjar.ui.theme.Spacing
+import com.mattdixon.jobjar.ui.theme.appTopBarColors
+import com.mattdixon.jobjar.ui.theme.appCardBorder
+import com.mattdixon.jobjar.ui.theme.appCardColors
+import com.mattdixon.jobjar.util.formatCost
 import com.mattdixon.jobjar.util.formatMinutes
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StatsScreen(
     repository: JobRepository,
-    darkTheme: Boolean,
-    onToggleTheme: () -> Unit
+    onOpenSettings: () -> Unit
 ) {
     val viewModel: StatsViewModel = viewModel(factory = StatsViewModel.Factory(repository))
     val state by viewModel.uiState.collectAsState()
@@ -41,10 +51,16 @@ fun StatsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Stats") },
+                colors = appTopBarColors(),
+                title = {
+                    Column {
+                        TodayDateButton()
+                        Text(stringResource(R.string.stats_screen_title))
+                    }
+                },
                 actions = {
-                    TextButton(onClick = onToggleTheme) {
-                        Text(if (darkTheme) "Light" else "Dark")
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.cd_settings))
                     }
                 }
             )
@@ -54,39 +70,48 @@ fun StatsScreen(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(Spacing.xl),
+            verticalArrangement = Arrangement.spacedBy(Spacing.xl)
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatCard(label = "Active jobs", value = state.activeCount.toString(), modifier = Modifier.weight(1f))
-                StatCard(label = "Completed", value = state.completedCount.toString(), modifier = Modifier.weight(1f))
-                StatCard(
-                    label = "Time invested",
-                    value = formatMinutes(state.totalMinutesCompleted),
-                    modifier = Modifier.weight(1f)
-                )
+            val toDo = stringResource(R.string.stat_active_jobs) to state.activeCount.toString()
+            val completed = stringResource(R.string.stat_completed) to state.completedCount.toString()
+            val time = stringResource(R.string.stat_time_invested) to formatMinutes(state.totalMinutesCompleted)
+            // Spent only appears once something with a cost has been completed; then the cards go
+            // two by two so none of them gets squeezed.
+            val rows = if (state.spentCents > 0) {
+                listOf(listOf(toDo, completed), listOf(time, stringResource(R.string.stat_spent) to formatCost(state.spentCents)))
+            } else {
+                listOf(listOf(toDo, completed, time))
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.lg)) {
+                rows.forEach { cards ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.lg)) {
+                        cards.forEach { (label, value) ->
+                            StatCard(label = label, value = value, modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
             }
 
-            Text("By category", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.stats_by_category), style = MaterialTheme.typography.titleMedium)
 
             if (state.categoryStats.isEmpty()) {
                 Text(
-                    "Complete a few jobs to see your stats here.",
+                    stringResource(R.string.stats_empty_hint),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             } else {
-                // Sorted descending by totalMinutes already, so the first entry is the max -
-                // used to scale each bar relative to your biggest time sink.
+                // Already sorted biggest first, so the first one sets the bar scale.
                 val maxMinutes = state.categoryStats.first().totalMinutes.coerceAtLeast(1)
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
                     items(state.categoryStats, key = { it.category }) { stat ->
-                        Card(modifier = Modifier.fillMaxWidth()) {
+                        Card(colors = appCardColors(), border = appCardBorder(), modifier = Modifier.fillMaxWidth()) {
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    .padding(Spacing.xl),
+                                verticalArrangement = Arrangement.spacedBy(Spacing.md)
                             ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -94,7 +119,16 @@ fun StatsScreen(
                                 ) {
                                     Text(stat.category, style = MaterialTheme.typography.bodyLarge)
                                     Text(
-                                        "${stat.completedCount} done · ${formatMinutes(stat.totalMinutes)}",
+                                        if (stat.spentCents > 0) {
+                                            stringResource(
+                                                R.string.stats_category_summary_with_cost,
+                                                stat.completedCount,
+                                                formatMinutes(stat.totalMinutes),
+                                                formatCost(stat.spentCents)
+                                            )
+                                        } else {
+                                            stringResource(R.string.stats_category_summary, stat.completedCount, formatMinutes(stat.totalMinutes))
+                                        },
                                         style = MaterialTheme.typography.bodyMedium
                                     )
                                 }
@@ -103,7 +137,7 @@ fun StatsScreen(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(6.dp)
-                                        .clip(RoundedCornerShape(3.dp))
+                                        .clip(AppShapes.hairline)
                                 )
                             }
                         }
@@ -116,10 +150,10 @@ fun StatsScreen(
 
 @Composable
 private fun StatCard(label: String, value: String, modifier: Modifier = Modifier) {
-    Card(modifier = modifier) {
+    Card(colors = appCardColors(), border = appCardBorder(), modifier = modifier) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            modifier = Modifier.padding(Spacing.xl),
+            verticalArrangement = Arrangement.spacedBy(Spacing.xs)
         ) {
             Text(value, style = MaterialTheme.typography.titleLarge)
             Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

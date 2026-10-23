@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Behind the start-up screen and the app until it draws. Same as the app's page colour. -->
+    <color name="window_background">#F6F7F7</color>
+</resources>

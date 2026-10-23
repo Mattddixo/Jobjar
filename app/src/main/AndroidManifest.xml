@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- For CalendarScheduler: writing a scheduled job to the device's own Calendar Provider,
+         which the OS's own account sync then pushes to the user's real Google Calendar. Both
+         requested together, at runtime, only when Schedule is first tapped - never up front. -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
+
     <application
         android:name=".JobJarApplication"
         android:allowBackup="true"
@@ -8,12 +14,14 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
+        android:enableOnBackInvokedCallback="true"
         android:theme="@style/Theme.JobJar"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules">
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:configChanges="uiMode"
             android:theme="@style/Theme.JobJar">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

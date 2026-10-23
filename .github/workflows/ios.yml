@@ -1,0 +1,99 @@
+name: iOS
+
+on:
+  push:
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios.yml"
+  pull_request:
+    paths:
+      - "ios/**"
+  # Run from the Actions tab with "publish" ticked to put a fresh JobJar.ipa on the Releases page.
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish JobJar.ipa as a release"
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build
+    runs-on: macos-15
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: ios/JobJar
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate Xcode project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Build for the simulator
+        run: |
+          xcodebuild build \
+            -project JobJar.xcodeproj \
+            -target JobJar \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Run tests
+        run: |
+          # Whichever iPhone simulator this runner's Xcode ships with.
+          device=$(xcrun simctl list devices available | grep -m1 -oE 'iPhone [^(]+' | sed 's/ *$//')
+          echo "Testing on $device"
+          xcodebuild test \
+            -project JobJar.xcodeproj \
+            -scheme JobJar \
+            -destination "platform=iOS Simulator,name=$device" \
+            CODE_SIGNING_ALLOWED=NO
+
+      # Unsigned: Sideloadly / AltStore sign it with your own Apple ID when installing.
+      - name: Build unsigned IPA
+        run: |
+          xcodebuild build \
+            -project JobJar.xcodeproj \
+            -target JobJar \
+            -configuration Release \
+            -sdk iphoneos \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+          mkdir -p Payload
+          cp -R build/Release-iphoneos/JobJar.app Payload/
+          zip -qr JobJar.ipa Payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: JobJar-ipa
+          path: ios/JobJar/JobJar.ipa
+
+  publish:
+    name: Publish IPA
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && inputs.publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: JobJar-ipa
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ios-build-${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          name: Job Jar for iPhone (build ${{ github.run_number }})
+          prerelease: true
+          files: JobJar.ipa
+          body: |
+            Unsigned iPhone build. Install it with Sideloadly or AltStore using your own Apple ID.
+            Needs iOS 17 or newer.

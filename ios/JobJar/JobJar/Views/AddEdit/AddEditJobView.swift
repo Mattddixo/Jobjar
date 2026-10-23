@@ -3,6 +3,7 @@ import SwiftUI
 
 private let quickDurations = [5, 15, 30, 45, 60, 90, 120, 180]
 private let recurrencePresets = [1, 7, 14, 30]
+private let maxTitleLength = 80
 
 struct AddEditJobView: View {
     let jobId: UUID?
@@ -19,7 +20,10 @@ struct AddEditJobView: View {
     @State private var estimatedMinutes = 15
     @State private var category = ""
     @State private var priority: Priority = .normal
+    /// As typed. Blank = no cost.
+    @State private var costText = ""
     @State private var recurrenceDays: Int? = nil
+    @State private var repeatWeekdays: Int? = nil
     @State private var dependsOnSubtaskId: UUID? = nil
     @State private var savedJobId: UUID? = nil
     @State private var resolvedParentId: UUID? = nil
@@ -29,9 +33,31 @@ struct AddEditJobView: View {
     private var categories: [String] { Array(Set(allJobs.map(\.category).filter { !$0.isEmpty })).sorted() }
 
     private var isValid: Bool {
-        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-            estimatedMinutes > 0 &&
-            (recurrenceDays == nil || recurrenceDays! > 0)
+        guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, estimatedMinutes > 0 else { return false }
+        guard parseCostInput(costText) != .invalid else { return false }
+        guard let days = recurrenceDays else { return true }
+        if let mask = repeatWeekdays { return mask & everyDayMask != 0 }
+        return days > 0
+    }
+
+    /// Repeat and subtasks are either/or.
+    private var hasSubtasks: Bool {
+        guard let savedJobId else { return false }
+        return allJobs.contains { $0.parentId == savedJobId }
+    }
+
+    /// A typo hint, or for a job with subtasks, what they add so the total isn't a surprise.
+    @ViewBuilder
+    private var costFooter: some View {
+        let input = parseCostInput(costText)
+        let subtaskCosts = savedJobId.map { id in allJobs.filter { $0.parentId == id }.compactMap(\.costCents) } ?? []
+        if input == .invalid {
+            Text("Enter an amount, like 12.50").foregroundStyle(.red)
+        } else if !subtaskCosts.isEmpty {
+            let subtaskTotal = subtaskCosts.reduce(0, +)
+            let own: Int = { if case .valid(let cents) = input { return cents } else { return 0 } }()
+            Text("Subtasks add \(formatCost(subtaskTotal)) · \(formatCost(own + subtaskTotal)) in total")
+        }
     }
 
     private var navTitle: String {
@@ -44,8 +70,18 @@ struct AddEditJobView: View {
     var body: some View {
         Form {
             Section {
-                TextField("Title", text: $title)
-                TextField("Notes (optional)", text: $notes, axis: .vertical)
+                TextField("What needs doing?", text: $title)
+                    .onChange(of: title) { _, new in
+                        if new.count > maxTitleLength { title = String(new.prefix(maxTitleLength)) }
+                    }
+                HStack {
+                    Spacer()
+                    Text("\(title.count)/\(maxTitleLength)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+                TextField("Notes", text: $notes, axis: .vertical)
                     .lineLimit(2...4)
             }
 
@@ -58,24 +94,37 @@ struct AddEditJobView: View {
                                 estimatedMinutes = minutes
                             }
                         }
-                        // Long jobs don't have one "right" length, so this is a range, not an
-                        // exact value: selected whenever the estimate is 4hr or more, and
-                        // tapping it seeds 4hr as a starting point you can then fine-tune.
+                        // Selected for anything 4hr+. Tapping it sets 4hr.
                         FilterChip(label: "4+ hrs", selected: estimatedMinutes >= longJobMinutes) {
                             estimatedMinutes = longJobMinutes
                         }
                     }
                 }
                 Stepper(
-                    "Custom: \(estimatedMinutes) min",
+                    "\(estimatedMinutes) min",
                     value: $estimatedMinutes,
                     in: 0...1440,
                     step: 5
                 )
+
+                // Uses what's typed right now for this subtask, not its saved estimate.
+                if isLoaded, let parentId = resolvedParentId, let parent = allJobs.first(where: { $0.id == parentId }) {
+                    let others = allJobs.filter { $0.parentId == parentId && $0.id != savedJobId }
+                    AllocationSummary(
+                        estimatedMinutes: parent.estimatedMinutes,
+                        subtasksTotalMinutes: others.reduce(0) { $0 + $1.estimatedMinutes } + estimatedMinutes
+                    )
+                }
+                if resolvedParentId == nil, let savedJobId, hasSubtasks {
+                    AllocationSummary(
+                        estimatedMinutes: estimatedMinutes,
+                        subtasksTotalMinutes: allJobs.filter { $0.parentId == savedJobId }.reduce(0) { $0 + $1.estimatedMinutes }
+                    )
+                }
             }
 
             Section("Category") {
-                TextField("e.g. Chores, Work, Errands", text: $category)
+                TextField("Chores, errands, garden…", text: $category)
                 if !categories.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
@@ -96,13 +145,23 @@ struct AddEditJobView: View {
                 .pickerStyle(.segmented)
             }
 
-            // The opposite gate from below: only a subtask can depend on another subtask, and
-            // only among its own siblings (same parent).
+            Section {
+                HStack(spacing: 4) {
+                    Text(currencySymbol()).foregroundStyle(.secondary)
+                    TextField("Optional", text: $costText)
+                        .keyboardType(.decimalPad)
+                }
+            } header: {
+                Text("Cost")
+            } footer: {
+                costFooter
+            }
+
+            // Only subtasks can depend on something, and only on a sibling.
             if isLoaded, let subtaskParentId = resolvedParentId {
-                Section("Depends on") {
+                Section("Do this after") {
                     Text(
-                        "Optional: this subtask stays out of the jar's random draw until the one it depends " +
-                            "on is done. You can still check it off by hand any time."
+                        "It won't be drawn until that one's completed. You can still tick it off whenever you like."
                     )
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -111,7 +170,7 @@ struct AddEditJobView: View {
                     let candidates = subtasksAvailableAsDependency(siblings: siblings, excludingSelfId: savedJobId)
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
-                            FilterChip(label: "None", selected: dependsOnSubtaskId == nil) {
+                            FilterChip(label: "Nothing", selected: dependsOnSubtaskId == nil) {
                                 dependsOnSubtaskId = nil
                             }
                             ForEach(candidates) { candidate in
@@ -124,51 +183,103 @@ struct AddEditJobView: View {
                 }
             }
 
-            // Only a job that isn't itself a subtask can repeat or have subtasks (one level
-            // deep). Gated on isLoaded so an existing subtask being edited never flashes
-            // either section before we know its real parentId.
+            // Top-level jobs only. Waits for isLoaded so a subtask doesn't flash these sections.
             if isLoaded, resolvedParentId == nil {
                 Section("Repeat") {
                     Toggle(
                         "Repeat",
                         isOn: Binding(
                             get: { recurrenceDays != nil },
-                            set: { enabled in recurrenceDays = enabled ? (recurrenceDays ?? 7) : nil }
+                            set: { enabled in
+                                recurrenceDays = enabled ? (recurrenceDays ?? 7) : nil
+                                if !enabled { repeatWeekdays = nil }
+                            }
                         )
                     )
+                    .disabled(recurrenceDays == nil && hasSubtasks)
                     if let days = recurrenceDays {
-                        Text(formatRecurrenceInterval(days)).font(.title3.weight(.semibold))
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                ForEach(recurrencePresets, id: \.self) { preset in
-                                    FilterChip(label: formatRecurrenceInterval(preset), selected: days == preset) {
-                                        recurrenceDays = preset
+                        Text(formatRecurrence(days: days, weekdays: repeatWeekdays)).font(.title3.weight(.semibold))
+                        Picker(
+                            "Schedule",
+                            selection: Binding(
+                                get: { repeatWeekdays != nil },
+                                set: { onWeekdays in
+                                    if onWeekdays {
+                                        recurrenceDays = 7
+                                        repeatWeekdays = repeatWeekdays
+                                            ?? weekdayBit(calendarWeekday: Calendar.current.component(.weekday, from: .now))
+                                    } else {
+                                        repeatWeekdays = nil
+                                    }
+                                }
+                            )
+                        ) {
+                            Text("Every few days").tag(false)
+                            Text("On set days").tag(true)
+                        }
+                        .pickerStyle(.segmented)
+
+                        if let mask = repeatWeekdays {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 6) {
+                                    ForEach(mondayFirstWeekdays, id: \.self) { weekday in
+                                        let bit = weekdayBit(calendarWeekday: weekday)
+                                        FilterChip(
+                                            label: Calendar.current.shortWeekdaySymbols[weekday - 1],
+                                            selected: mask & bit != 0
+                                        ) {
+                                            repeatWeekdays = mask ^ bit
+                                        }
                                     }
                                 }
                             }
+                            Text("Comes back each chosen day, even if you were late last time.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 8) {
+                                    ForEach(recurrencePresets, id: \.self) { preset in
+                                        FilterChip(label: formatRecurrenceInterval(preset), selected: days == preset) {
+                                            recurrenceDays = preset
+                                        }
+                                    }
+                                }
+                            }
+                            Stepper(
+                                "Every \(countLabel(days, "day", "days"))",
+                                value: Binding(get: { days }, set: { recurrenceDays = $0 }),
+                                in: 1...365
+                            )
+                            Text("Counts from the day you finish it.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
                         }
-                        Stepper(
-                            "Custom: every \(days) day(s)",
-                            value: Binding(get: { days }, set: { recurrenceDays = $0 }),
-                            in: 1...365
-                        )
                     } else {
-                        Text("Completing a repeating job reopens it automatically after the interval, instead of leaving it done for good.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                        Text(
+                            hasSubtasks
+                                ? "Jobs with subtasks can't repeat."
+                                : "Puts the job back in the jar after you finish it."
+                        )
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                     }
                 }
 
                 Section("Subtasks") {
-                    if let savedJobId {
+                    if recurrenceDays != nil {
+                        Text("Repeating jobs can't have subtasks.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else if let savedJobId {
                         SubtasksSection(
                             parentId: savedJobId,
                             parentEstimatedMinutes: estimatedMinutes,
                             onOpenSubtask: onOpenSubtask,
-                            onAddSubtask: { onAddSubtask(savedJobId) }
+                            onAddSubtask: { ensurePersisted { onAddSubtask($0) } }
                         )
                     } else {
-                        Text("Adding a subtask saves this job first, using what you've filled in so far.")
+                        Text("This saves the job first.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                         Button {
@@ -197,12 +308,14 @@ struct AddEditJobView: View {
             estimatedMinutes = job.estimatedMinutes
             category = job.category
             priority = job.priority
+            costText = costInputText(job.costCents)
             recurrenceDays = job.recurrenceDays
+            repeatWeekdays = job.repeatWeekdays
             dependsOnSubtaskId = job.dependsOnSubtaskId
             resolvedParentId = job.parentId
             savedJobId = job.id
         } else {
-            // Prefill the new subtask's category from its parent, purely as a convenience.
+            // Handy default: same category as the parent.
             resolvedParentId = parentId
             if let parentId, let parent = allJobs.first(where: { $0.id == parentId }), !parent.category.isEmpty {
                 category = parent.category
@@ -216,47 +329,32 @@ struct AddEditJobView: View {
         onDone()
     }
 
-    /// Ensures this job already exists in SwiftData - inserting it now, using whatever's
-    /// currently in the form, if it's still an unsaved draft - then invokes `onReady` with its
-    /// id. This is what lets "Add subtask" work before you've explicitly hit Save: the job
-    /// behind the form quietly becomes real the moment you need to attach something to it.
+    /// Saves the form (inserting it if it's new) and hands back the id, so "Add subtask" works
+    /// without hitting Save first.
     private func ensurePersisted(onReady: (UUID) -> Void) {
-        if let savedJobId {
-            onReady(savedJobId)
-            return
-        }
         guard isValid else { return }
-        onReady(persist())
+        if let id = persist() { onReady(id) }
     }
 
+    /// Saves through the repository so its rules apply.
     @discardableResult
-    private func persist() -> UUID {
+    private func persist() -> UUID? {
+        let edit = JobEdit(
+            title: title,
+            notes: notes,
+            estimatedMinutes: estimatedMinutes,
+            category: category,
+            priority: priority,
+            recurrenceDays: recurrenceDays,
+            repeatWeekdays: recurrenceDays == nil ? nil : repeatWeekdays,
+            dependsOnSubtaskId: dependsOnSubtaskId,
+            costCents: { if case .valid(let cents) = parseCostInput(costText) { return cents } else { return nil } }()
+        )
         if let id = savedJobId, let job = allJobs.first(where: { $0.id == id }) {
-            job.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
-            job.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
-            job.estimatedMinutes = estimatedMinutes
-            job.category = category.trimmingCharacters(in: .whitespacesAndNewlines)
-            job.priority = priority
-            // Turning repeat off clears the stale schedule; turning it on (or leaving it on)
-            // keeps whatever nextDueAt already existed.
-            if recurrenceDays == nil { job.nextDueAt = nil }
-            job.recurrenceDays = recurrenceDays
-            job.dependsOnSubtaskId = dependsOnSubtaskId
-            repository.updateJob(job, allJobs: allJobs)
+            repository.updateJob(job, with: edit, allJobs: allJobs)
             return id
         }
-
-        let job = Job(
-            title: title.trimmingCharacters(in: .whitespacesAndNewlines),
-            notes: notes.trimmingCharacters(in: .whitespacesAndNewlines),
-            estimatedMinutes: estimatedMinutes,
-            category: category.trimmingCharacters(in: .whitespacesAndNewlines),
-            priority: priority,
-            parentId: resolvedParentId,
-            recurrenceDays: recurrenceDays,
-            dependsOnSubtaskId: dependsOnSubtaskId
-        )
-        repository.addJob(job, allJobs: allJobs)
+        guard let job = repository.addJob(edit, parentId: resolvedParentId, allJobs: allJobs) else { return nil }
         savedJobId = job.id
         return job.id
     }

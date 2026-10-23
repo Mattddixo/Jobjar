@@ -3,12 +3,15 @@ package com.mattdixon.jobjar.ui.joblist
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import androidx.annotation.StringRes
+import com.mattdixon.jobjar.R
 import com.mattdixon.jobjar.data.Job
 import com.mattdixon.jobjar.data.JobRepository
+import com.mattdixon.jobjar.data.UndoSnapshot
 import com.mattdixon.jobjar.data.isPending
+import com.mattdixon.jobjar.data.isUnblocked
 import com.mattdixon.jobjar.data.remainingMinutes
-import com.mattdixon.jobjar.util.formatDueStatus
-import com.mattdixon.jobjar.util.formatRecurrenceInterval
+import com.mattdixon.jobjar.data.totalCostCents
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -16,123 +19,203 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-enum class SortOrder(val label: String) {
-    TIME_ASC("Shortest first"),
-    TIME_DESC("Longest first"),
-    PRIORITY("Priority"),
-    NEWEST("Newest"),
-    CATEGORY("Category")
+enum class SortOrder(@StringRes val labelRes: Int) {
+    TIME_ASC(R.string.sort_shortest_first),
+    TIME_DESC(R.string.sort_longest_first),
+    PRIORITY(R.string.sort_priority),
+    NEWEST(R.string.sort_newest),
+    CATEGORY(R.string.sort_category)
 }
 
-/** A top-level job plus how many of its subtasks (if any) are done, for the list row's badge. */
+/** Tabs on the Jobs screen. Scheduled jobs get their own tab since they're neither to-do nor done. */
+enum class JobsView { ACTIVE, COMPLETED, SCHEDULED }
+
+/** One row: a job or a subtask (subtasks are listed too so they can be found and filtered). */
 data class JobListItem(
     val job: Job,
     val displayMinutes: Int,
-    val subtaskDone: Int,
-    val subtaskTotal: Int,
-    /** "Weekly" etc, or null if this job doesn't repeat. */
-    val recurrenceLabel: String?,
-    /** "Due now" / "Next: in 3 days", or null if this job doesn't repeat. */
-    val dueStatus: String?
+    val parentTitle: String? = null,
+    val subtaskDone: Int = 0,
+    val subtaskTotal: Int = 0,
+    val waitingOnTitle: String? = null,
+    val scheduledDate: Long? = null,
+    /** A parent's includes its subtasks. Null = no cost anywhere. */
+    val costCents: Long? = null
 )
 
 data class JobListUiState(
     val items: List<JobListItem> = emptyList(),
     val categories: List<String> = emptyList(),
-    val showCompleted: Boolean = false,
-    /** Empty = no category narrowing (all categories included). */
+    /** Jobs per category, for the Edit categories dialog. */
+    val categoryCounts: Map<String, Int> = emptyMap(),
+    val view: JobsView = JobsView.ACTIVE,
+    /** Empty = all. */
     val selectedCategories: Set<String> = emptySet(),
     val showRepeatingOnly: Boolean = false,
+    val showInProgressOnly: Boolean = false,
     val sortOrder: SortOrder = SortOrder.NEWEST,
-    val searchQuery: String = ""
+    val searchQuery: String = "",
+    /** Parents whose subtasks are showing. */
+    val expandedParentIds: Set<Long> = emptySet(),
+    /** False until the first load. */
+    val isLoaded: Boolean = false
 ) {
-    /** Whether any *narrowing* filter (as opposed to the Active/Completed view or sort) is on - drives the "Clear" chip. */
-    val hasActiveFilters: Boolean get() = selectedCategories.isNotEmpty() || showRepeatingOnly
+    val hasActiveFilters: Boolean get() = selectedCategories.isNotEmpty() || showRepeatingOnly || showInProgressOnly
 }
 
-private data class ListFilters(
-    val showCompleted: Boolean,
+private data class ToggleFilters(
+    val view: JobsView,
     val categories: Set<String>,
     val repeatingOnly: Boolean,
+    val inProgressOnly: Boolean
+)
+
+private data class ListFilters(
+    val view: JobsView,
+    val categories: Set<String>,
+    val repeatingOnly: Boolean,
+    val inProgressOnly: Boolean,
     val sort: SortOrder,
     val searchQuery: String
 )
 
 class JobListViewModel(private val repository: JobRepository) : ViewModel() {
-
-    private val showCompleted = MutableStateFlow(false)
+    private val view = MutableStateFlow(JobsView.ACTIVE)
     private val selectedCategories = MutableStateFlow<Set<String>>(emptySet())
     private val showRepeatingOnly = MutableStateFlow(false)
+    private val showInProgressOnly = MutableStateFlow(false)
     private val sortOrder = MutableStateFlow(SortOrder.NEWEST)
     private val searchQuery = MutableStateFlow("")
+    private val expandedParentIds = MutableStateFlow<Set<Long>>(emptySet())
 
-    private val filters = combine(
-        showCompleted,
+    // combine() only has typed overloads up to 5 flows, so the filters are combined in two steps.
+    private val toggleFilters = combine(
+        view,
         selectedCategories,
         showRepeatingOnly,
-        sortOrder,
-        searchQuery
-    ) { showDone, categories, repeatingOnly, sort, query ->
-        ListFilters(showDone, categories, repeatingOnly, sort, query)
+        showInProgressOnly
+    ) { currentView, categories, repeatingOnly, inProgressOnly ->
+        ToggleFilters(currentView, categories, repeatingOnly, inProgressOnly)
+    }
+
+    private val filters = combine(toggleFilters, sortOrder, searchQuery) { toggles, sort, query ->
+        ListFilters(
+            view = toggles.view,
+            categories = toggles.categories,
+            repeatingOnly = toggles.repeatingOnly,
+            inProgressOnly = toggles.inProgressOnly,
+            sort = sort,
+            searchQuery = query
+        )
     }
 
     val uiState: StateFlow<JobListUiState> = combine(
         filters,
-        repository.topLevelJobs,
         repository.allJobsFlat,
-        repository.categories
-    ) { currentFilters, topLevel, allFlat, categories ->
+        repository.categories,
+        expandedParentIds
+    ) { currentFilters, allFlat, categories, expanded ->
+        val allById = allFlat.associateBy { it.id }
         val subtasksByParent = allFlat.filter { it.parentId != null }.groupBy { it.parentId }
 
-        val items = topLevel.map { job ->
-            val subtasks = subtasksByParent[job.id].orEmpty()
-            JobListItem(
-                job = job,
-                displayMinutes = if (subtasks.isEmpty()) job.estimatedMinutes else job.remainingMinutes(subtasks),
-                subtaskDone = subtasks.count { it.isDone },
-                subtaskTotal = subtasks.size,
-                recurrenceLabel = job.recurrenceDays?.let { formatRecurrenceInterval(it) },
-                dueStatus = job.recurrenceDays?.let { formatDueStatus(job.nextDueAt) }
-            )
+        // Subtasks get their own rows too, same as the Jar and Stats count them.
+        val items = allFlat.map { job ->
+            if (job.parentId == null) {
+                val subtasks = subtasksByParent[job.id].orEmpty()
+                JobListItem(
+                    job = job,
+                    displayMinutes = if (subtasks.isEmpty()) job.estimatedMinutes else job.remainingMinutes(subtasks),
+                    subtaskDone = subtasks.count { it.isDone },
+                    subtaskTotal = subtasks.size,
+                    scheduledDate = job.scheduledDate,
+                    costCents = totalCostCents(job, subtasks)
+                )
+            } else {
+                val siblingsById = subtasksByParent[job.parentId].orEmpty().associateBy { it.id }
+                JobListItem(
+                    job = job,
+                    displayMinutes = job.estimatedMinutes,
+                    parentTitle = allById[job.parentId]?.title,
+                    waitingOnTitle = job.dependsOnSubtaskId
+                        ?.takeUnless { job.isUnblocked(siblingsById) }
+                        ?.let { siblingsById[it]?.title },
+                    scheduledDate = job.scheduledDate,
+                    costCents = job.costCents
+                )
+            }
         }
 
         val query = currentFilters.searchQuery.trim()
 
-        // A repeating job never persists isDone, so "completed" for it means "resting until its
-        // next cycle" - isPending() (not isDone) is what decides Active vs Completed for it, and
-        // for everything else it's equivalent to !isDone. When filtering to repeating jobs only,
-        // the Active/Completed split is bypassed entirely and both due and resting ones show
-        // together, so this is the one place you can see the full set regardless of state.
+        // Repeating jobs never stay done, so isPending() decides To do vs Done. The Repeating filter
+        // ignores that split and shows them all. Scheduled is just scheduledDate != null.
         val filtered = items
             .filter { currentFilters.categories.isEmpty() || it.job.category in currentFilters.categories }
             .filter { !currentFilters.repeatingOnly || it.job.recurrenceDays != null }
-            .filter { currentFilters.repeatingOnly || it.job.isPending() != currentFilters.showCompleted }
+            .filter { !currentFilters.inProgressOnly || it.job.isInProgress }
+            .filter {
+                when (currentFilters.view) {
+                    JobsView.SCHEDULED -> it.job.scheduledDate != null
+                    JobsView.ACTIVE -> currentFilters.repeatingOnly || it.job.isPending()
+                    JobsView.COMPLETED -> currentFilters.repeatingOnly || !it.job.isPending()
+                }
+            }
             .filter {
                 query.isBlank() ||
                     it.job.title.contains(query, ignoreCase = true) ||
                     it.job.notes.contains(query, ignoreCase = true)
             }
 
-        val sorted = when (currentFilters.sort) {
-            SortOrder.TIME_ASC -> filtered.sortedBy { it.displayMinutes }
-            SortOrder.TIME_DESC -> filtered.sortedByDescending { it.displayMinutes }
-            SortOrder.PRIORITY -> filtered.sortedByDescending { it.job.priority.ordinal }
-            SortOrder.NEWEST -> filtered.sortedByDescending { it.job.createdAt }
-            SortOrder.CATEGORY -> filtered.sortedBy { it.job.category }
+        fun sortTopLevel(entries: List<JobListItem>): List<JobListItem> = when (currentFilters.sort) {
+            SortOrder.TIME_ASC -> entries.sortedBy { it.displayMinutes }
+            SortOrder.TIME_DESC -> entries.sortedByDescending { it.displayMinutes }
+            SortOrder.PRIORITY -> entries.sortedByDescending { it.job.priority.ordinal }
+            SortOrder.NEWEST -> entries.sortedByDescending { it.job.createdAt }
+            SortOrder.CATEGORY -> entries.sortedBy { it.job.category }
+        }
+
+        // Subtasks sit under their parent. If the parent is filtered out, the subtask sorts like a
+        // normal row.
+        val visibleParentIds = filtered.filter { it.job.parentId == null }.mapTo(mutableSetOf()) { it.job.id }
+        val subtasksByVisibleParent = filtered
+            .filter { it.job.parentId != null && it.job.parentId in visibleParentIds }
+            .groupBy { it.job.parentId }
+            .mapValues { (_, subs) -> subs.sortedBy { it.job.createdAt } }
+        val topLevelAndStandalone = filtered.filter {
+            it.job.parentId == null || it.job.parentId !in visibleParentIds
+        }
+
+        // Groups start collapsed, but searching or filtering opens them so matches aren't hidden.
+        val hasActiveNarrowing = currentFilters.categories.isNotEmpty() ||
+            currentFilters.repeatingOnly ||
+            currentFilters.inProgressOnly ||
+            query.isNotBlank()
+
+        val sorted = sortTopLevel(topLevelAndStandalone).flatMap { entry ->
+            val subs = subtasksByVisibleParent[entry.job.id].orEmpty()
+            if (subs.isEmpty() || hasActiveNarrowing || entry.job.id in expanded) {
+                listOf(entry) + subs
+            } else {
+                listOf(entry)
+            }
         }
 
         JobListUiState(
             items = sorted,
             categories = categories,
-            showCompleted = currentFilters.showCompleted,
+            categoryCounts = allFlat.filter { it.category.isNotBlank() }.groupingBy { it.category }.eachCount(),
+            view = currentFilters.view,
             selectedCategories = currentFilters.categories,
             showRepeatingOnly = currentFilters.repeatingOnly,
+            showInProgressOnly = currentFilters.inProgressOnly,
             sortOrder = currentFilters.sort,
-            searchQuery = currentFilters.searchQuery
+            searchQuery = currentFilters.searchQuery,
+            expandedParentIds = expanded,
+            isLoaded = true
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), JobListUiState())
 
-    fun setShowCompleted(value: Boolean) { showCompleted.value = value }
+    fun setView(value: JobsView) { view.value = value }
 
     fun toggleCategory(category: String) {
         selectedCategories.value = selectedCategories.value.let {
@@ -141,21 +224,46 @@ class JobListViewModel(private val repository: JobRepository) : ViewModel() {
     }
 
     fun setShowRepeatingOnly(value: Boolean) { showRepeatingOnly.value = value }
+    fun setShowInProgressOnly(value: Boolean) { showInProgressOnly.value = value }
     fun setSortOrder(value: SortOrder) { sortOrder.value = value }
     fun setSearchQuery(value: String) { searchQuery.value = value }
 
-    /** Resets every *narrowing* filter (category, repeating) - deliberately leaves Active/Completed and sort alone, since those aren't "filters" in the same sense. */
-    fun clearFilters() {
-        selectedCategories.value = emptySet()
-        showRepeatingOnly.value = false
+    fun toggleExpanded(parentId: Long) {
+        expandedParentIds.value = expandedParentIds.value.let {
+            if (parentId in it) it - parentId else it + parentId
+        }
     }
 
-    fun toggleDone(job: Job) {
-        viewModelScope.launch { repository.toggleDone(job) }
+    /** [onCompleted] only fires when this completed the job, not when it reopened it. */
+    fun toggleDone(job: Job, onCompleted: (UndoSnapshot) -> Unit) {
+        val completing = job.isPending()
+        viewModelScope.launch {
+            val snapshot = repository.toggleDone(job.id)
+            if (snapshot != null && completing) onCompleted(snapshot)
+        }
     }
 
-    fun deleteJob(job: Job) {
-        viewModelScope.launch { repository.deleteJob(job) }
+    /** Start / Put back in jar. */
+    fun toggleInProgress(job: Job) {
+        viewModelScope.launch { repository.toggleInProgress(job.id) }
+    }
+
+    fun deleteJob(job: Job, onDeleted: (UndoSnapshot) -> Unit) {
+        viewModelScope.launch { repository.deleteJob(job.id)?.let(onDeleted) }
+    }
+
+    fun scheduleJob(job: Job, dateTimeMillis: Long) {
+        viewModelScope.launch { repository.scheduleJob(job.id, dateTimeMillis) }
+    }
+
+    fun unscheduleJob(job: Job) {
+        viewModelScope.launch { repository.unscheduleJob(job.id) }
+    }
+
+    /** Also unticks it in the filter, since it won't be in the dropdown any more. */
+    fun removeCategory(category: String) {
+        viewModelScope.launch { repository.removeCategory(category) }
+        selectedCategories.value = selectedCategories.value - category
     }
 
     class Factory(private val repository: JobRepository) : ViewModelProvider.Factory {

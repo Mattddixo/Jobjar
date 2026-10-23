@@ -1,8 +1,7 @@
 import Foundation
 import SwiftData
 
-/// The threshold, in minutes, at which a job is treated as "long" - the "4+ hrs" option on
-/// both the job form and the draw screen. Mirrors LONG_JOB_MINUTES in the Android app.
+/// "4+ hrs" on the form and the Jar.
 let longJobMinutes = 240
 
 enum Priority: String, Codable, CaseIterable, Identifiable {
@@ -18,8 +17,7 @@ enum Priority: String, Codable, CaseIterable, Identifiable {
         }
     }
 
-    /// Declaration order, used for "priority" sort (high first) - Codable's rawValue alone
-    /// doesn't sort that way alphabetically.
+    /// For the priority sort (high first).
     var ordinal: Int {
         switch self {
         case .low: return 0
@@ -29,16 +27,11 @@ enum Priority: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-/// A job can optionally be a subtask of another job via [parentId]. Subtasks are one level
-/// deep only - a job that already has a parent cannot itself have subtasks. Only a top-level
-/// job (one that isn't itself a subtask) can repeat.
+/// A job, or a subtask if `parentId` is set (one level only). Repeating jobs can't be subtasks
+/// or have subtasks.
 ///
-/// A repeating job (non-nil [recurrenceDays]) never persists [isDone] = true - completing it
-/// instead advances [nextDueAt] and bumps [completionCount] (see JobRepository), so the same
-/// row just cycles rather than piling up a new "done" row per occurrence. [nextDueAt] is the
-/// schedule: nil means due right now; once completed it's set to that moment plus
-/// [recurrenceDays] days, i.e. the schedule is relative to when you actually did it, not a
-/// fixed calendar date.
+/// Repeating jobs never stay done: completing one moves `nextDueAt` on and bumps
+/// `completionCount`. Nil `nextDueAt` means it's due now.
 @Model
 final class Job: Identifiable {
     var id: UUID = UUID()
@@ -48,16 +41,28 @@ final class Job: Identifiable {
     var category: String = ""
     var priority: Priority = Priority.normal
     var isDone: Bool = false
+    /// Being worked on right now. Never true at the same time as `isDone`.
+    var isInProgress: Bool = false
     var createdAt: Date = Date.now
     var completedAt: Date?
     var timesDrawn: Int = 0
     var parentId: UUID?
     var recurrenceDays: Int?
+    /// Set = repeats on these weekdays. Monday is bit 0, same as Android and the export file.
+    var repeatWeekdays: Int?
     var nextDueAt: Date?
     var completionCount: Int = 0
-    /// Only meaningful when this is itself a subtask: the sibling subtask (same parentId)
-    /// that must be done first, if any.
+    /// Subtasks only: a sibling that has to be done first.
     var dependsOnSubtaskId: UUID?
+    /// When the job is booked for. Booked jobs stay out of the jar. Never set on repeating jobs.
+    var scheduledDate: Date?
+    /// The calendar event for `scheduledDate`, if one was written (EventKit's identifier).
+    var calendarEventId: String?
+    /// What the job costs, in hundredths of the currency (cents). Nil = no cost entered. A
+    /// parent's own cost doesn't include its subtasks; see `totalCostCents`.
+    var costCents: Int?
+    /// The checklist as JSON. Use `checklist`; this is just how it's stored.
+    var checklistJSON: String?
 
     init(
         id: UUID = UUID(),
@@ -67,14 +72,20 @@ final class Job: Identifiable {
         category: String = "",
         priority: Priority = .normal,
         isDone: Bool = false,
+        isInProgress: Bool = false,
         createdAt: Date = .now,
         completedAt: Date? = nil,
         timesDrawn: Int = 0,
         parentId: UUID? = nil,
         recurrenceDays: Int? = nil,
+        repeatWeekdays: Int? = nil,
         nextDueAt: Date? = nil,
         completionCount: Int = 0,
-        dependsOnSubtaskId: UUID? = nil
+        dependsOnSubtaskId: UUID? = nil,
+        scheduledDate: Date? = nil,
+        calendarEventId: String? = nil,
+        costCents: Int? = nil,
+        checklist: [ChecklistItem] = []
     ) {
         self.id = id
         self.title = title
@@ -83,20 +94,69 @@ final class Job: Identifiable {
         self.category = category
         self.priority = priority
         self.isDone = isDone
+        self.isInProgress = isInProgress
         self.createdAt = createdAt
         self.completedAt = completedAt
         self.timesDrawn = timesDrawn
         self.parentId = parentId
         self.recurrenceDays = recurrenceDays
+        self.repeatWeekdays = repeatWeekdays
         self.nextDueAt = nextDueAt
         self.completionCount = completionCount
         self.dependsOnSubtaskId = dependsOnSubtaskId
+        self.scheduledDate = scheduledDate
+        self.calendarEventId = calendarEventId
+        self.costCents = costCents
+        self.checklist = checklist
+    }
+}
+
+/// One line of a job's checklist. Checklists are lighter than subtasks: no time, no cost, never
+/// drawn, and ticking them doesn't finish the job.
+struct ChecklistItem: Codable, Equatable, Hashable {
+    var text: String
+    var checked: Bool = false
+
+    init(text: String, checked: Bool = false) {
+        self.text = text
+        self.checked = checked
+    }
+
+    /// Lenient, so a hand-edited backup with a missing field still imports.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        text = (try? container.decode(String.self, forKey: .text)) ?? ""
+        checked = (try? container.decode(Bool.self, forKey: .checked)) ?? false
+    }
+}
+
+/// Trims items and drops blank ones, so the stored list is always clean.
+func cleanChecklist(_ items: [ChecklistItem]) -> [ChecklistItem] {
+    items
+        .map { ChecklistItem(text: $0.text.trimmingCharacters(in: .whitespacesAndNewlines), checked: $0.checked) }
+        .filter { !$0.text.isEmpty }
+}
+
+extension Job {
+    /// Empty = no checklist. Only shown on the job page.
+    var checklist: [ChecklistItem] {
+        get {
+            guard let data = checklistJSON?.data(using: .utf8) else { return [] }
+            return (try? JSONDecoder().decode([ChecklistItem].self, from: data)) ?? []
+        }
+        set {
+            let cleaned = cleanChecklist(newValue)
+            if cleaned.isEmpty {
+                checklistJSON = nil
+            } else if let data = try? JSONEncoder().encode(cleaned) {
+                checklistJSON = String(data: data, encoding: .utf8)
+            }
+        }
     }
 }
 
 extension Job {
-    /// Is this job something you could act on right now? For a repeating job that's a
-    /// due-date check, not isDone (which a repeating job never persists as true).
+    /// Due now? For repeating jobs that's about `nextDueAt`, not `isDone`.
     func isPending(now: Date = .now) -> Bool {
         if recurrenceDays != nil {
             guard let nextDueAt else { return true }
@@ -105,9 +165,17 @@ extension Job {
         return !isDone
     }
 
-    /// A blocked subtask (prerequisite not yet done) is only excluded from the random draw
-    /// pool - it's still fully completable by hand at any time, out of order if you want.
-    /// [siblingsById] should map every subtask sharing this job's parentId by id.
+    /// Could the jar hand this out right now? Due, and not already started or booked.
+    func isAvailableToDraw(now: Date = .now) -> Bool {
+        isPending(now: now) && !isInProgress && scheduledDate == nil
+    }
+
+    /// Subtasks of a job you've already started don't get drawn on their own.
+    func isParentAvailable(_ parent: Job?) -> Bool {
+        parent?.isInProgress != true
+    }
+
+    /// Is the prerequisite done? Only affects the draw, you can still tick it off.
     func isUnblocked(siblingsById: [UUID: Job]) -> Bool {
         guard let prerequisiteId = dependsOnSubtaskId else { return true }
         return siblingsById[prerequisiteId]?.isDone ?? true
@@ -118,15 +186,19 @@ extension Job {
     }
 }
 
-/// Minutes still "owed" against a parent's estimate: estimatedMinutes minus time already
-/// accounted for by completed subtasks. Not clamped to zero, matching the Android version.
+/// The job's cost plus its subtasks' costs. Nil if none of them has a cost, so jobs without
+/// costs don't show "$0" anywhere.
+func totalCostCents(_ job: Job, subtasks: [Job]) -> Int? {
+    let costs = ([job] + subtasks).compactMap(\.costCents)
+    return costs.isEmpty ? nil : costs.reduce(0, +)
+}
+
+/// Parent estimate minus finished subtasks. Can go negative.
 func remainingMinutesOf(estimatedMinutes: Int, subtasks: [Job]) -> Int {
     estimatedMinutes - subtasks.filter { $0.isDone }.reduce(0) { $0 + $1.estimatedMinutes }
 }
 
-/// Which of [siblings] (subtasks sharing the same parent) [excludingSelfId] could validly
-/// depend on, without creating a cycle. A candidate is excluded if it already (transitively)
-/// depends on the subtask being edited, since linking to it would close a loop.
+/// Siblings that `excludingSelfId` could depend on without making a loop.
 func subtasksAvailableAsDependency(siblings: [Job], excludingSelfId: UUID?) -> [Job] {
     let byId = Dictionary(uniqueKeysWithValues: siblings.map { ($0.id, $0) })
     func eventuallyDependsOn(startId: UUID, targetId: UUID) -> Bool {

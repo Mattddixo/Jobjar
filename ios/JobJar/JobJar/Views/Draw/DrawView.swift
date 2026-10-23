@@ -9,7 +9,7 @@ struct DrawView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Job.createdAt, order: .reverse) private var allJobs: [Job]
     @State private var viewModel = DrawViewModel()
-    @State private var showForceCompleteDialog = false
+    @State private var jobToSchedule: Job? = nil
 
     private var repository: JobRepository { JobRepository(modelContext: modelContext) }
 
@@ -17,189 +17,267 @@ struct DrawView: View {
         Array(Set(allJobs.map(\.category).filter { !$0.isEmpty })).sorted()
     }
 
-    private var availableCount: Int { allJobs.filter { $0.isPending() }.count }
-    private var completedCount: Int { allJobs.filter { !$0.isPending() }.count }
-
     var body: some View {
+        let availableIds = Set(allJobs.filter { $0.isAvailableToDraw() }.map(\.id))
+        // Cards for jobs started, booked or deleted from another screen are skipped straight away
+        // (a deleted job can't be read), then dropped from the list.
+        let drawnJobs = viewModel.drawnJobs.filter { availableIds.contains($0.id) }
         ScrollView {
             VStack(spacing: 14) {
-                JarSummaryCard(available: availableCount, completed: completedCount)
+                JarSummaryCard(available: availableIds.count, inProgress: allJobs.filter(\.isInProgress).count)
 
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack {
-                        Text("Time available").font(.subheadline.weight(.semibold))
-                        Spacer()
-                        Text(viewModel.longJobsOnly ? "4+ hrs" : formatMinutes(viewModel.availableMinutes))
-                            .font(.title3.weight(.semibold))
-                    }
-                    Slider(
-                        value: Binding(
-                            get: { Double(viewModel.availableMinutes) },
-                            set: { viewModel.setAvailableMinutes(Int($0)) }
-                        ),
-                        in: 5...240
-                    )
-                    .disabled(viewModel.longJobsOnly)
-
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 6) {
-                            ForEach(timePresets, id: \.self) { minutes in
-                                FilterChip(
-                                    label: formatMinutes(minutes),
-                                    selected: !viewModel.longJobsOnly && viewModel.availableMinutes == minutes,
-                                    action: { viewModel.setAvailableMinutes(minutes) }
-                                )
-                            }
-                            // Not a ceiling like the other chips - an explicit "pull from the
-                            // big projects" request, since the slider above can't reach past
-                            // 4 hours.
-                            FilterChip(
-                                label: "4+ hrs",
-                                selected: viewModel.longJobsOnly,
-                                action: { viewModel.setLongJobsOnly() }
-                            )
-                        }
-                    }
-
-                    if !categories.isEmpty {
-                        Divider()
-                        Text("Category").font(.subheadline.weight(.semibold))
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 6) {
-                                FilterChip(
-                                    label: "Any",
-                                    selected: viewModel.selectedCategory == nil,
-                                    action: { viewModel.setCategory(nil) }
-                                )
-                                ForEach(categories, id: \.self) { category in
-                                    FilterChip(
-                                        label: category,
-                                        selected: viewModel.selectedCategory == category,
-                                        action: {
-                                            viewModel.setCategory(viewModel.selectedCategory == category ? nil : category)
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-                .padding(16)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: 16).fill(Color(.secondarySystemBackground)))
+                PickerPanel(viewModel: viewModel, categories: categories)
 
                 Button(action: { viewModel.draw(repository: repository, allJobs: allJobs) }) {
                     Label("Draw a job", systemImage: "shuffle")
+                        .font(.headline)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
+                        .padding(.vertical, 8)
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(viewModel.isDrawing)
 
-                if let drawnJob = viewModel.drawnJob {
-                    DrawnJobCard(
-                        job: drawnJob,
-                        context: viewModel.drawnContext,
-                        isBusy: viewModel.isDrawing,
-                        onOpen: { onOpenJob(drawnJob.id) },
-                        onDone: {
-                            let context = viewModel.drawnContext
-                            let hasOpenSubtasks = (context?.subtaskTotal ?? 0) > (context?.subtaskDone ?? 0)
-                            if hasOpenSubtasks {
-                                showForceCompleteDialog = true
-                            } else {
-                                viewModel.completeDrawnJob(repository: repository, allJobs: allJobs)
-                            }
-                        },
-                        onSkip: { viewModel.draw(repository: repository, allJobs: allJobs, excludeCurrent: true) }
+                if !drawnJobs.isEmpty {
+                    DrawnJobsBatch(
+                        entries: drawnJobs,
+                        showBudgetSummary: !viewModel.longJobsOnly && viewModel.batchSize != .one,
+                        availableMinutes: viewModel.availableMinutes,
+                        remainingMinutes: viewModel.remainingMinutesAfterDraw,
+                        onOpen: onOpenJob,
+                        onStart: { job in viewModel.startJob(job, repository: repository) },
+                        onSchedule: { job in jobToSchedule = job },
+                        onRedraw: { viewModel.draw(repository: repository, allJobs: allJobs, excludeCurrent: true) },
+                        onCloseJar: { viewModel.clearDraw() }
                     )
                     .transition(.opacity)
                 } else if viewModel.noMatchFound {
-                    Text(
+                    EmptyStateText(
                         viewModel.longJobsOnly
-                            ? "Nothing needs \(formatMinutes(longJobMinutes))+ yet. Try a shorter time, or add a bigger job."
-                            : "No jobs fit that time and category. Try a longer time or add more jobs."
+                            ? "Nothing takes \(formatMinutes(longJobMinutes)) or more right now."
+                            : "Nothing fits. Try more time or a different category."
                     )
-                    .font(.body)
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
-                    Text("Set your time and tap \"Draw a job\" to pick something from the jar.")
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    EmptyStateText("How much time have you got? Pick it above and draw.")
                 }
             }
             .padding(16)
-            .animation(.easeInOut(duration: 0.2), value: viewModel.drawnJob?.id)
+            .animation(.easeInOut(duration: 0.2), value: drawnJobs.isEmpty)
         }
-        .navigationTitle("The Job Jar")
-        .alert("Mark as done?", isPresented: $showForceCompleteDialog) {
-            Button("Cancel", role: .cancel) {}
-            Button("Mark done") {
-                viewModel.completeDrawnJob(repository: repository, allJobs: allJobs)
+        .pageBackground()
+        .navigationTitle("Job Jar")
+        .todayDateButton()
+        .scheduleSheet(for: $jobToSchedule) { job, date in
+            viewModel.scheduleJob(job, at: date, repository: repository)
+        }
+        .onChange(of: categories, initial: true) { _, current in viewModel.pruneCategories(to: current) }
+        .onChange(of: availableIds) { viewModel.dropStaleCards(allJobs: allJobs) }
+    }
+}
+
+private struct EmptyStateText: View {
+    let text: String
+
+    init(_ text: String) { self.text = text }
+
+    var body: some View {
+        Text(text)
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+    }
+}
+
+/// Time, how many, and category, each as a chip that opens a menu.
+private struct PickerPanel: View {
+    let viewModel: DrawViewModel
+    let categories: [String]
+
+    private var categoryLabel: String {
+        switch viewModel.selectedCategories.count {
+        case 0: return "Any"
+        case 1: return viewModel.selectedCategories.first!
+        default: return "\(viewModel.selectedCategories.count) categories"
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                SectionLabel("TIME")
+                Spacer()
+                MenuChip(
+                    label: viewModel.longJobsOnly ? "4+ hrs" : formatMinutes(viewModel.availableMinutes),
+                    selected: true
+                ) {
+                    ForEach(timePresets, id: \.self) { minutes in
+                        Button(formatMinutes(minutes)) { viewModel.setAvailableMinutes(minutes) }
+                    }
+                    // Not a duration: switches to "4hr or longer" and the slider stops applying.
+                    Button("4+ hrs") { viewModel.setLongJobsOnly() }
+                }
             }
-        } message: {
-            let incomplete = (viewModel.drawnContext?.subtaskTotal ?? 0) - (viewModel.drawnContext?.subtaskDone ?? 0)
-            Text("\(incomplete) subtask(s) are still open. They'll stay open, but this job will be marked done.")
+            Slider(
+                value: Binding(
+                    get: { Double(viewModel.availableMinutes) },
+                    set: { viewModel.setAvailableMinutes(Int($0)) }
+                ),
+                in: 5...240
+            )
+            .disabled(viewModel.longJobsOnly)
+
+            // 4+ hrs always draws one job, so "how many" only shows for normal draws.
+            if !viewModel.longJobsOnly {
+                HStack {
+                    SectionLabel("HOW MANY")
+                    Spacer()
+                    MenuChip(label: viewModel.batchSize.label, selected: viewModel.batchSize != .one) {
+                        ForEach(DrawBatchSize.allCases) { size in
+                            Button(size.label) { viewModel.setBatchSize(size) }
+                        }
+                    }
+                }
+            }
+
+            if !categories.isEmpty {
+                Divider()
+                HStack {
+                    SectionLabel("CATEGORY")
+                    Spacer()
+                    MenuChip(label: categoryLabel, selected: !viewModel.selectedCategories.isEmpty, staysOpen: true) {
+                        ForEach(categories, id: \.self) { category in
+                            CheckedMenuItem(
+                                title: category,
+                                checked: viewModel.selectedCategories.contains(category),
+                                action: { viewModel.toggleCategory(category) }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .cardStyle()
+    }
+}
+
+private struct SectionLabel: View {
+    let text: String
+
+    init(_ text: String) { self.text = text }
+
+    var body: some View {
+        Text(text)
+            .font(.caption2.weight(.semibold))
+            .tracking(0.8)
+            .foregroundStyle(.secondary)
+    }
+}
+
+/// The drawn jobs, with a "time spare" line when you asked for more than one, then Draw again /
+/// Never mind. Drawing doesn't take anything out of the jar, so Never mind just clears the list.
+private struct DrawnJobsBatch: View {
+    let entries: [DrawnJobEntry]
+    let showBudgetSummary: Bool
+    let availableMinutes: Int
+    let remainingMinutes: Int
+    let onOpen: (UUID) -> Void
+    let onStart: (Job) -> Void
+    let onSchedule: (Job) -> Void
+    let onRedraw: () -> Void
+    let onCloseJar: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if showBudgetSummary {
+                Text("\(countLabel(entries.count, "job", "jobs")) · \(formatMinutes(remainingMinutes)) spare of \(formatMinutes(availableMinutes))")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(entries) { entry in
+                BatchJobCard(
+                    entry: entry,
+                    onOpen: { onOpen(entry.id) },
+                    onStart: { onStart(entry.job) },
+                    onSchedule: { onSchedule(entry.job) }
+                )
+            }
+            HStack(spacing: 10) {
+                Button(action: onRedraw) {
+                    Text("Draw again").frame(maxWidth: .infinity)
+                }
+                Button(action: onCloseJar) {
+                    Text("Never mind").frame(maxWidth: .infinity)
+                }
+            }
+            .buttonStyle(.bordered)
+            .font(.subheadline)
         }
     }
 }
 
-private struct DrawnJobCard: View {
-    let job: Job
-    let context: DrawnJobContext?
-    let isBusy: Bool
+/// A drawn job, on the honey card. Tap for details. Actions are Start and Schedule; finishing
+/// happens later from the job itself. Notes are left off to keep cards a predictable size.
+private struct BatchJobCard: View {
+    let entry: DrawnJobEntry
     let onOpen: () -> Void
-    let onDone: () -> Void
-    let onSkip: () -> Void
+    let onStart: () -> Void
+    let onSchedule: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(job.title).font(.title3.weight(.semibold))
+        let job = entry.job
+        let context = entry.context
+        VStack(alignment: .leading, spacing: 6) {
+            Button(action: onOpen) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(job.title)
+                        .font(.headline)
+                        .lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    HStack(spacing: 6) {
+                        TimeBadge(minutes: context.remainingMinutes ?? job.estimatedMinutes, compact: true)
+                        if !job.category.isEmpty { CategoryBadge(category: job.category, compact: true) }
+                        if let days = job.recurrenceDays {
+                            InfoBadge(text: formatRecurrence(days: days, weekdays: job.repeatWeekdays), compact: true)
+                        }
+                    }
+                    if let parentTitle = context.parentTitle {
+                        Text("Part of \(parentTitle)").font(.caption).lineLimit(1)
+                    }
+                    if context.subtaskTotal > 0 {
+                        Text("\(context.subtaskDone) of \(context.subtaskTotal) subtasks completed · \(formatMinutes(context.remainingMinutes ?? job.estimatedMinutes)) left")
+                            .font(.caption)
+                            .lineLimit(1)
+                    }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
 
             HStack(spacing: 8) {
-                TimeBadge(minutes: context?.remainingMinutes ?? job.estimatedMinutes)
-                if !job.category.isEmpty { CategoryBadge(category: job.category) }
-                if let days = job.recurrenceDays { InfoBadge(text: formatRecurrenceInterval(days)) }
-            }
-
-            if let parentTitle = context?.parentTitle {
-                Text("Part of: \(parentTitle)")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            if let context, context.subtaskTotal > 0 {
-                Text(
-                    "\(context.subtaskDone)/\(context.subtaskTotal) subtasks done · " +
-                        "\(formatMinutes(context.remainingMinutes ?? job.estimatedMinutes)) left of " +
-                        "\(formatMinutes(job.estimatedMinutes)) total"
-                )
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-            }
-
-            if !job.notes.isEmpty {
-                Text(job.notes).font(.body)
-            }
-
-            HStack(spacing: 8) {
-                Button("Skip", action: onSkip)
+                Button(action: onStart) {
+                    Text("Start").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Palette.honey)
+                .foregroundStyle(Palette.onHoney)
+                // No scheduling for repeating jobs.
+                if job.recurrenceDays == nil {
+                    Button(action: onSchedule) {
+                        Text("Schedule").frame(maxWidth: .infinity)
+                    }
                     .buttonStyle(.bordered)
-                    .frame(maxWidth: .infinity)
-                    .disabled(isBusy)
-                Button("Mark done", action: onDone)
-                    .buttonStyle(.borderedProminent)
-                    .frame(maxWidth: .infinity)
-                    .disabled(isBusy)
+                    .tint(Palette.honey)
+                }
             }
-
-            Button("View details", action: onOpen)
-                .buttonStyle(.bordered)
-                .frame(maxWidth: .infinity)
+            .font(.subheadline.weight(.medium))
+            .padding(.top, 4)
         }
-        .padding(16)
+        .foregroundStyle(Palette.onDrawnCard)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 16).fill(Color(.secondarySystemBackground)))
+        .background(RoundedRectangle(cornerRadius: 14).fill(Color("DrawnCard")))
     }
 }

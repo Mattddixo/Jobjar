@@ -6,6 +6,8 @@ enum Route: Hashable {
 }
 
 struct ContentView: View {
+    @Environment(\.modelContext) private var modelContext
+
     var body: some View {
         TabView {
             DrawTab()
@@ -14,21 +16,23 @@ struct ContentView: View {
                 .tabItem { Label("Jobs", systemImage: "list.bullet") }
             NavigationStack {
                 StatsView()
+                    .settingsButton()
             }
             .tabItem { Label("Stats", systemImage: "chart.bar") }
         }
+        .overlay(alignment: .bottom) { UndoToast() }
+        .task { JobRepository(modelContext: modelContext).applyLaunchRules() }
     }
 }
 
-/// Each top-level tab owns its own NavigationPath, mirroring the Android app's single NavHost
-/// with per-destination `popUpTo`/`saveState`/`restoreState`: switching tabs preserves whatever
-/// push stack you left behind in the other one.
+/// Each tab keeps its own navigation stack, so switching tabs doesn't lose your place.
 private struct DrawTab: View {
     @State private var path = NavigationPath()
 
     var body: some View {
         NavigationStack(path: $path) {
             DrawView(onOpenJob: { id in path.append(Route.jobDetail(id)) })
+                .settingsButton()
                 .navigationDestination(for: Route.self) { route in
                     RouteDestination(route: route, path: $path)
                 }
@@ -45,6 +49,7 @@ private struct JobsTab: View {
                 onAddJob: { path.append(Route.addEditJob(jobId: nil, parentId: nil)) },
                 onOpenJob: { id in path.append(Route.jobDetail(id)) }
             )
+            .settingsButton()
             .navigationDestination(for: Route.self) { route in
                 RouteDestination(route: route, path: $path)
             }
@@ -52,8 +57,7 @@ private struct JobsTab: View {
     }
 }
 
-/// Shared push-destination resolver for both tabs that can navigate into job detail/add/edit -
-/// the equivalent of the Android app's NavHost composable() routes.
+/// Destinations shared by the Jar and Jobs tabs.
 private struct RouteDestination: View {
     let route: Route
     @Binding var path: NavigationPath

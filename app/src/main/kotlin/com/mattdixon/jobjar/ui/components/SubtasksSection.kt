@@ -24,27 +24,25 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import com.mattdixon.jobjar.R
 import com.mattdixon.jobjar.data.Job
 import com.mattdixon.jobjar.data.JobRepository
+import com.mattdixon.jobjar.data.LONG_JOB_MINUTES
 import com.mattdixon.jobjar.data.isUnblocked
-import com.mattdixon.jobjar.data.remainingMinutesOf
+import com.mattdixon.jobjar.data.unallocatedMinutesOf
+import com.mattdixon.jobjar.ui.theme.Spacing
+import com.mattdixon.jobjar.ui.theme.appCardBorder
+import com.mattdixon.jobjar.ui.theme.appCardColors
+import com.mattdixon.jobjar.util.formatCost
 import com.mattdixon.jobjar.util.formatMinutes
 import kotlinx.coroutines.launch
 
-/**
- * The "Subtasks" list, progress summary, and add-subtask button for a top-level job. Shared by
- * the job detail screen and the job creation/edit screen so subtask management looks and works
- * identically everywhere it appears, instead of each screen reimplementing it.
- *
- * [parentId] must refer to a job that is itself NOT a subtask (subtasks are one level deep) -
- * callers are responsible for that check, since this composable has no way to verify it.
- */
+/** Subtask list + add button for a top-level job. Used on the detail and edit screens. */
 @Composable
 fun SubtasksSection(
     repository: JobRepository,
     parentId: Long,
-    parentEstimatedMinutes: Int,
     onOpenSubtask: (Long) -> Unit,
     onAddSubtask: () -> Unit,
     modifier: Modifier = Modifier
@@ -53,16 +51,16 @@ fun SubtasksSection(
     val subtasks by subtasksFlow.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
 
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(Spacing.lg)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Subtasks", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.subtasks_title), style = MaterialTheme.typography.titleMedium)
             if (subtasks.isNotEmpty()) {
                 Text(
-                    "${subtasks.count { it.isDone }}/${subtasks.size} done",
+                    stringResource(R.string.subtasks_done_count, subtasks.count { it.isDone }, subtasks.size),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -71,19 +69,13 @@ fun SubtasksSection(
 
         if (subtasks.isEmpty()) {
             Text(
-                "Break this job into smaller pieces you can draw on their own.",
+                stringResource(R.string.subtasks_empty_hint),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         } else {
-            val remaining = remainingMinutesOf(parentEstimatedMinutes, subtasks)
-            Text(
-                "${formatMinutes(remaining)} left of ${formatMinutes(parentEstimatedMinutes)} total",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
             val siblingsById = subtasks.associateBy { it.id }
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
                 subtasks.forEach { subtask ->
                     SubtaskRow(
                         subtask = subtask,
@@ -91,7 +83,7 @@ fun SubtasksSection(
                             ?.takeUnless { subtask.isUnblocked(siblingsById) }
                             ?.let { siblingsById[it]?.title },
                         onClick = { onOpenSubtask(subtask.id) },
-                        onToggleDone = { scope.launch { repository.toggleDone(subtask) } }
+                        onToggleDone = { scope.launch { repository.toggleDone(subtask.id) } }
                     )
                 }
             }
@@ -99,17 +91,33 @@ fun SubtasksSection(
 
         OutlinedButton(onClick = onAddSubtask, modifier = Modifier.fillMaxWidth()) {
             Icon(Icons.Filled.Add, contentDescription = null)
-            Text("Add subtask")
+            Text(stringResource(R.string.cd_add_subtask))
         }
     }
 }
 
 /**
- * [waitingOnTitle], when non-null, means this subtask is soft-blocked on an unfinished sibling:
- * it's greyed out with a lock indicator and excluded from the jar's draw pool (see
- * [com.mattdixon.jobjar.data.JobRepository.drawJob]), but the checkbox stays fully live - it can
- * still be checked off by hand at any time.
+ * How the subtask estimates compare with the job's total. For 4hr+ jobs there's no real target,
+ * so it just shows the running total.
  */
+@Composable
+fun AllocationSummary(estimatedMinutes: Int, subtasksTotalMinutes: Int) {
+    val text = if (estimatedMinutes >= LONG_JOB_MINUTES) {
+        stringResource(R.string.subtasks_allocation_running_total, formatMinutes(subtasksTotalMinutes))
+    } else {
+        when (val unallocated = unallocatedMinutesOf(estimatedMinutes, subtasksTotalMinutes)) {
+            0 -> stringResource(R.string.subtasks_allocation_exact, formatMinutes(estimatedMinutes))
+            else -> if (unallocated > 0) {
+                stringResource(R.string.subtasks_allocation_under, formatMinutes(unallocated), formatMinutes(estimatedMinutes))
+            } else {
+                stringResource(R.string.subtasks_allocation_over, formatMinutes(-unallocated), formatMinutes(estimatedMinutes))
+            }
+        }
+    }
+    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
+/** [waitingOnTitle] set = greyed out with a lock. Still tickable. */
 @Composable
 private fun SubtaskRow(
     subtask: Job,
@@ -119,34 +127,35 @@ private fun SubtaskRow(
 ) {
     val blocked = waitingOnTitle != null
     val contentColor = if (blocked) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
-    Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+    Card(onClick = onClick, colors = appCardColors(), border = appCardBorder(), modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(8.dp),
+                .padding(Spacing.md),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(Spacing.md)
         ) {
             IconButton(onClick = onToggleDone) {
                 Icon(
                     imageVector = if (subtask.isDone) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
-                    contentDescription = if (subtask.isDone) "Mark not done" else "Mark done",
+                    contentDescription = stringResource(if (subtask.isDone) R.string.cd_mark_not_done else R.string.cd_mark_done),
                     tint = contentColor
                 )
             }
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
                 Text(subtask.title, style = MaterialTheme.typography.bodyLarge, color = contentColor)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm), verticalAlignment = Alignment.CenterVertically) {
                     TimeBucketBadge(minutes = subtask.estimatedMinutes)
+                    subtask.costCents?.let { InfoBadge(text = formatCost(it)) }
                     if (waitingOnTitle != null) {
                         Icon(
                             Icons.Filled.Lock,
                             contentDescription = null,
-                            modifier = Modifier.padding(start = 2.dp),
+                            modifier = Modifier.padding(start = Spacing.xxs),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            "Waiting on: $waitingOnTitle",
+                            stringResource(R.string.label_waiting_on, waitingOnTitle),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

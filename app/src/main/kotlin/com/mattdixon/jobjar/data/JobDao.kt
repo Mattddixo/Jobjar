@@ -10,19 +10,31 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface JobDao {
-
-    /** Every row, parents and subtasks alike. Used internally by the repository (draws, stats). */
     @Query("SELECT * FROM jobs")
     fun getAllJobsFlow(): Flow<List<Job>>
-
-    @Query("SELECT * FROM jobs WHERE parentId IS NULL ORDER BY createdAt DESC")
-    fun getTopLevelJobs(): Flow<List<Job>>
 
     @Query("SELECT DISTINCT category FROM jobs WHERE category != '' ORDER BY category ASC")
     fun getCategories(): Flow<List<String>>
 
+    /** "Removing" a category just blanks it on every job that has it. */
+    @Query("UPDATE jobs SET category = '' WHERE category = :category")
+    suspend fun clearCategory(category: String)
+
     @Query("SELECT * FROM jobs WHERE id = :id")
     fun getJobById(id: Long): Flow<Job?>
+
+    @Query("SELECT * FROM jobs WHERE id = :id")
+    suspend fun getJob(id: Long): Job?
+
+    @Query("SELECT * FROM jobs")
+    suspend fun getAllJobs(): List<Job>
+
+    /** [excludeJobId] = 0 excludes nothing. */
+    @Query("SELECT DISTINCT category FROM jobs WHERE category != '' AND id != :excludeJobId")
+    suspend fun getCategoriesOfOtherJobs(excludeJobId: Long): List<String>
+
+    @Query("UPDATE jobs SET category = :to WHERE category = :from")
+    suspend fun renameCategory(from: String, to: String)
 
     @Query("SELECT * FROM jobs WHERE parentId = :parentId ORDER BY createdAt ASC")
     fun getSubtasks(parentId: Long): Flow<List<Job>>
@@ -33,6 +45,13 @@ interface JobDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(job: Job): Long
 
+    /** Keeps the ids as they are (undo and import rely on that). */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(jobs: List<Job>)
+
+    @Query("DELETE FROM jobs")
+    suspend fun deleteAll()
+
     @Update
     suspend fun update(job: Job)
 
@@ -42,9 +61,40 @@ interface JobDao {
     @Query("UPDATE jobs SET timesDrawn = timesDrawn + 1 WHERE id = :id")
     suspend fun incrementDrawCount(id: Long)
 
-    @Query("UPDATE jobs SET isDone = 1, completedAt = :completedAt WHERE id = :id")
+    // Clears in-progress too: a job can't be both.
+    @Query("UPDATE jobs SET isDone = 1, isInProgress = 0, completedAt = :completedAt WHERE id = :id")
     suspend fun markDone(id: Long, completedAt: Long)
 
     @Query("UPDATE jobs SET isDone = 0, completedAt = NULL WHERE id = :id")
     suspend fun markNotDone(id: Long)
+
+    @Query("UPDATE jobs SET isInProgress = 1 WHERE id = :id")
+    suspend fun markInProgress(id: Long)
+
+    @Query("UPDATE jobs SET isInProgress = 0 WHERE id = :id")
+    suspend fun markNotInProgress(id: Long)
+
+    @Query("UPDATE jobs SET scheduledDate = :scheduledDate, calendarEventId = :calendarEventId, isInProgress = 0 WHERE id = :id")
+    suspend fun setSchedule(id: Long, scheduledDate: Long, calendarEventId: Long?)
+
+    @Query("UPDATE jobs SET scheduledDate = NULL, calendarEventId = NULL WHERE id = :id")
+    suspend fun clearSchedule(id: Long)
+
+    @Query("UPDATE jobs SET calendarEventId = :calendarEventId WHERE id = :id")
+    suspend fun setCalendarEventId(id: Long, calendarEventId: Long?)
+
+    @Query("UPDATE jobs SET nextDueAt = :nextDueAt WHERE id = :id")
+    suspend fun setNextDueAt(id: Long, nextDueAt: Long?)
+
+    @Query("UPDATE jobs SET completedAt = :completedAt, nextDueAt = :nextDueAt, completionCount = completionCount + 1, isInProgress = 0 WHERE id = :id")
+    suspend fun cycleRepeating(id: Long, completedAt: Long, nextDueAt: Long)
+
+    @Query("UPDATE jobs SET checklist = :checklist WHERE id = :id")
+    suspend fun setChecklist(id: Long, checklist: List<ChecklistItem>)
+
+    @Query("UPDATE jobs SET estimatedMinutes = :minutes WHERE id = :id")
+    suspend fun setEstimatedMinutes(id: Long, minutes: Int)
+
+    @Query("UPDATE jobs SET dependsOnSubtaskId = NULL WHERE dependsOnSubtaskId = :subtaskId")
+    suspend fun clearDependenciesOn(subtaskId: Long)
 }

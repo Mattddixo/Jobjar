@@ -18,12 +18,36 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mattdixon.jobjar
         PRODUCT_NAME: JobJar
+        MARKETING_VERSION: "1.2"
+        CURRENT_PROJECT_VERSION: "3"
         TARGETED_DEVICE_FAMILY: "1,2"
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: Job Jar
-        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription: Job Jar adds the jobs you schedule to your calendar.
+        INFOPLIST_KEY_NSCalendarsUsageDescription: Job Jar adds the jobs you schedule to your calendar.
+        INFOPLIST_FILE: Info.plist
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         ENABLE_PREVIEWS: YES
+  JobJarTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: JobJarTests
+    dependencies:
+      - target: JobJar
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mattdixon.jobjar.tests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  JobJar:
+    build:
+      targets:
+        JobJar: all
+        JobJarTests: [test]
+    test:
+      targets:
+        - JobJarTests

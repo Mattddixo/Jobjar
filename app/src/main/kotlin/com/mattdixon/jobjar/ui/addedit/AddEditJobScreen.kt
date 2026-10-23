@@ -1,6 +1,8 @@
 package com.mattdixon.jobjar.ui.addedit
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -37,22 +39,34 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.mattdixon.jobjar.R
 import com.mattdixon.jobjar.data.JobRepository
 import com.mattdixon.jobjar.data.LONG_JOB_MINUTES
 import com.mattdixon.jobjar.data.Priority
 import com.mattdixon.jobjar.data.subtasksAvailableAsDependency
+import com.mattdixon.jobjar.data.weekdayBit
+import com.mattdixon.jobjar.ui.components.AllocationSummary
 import com.mattdixon.jobjar.ui.components.SubtasksSection
+import com.mattdixon.jobjar.ui.components.recurrenceLabel
+import com.mattdixon.jobjar.ui.theme.Spacing
+import com.mattdixon.jobjar.ui.theme.appTopBarColors
+import com.mattdixon.jobjar.util.CostInput
+import com.mattdixon.jobjar.util.currencySymbol
+import com.mattdixon.jobjar.util.formatCost
 import com.mattdixon.jobjar.util.formatMinutes
-import com.mattdixon.jobjar.util.formatRecurrenceInterval
+import kotlinx.coroutines.flow.flowOf
+import java.time.DayOfWeek
+import java.time.format.TextStyle
 
 private val QUICK_DURATIONS = listOf(5, 15, 30, 45, 60, 90, 120, 180)
 private val RECURRENCE_PRESETS = listOf(1, 7, 14, 30)
 
-/** Generous enough for a real task phrase, short enough to always stay tidy in a list row, a
- * badge-heavy card, or a detail-screen header - the places a title actually has to fit. */
+/** Long enough for a real task, short enough to fit on a card. */
 private const val MAX_TITLE_LENGTH = 80
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -71,29 +85,48 @@ fun AddEditJobScreen(
     val state by viewModel.formState.collectAsState()
     val categories by repository.categories.collectAsState(initial = emptyList())
 
+    // Subtasks only: the parent and siblings, for the time summary and the "Do this after" picker.
+    val subtaskParentId = state.parentId
+    val parentJobFlow = remember(repository, subtaskParentId) {
+        subtaskParentId?.let { repository.jobById(it) } ?: flowOf(null)
+    }
+    val parentJob by parentJobFlow.collectAsState(initial = null)
+    val siblingsFlow = remember(repository, subtaskParentId) {
+        subtaskParentId?.let { repository.subtasksOf(it) } ?: flowOf(emptyList())
+    }
+    val siblings by siblingsFlow.collectAsState(initial = emptyList())
+
+    // Parents only: this job's own subtasks, for the time summary next to the duration.
+    val savedId = state.id
+    val ownSubtasksFlow = remember(repository, savedId) {
+        savedId?.let { repository.subtasksOf(it) } ?: flowOf(emptyList())
+    }
+    val ownSubtasks by ownSubtasksFlow.collectAsState(initial = emptyList())
+
     LaunchedEffect(state.isSaved) {
         if (state.isSaved) onDone()
     }
 
-    val title = when {
-        jobId != null && state.parentId != null -> "Edit subtask"
-        jobId != null -> "Edit job"
-        parentId != null -> "New subtask"
-        else -> "New job"
+    val titleRes = when {
+        jobId != null && state.parentId != null -> R.string.addedit_title_edit_subtask
+        jobId != null -> R.string.addedit_title_edit_job
+        parentId != null -> R.string.addedit_title_new_subtask
+        else -> R.string.addedit_title_new_job
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(title) },
+                colors = appTopBarColors(),
+                title = { Text(stringResource(titleRes)) },
                 navigationIcon = {
                     IconButton(onClick = onDone) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Cancel")
+                        Icon(Icons.Filled.ArrowBack, contentDescription = stringResource(R.string.action_cancel))
                     }
                 },
                 actions = {
                     IconButton(onClick = { viewModel.save() }, enabled = state.isValid) {
-                        Icon(Icons.Filled.Check, contentDescription = "Save")
+                        Icon(Icons.Filled.Check, contentDescription = stringResource(R.string.cd_save))
                     }
                 }
             )
@@ -104,19 +137,19 @@ fun AddEditJobScreen(
                 .padding(padding)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+                .padding(Spacing.xl),
+            verticalArrangement = Arrangement.spacedBy(Spacing.xxl)
         ) {
             OutlinedTextField(
                 value = state.title,
                 onValueChange = { if (it.length <= MAX_TITLE_LENGTH) viewModel.setTitle(it) },
-                label = { Text("Title") },
+                label = { Text(stringResource(R.string.field_title_label)) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                 supportingText = {
                     Text(
-                        "${state.title.length}/$MAX_TITLE_LENGTH",
+                        stringResource(R.string.title_char_count, state.title.length, MAX_TITLE_LENGTH),
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -125,17 +158,17 @@ fun AddEditJobScreen(
             OutlinedTextField(
                 value = state.notes,
                 onValueChange = viewModel::setNotes,
-                label = { Text("Notes (optional)") },
+                label = { Text(stringResource(R.string.field_notes_label)) },
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 2,
                 maxLines = 4,
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences)
             )
 
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("How long will it take?", style = MaterialTheme.typography.labelLarge)
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
+                Text(stringResource(R.string.duration_question), style = MaterialTheme.typography.labelLarge)
                 Text(formatMinutes(state.estimatedMinutes), style = MaterialTheme.typography.headlineSmall)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(Spacing.md)) {
                     items(QUICK_DURATIONS) { minutes ->
                         FilterChip(
                             selected = state.estimatedMinutes == minutes,
@@ -144,13 +177,11 @@ fun AddEditJobScreen(
                         )
                     }
                     item {
-                        // Long jobs don't have one "right" length, so this is a range, not an
-                        // exact value: selected whenever the estimate is 4hr or more, and tapping
-                        // it seeds 4hr as a starting point you can then fine-tune below.
+                        // Selected for anything 4hr+. Tapping it sets 4hr, which you can then adjust below.
                         FilterChip(
                             selected = state.estimatedMinutes >= LONG_JOB_MINUTES,
                             onClick = { viewModel.setEstimatedMinutes(LONG_JOB_MINUTES) },
-                            label = { Text("4+ hrs") }
+                            label = { Text(stringResource(R.string.long_job_chip_label)) }
                         )
                     }
                 }
@@ -160,24 +191,41 @@ fun AddEditJobScreen(
                         val value = text.filter { it.isDigit() }.toIntOrNull() ?: 0
                         viewModel.setEstimatedMinutes(value)
                     },
-                    label = { Text("Custom minutes") },
+                    label = { Text(stringResource(R.string.field_custom_minutes)) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
+
+                // Uses what's typed right now for this subtask, not its saved estimate.
+                val currentParent = parentJob
+                if (state.isLoaded && subtaskParentId != null && currentParent != null) {
+                    val otherSiblingsTotal = siblings.filter { it.id != state.id }.sumOf { it.estimatedMinutes }
+                    AllocationSummary(
+                        estimatedMinutes = currentParent.estimatedMinutes,
+                        subtasksTotalMinutes = otherSiblingsTotal + state.estimatedMinutes
+                    )
+                }
+
+                if (subtaskParentId == null && savedId != null && ownSubtasks.isNotEmpty()) {
+                    AllocationSummary(
+                        estimatedMinutes = state.estimatedMinutes,
+                        subtasksTotalMinutes = ownSubtasks.sumOf { it.estimatedMinutes }
+                    )
+                }
             }
 
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Category", style = MaterialTheme.typography.labelLarge)
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
+                Text(stringResource(R.string.category_label), style = MaterialTheme.typography.labelLarge)
                 OutlinedTextField(
                     value = state.category,
                     onValueChange = viewModel::setCategory,
-                    label = { Text("e.g. Chores, Work, Errands") },
+                    label = { Text(stringResource(R.string.category_hint)) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words)
                 )
                 if (categories.isNotEmpty()) {
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(Spacing.md)) {
                         items(categories) { category ->
                             FilterChip(
                                 selected = state.category == category,
@@ -189,8 +237,8 @@ fun AddEditJobScreen(
                 }
             }
 
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Priority", style = MaterialTheme.typography.labelLarge)
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
+                Text(stringResource(R.string.priority_label), style = MaterialTheme.typography.labelLarge)
                 SingleChoiceSegmentedButtonRow {
                     Priority.entries.forEachIndexed { index, priority ->
                         SegmentedButton(
@@ -202,29 +250,52 @@ fun AddEditJobScreen(
                 }
             }
 
-            // The opposite gate from below: only a subtask can depend on another subtask, and
-            // only among its own siblings (same parent).
-            val subtaskParentId = state.parentId
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
+                Text(stringResource(R.string.cost_label), style = MaterialTheme.typography.labelLarge)
+                val invalid = state.costInput == CostInput.Invalid
+                // For a job with subtasks, show what they add so the total isn't a surprise.
+                val subtaskCost = ownSubtasks.mapNotNull { it.costCents }.takeIf { it.isNotEmpty() }?.sum()
+                val ownCost = (state.costInput as? CostInput.Valid)?.cents ?: 0L
+                OutlinedTextField(
+                    value = state.costText,
+                    onValueChange = viewModel::setCostText,
+                    placeholder = { Text(stringResource(R.string.cost_placeholder)) },
+                    prefix = { Text(currencySymbol()) },
+                    isError = invalid,
+                    supportingText = when {
+                        invalid -> {
+                            { Text(stringResource(R.string.cost_invalid)) }
+                        }
+                        subtaskCost != null -> {
+                            { Text(stringResource(R.string.cost_with_subtasks, formatCost(subtaskCost), formatCost(ownCost + subtaskCost))) }
+                        }
+                        else -> null
+                    },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            // Only subtasks can depend on something, and only on a sibling.
             if (state.isLoaded && subtaskParentId != null) {
                 HorizontalDivider()
 
-                val siblingsFlow = remember(repository, subtaskParentId) { repository.subtasksOf(subtaskParentId) }
-                val siblings by siblingsFlow.collectAsState(initial = emptyList())
                 val candidates = subtasksAvailableAsDependency(siblings, excludingSelfId = state.id)
 
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Depends on", style = MaterialTheme.typography.labelLarge)
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
+                    Text(stringResource(R.string.depends_on_label), style = MaterialTheme.typography.labelLarge)
                     Text(
-                        "Optional: this subtask stays out of the jar's random draw until the one it depends on is done. You can still check it off by hand any time.",
+                        stringResource(R.string.depends_on_hint),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(Spacing.md)) {
                         item {
                             FilterChip(
                                 selected = state.dependsOnSubtaskId == null,
                                 onClick = { viewModel.setDependsOn(null) },
-                                label = { Text("None") }
+                                label = { Text(stringResource(R.string.depends_on_none)) }
                             )
                         }
                         items(candidates) { candidate ->
@@ -238,49 +309,83 @@ fun AddEditJobScreen(
                 }
             }
 
-            // Only a job that isn't itself a subtask can repeat or have subtasks (one level
-            // deep). Gated on isLoaded so an existing subtask being edited never flashes either
-            // section before we know its real parentId.
+            // Top-level jobs only. Repeat and subtasks are either/or (see JobRepository.addJob).
+            // Waits for isLoaded so a subtask doesn't flash these sections while it loads.
             if (state.isLoaded && state.parentId == null) {
+                val hasSubtasks = ownSubtasks.isNotEmpty()
                 HorizontalDivider()
 
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Repeat", style = MaterialTheme.typography.labelLarge)
+                        Text(stringResource(R.string.repeat_label), style = MaterialTheme.typography.labelLarge)
                         Switch(
                             checked = state.recurrenceDays != null,
-                            onCheckedChange = { viewModel.setRecurring(it) }
+                            onCheckedChange = { viewModel.setRecurring(it) },
+                            enabled = state.recurrenceDays != null || !hasSubtasks
                         )
                     }
                     val recurrenceDays = state.recurrenceDays
                     if (recurrenceDays != null) {
-                        Text(formatRecurrenceInterval(recurrenceDays), style = MaterialTheme.typography.headlineSmall)
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(RECURRENCE_PRESETS) { days ->
-                                FilterChip(
-                                    selected = recurrenceDays == days,
-                                    onClick = { viewModel.setRecurrenceDays(days) },
-                                    label = { Text(formatRecurrenceInterval(days)) }
-                                )
-                            }
-                        }
-                        OutlinedTextField(
-                            value = if (recurrenceDays == 0) "" else recurrenceDays.toString(),
-                            onValueChange = { text ->
-                                val value = text.filter { it.isDigit() }.toIntOrNull() ?: 0
-                                viewModel.setRecurrenceDays(value)
-                            },
-                            label = { Text("Custom: every N days") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true
+                        Text(
+                            recurrenceLabel(recurrenceDays, state.repeatWeekdays.takeIf { state.repeatsOnWeekdays }),
+                            style = MaterialTheme.typography.headlineSmall
                         )
+                        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                            SegmentedButton(
+                                selected = !state.repeatsOnWeekdays,
+                                onClick = { viewModel.setRepeatOnWeekdays(false) },
+                                shape = SegmentedButtonDefaults.itemShape(0, 2)
+                            ) { Text(stringResource(R.string.repeat_mode_interval)) }
+                            SegmentedButton(
+                                selected = state.repeatsOnWeekdays,
+                                onClick = { viewModel.setRepeatOnWeekdays(true) },
+                                shape = SegmentedButtonDefaults.itemShape(1, 2)
+                            ) { Text(stringResource(R.string.repeat_mode_weekdays)) }
+                        }
+                        if (state.repeatsOnWeekdays) {
+                            WeekdayPicker(
+                                mask = state.repeatWeekdays ?: 0,
+                                onToggle = viewModel::toggleWeekday
+                            )
+                            Text(
+                                stringResource(R.string.repeat_weekdays_explainer),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else {
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(Spacing.md)) {
+                                items(RECURRENCE_PRESETS) { days ->
+                                    FilterChip(
+                                        selected = recurrenceDays == days,
+                                        onClick = { viewModel.setRecurrenceDays(days) },
+                                        label = { Text(recurrenceLabel(days)) }
+                                    )
+                                }
+                            }
+                            OutlinedTextField(
+                                value = if (recurrenceDays == 0) "" else recurrenceDays.toString(),
+                                onValueChange = { text ->
+                                    val value = text.filter { it.isDigit() }.take(3).toIntOrNull() ?: 0
+                                    viewModel.setRecurrenceDays(value)
+                                },
+                                label = { Text(stringResource(R.string.field_custom_recurrence)) },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true
+                            )
+                            Text(
+                                stringResource(R.string.repeat_interval_explainer),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     } else {
                         Text(
-                            "Completing a repeating job reopens it automatically after the interval, instead of leaving it done for good.",
+                            stringResource(if (hasSubtasks) R.string.repeat_blocked_by_subtasks else R.string.repeat_explainer),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -289,20 +394,27 @@ fun AddEditJobScreen(
 
                 HorizontalDivider()
 
-                val savedId = state.id
-                if (savedId != null) {
+                if (state.recurrenceDays != null) {
+                    Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
+                        Text(stringResource(R.string.subtasks_title), style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            stringResource(R.string.subtasks_blocked_by_repeat),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                } else if (savedId != null) {
                     SubtasksSection(
                         repository = repository,
                         parentId = savedId,
-                        parentEstimatedMinutes = state.estimatedMinutes,
                         onOpenSubtask = onOpenSubtask,
-                        onAddSubtask = { onAddSubtask(savedId) }
+                        onAddSubtask = { viewModel.ensurePersisted { id -> onAddSubtask(id) } }
                     )
                 } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Subtasks", style = MaterialTheme.typography.titleMedium)
+                    Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
+                        Text(stringResource(R.string.subtasks_title), style = MaterialTheme.typography.titleMedium)
                         Text(
-                            "Adding a subtask saves this job first, using what you've filled in so far.",
+                            stringResource(R.string.subtasks_save_first_hint),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -312,11 +424,30 @@ fun AddEditJobScreen(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Icon(Icons.Filled.Add, contentDescription = null)
-                            Text("Add subtask")
+                            Text(stringResource(R.string.cd_add_subtask))
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+/** Monday first. Any combination. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun WeekdayPicker(mask: Int, onToggle: (DayOfWeek) -> Unit) {
+    val locale = LocalConfiguration.current.locales[0]
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+        verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+    ) {
+        DayOfWeek.entries.forEach { day ->
+            FilterChip(
+                selected = mask and weekdayBit(day) != 0,
+                onClick = { onToggle(day) },
+                label = { Text(day.getDisplayName(TextStyle.SHORT, locale)) }
+            )
         }
     }
 }
