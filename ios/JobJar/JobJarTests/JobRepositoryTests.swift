@@ -349,18 +349,20 @@ final class JobRepositoryTests: XCTestCase {
     }
 
     func testDrawSkipsSubtasksOfAStartedParentAndCountsParentsByRemainingTime() {
-        let parent = add("Garage", minutes: 60)
-        let sub = add("Sweep", minutes: 40, parent: parent)
-        repository.toggleDone(sub, allJobs: all)
-        // 20 minutes left on the parent, so it fits a 30 minute slot.
-        let pick = repository.drawJob(allJobs: all, maxMinutes: 30, categories: [], excludeIds: [], longOnly: false)
+        let parent = add("Garage", minutes: 90)
+        let sweep = add("Sweep", minutes: 40, parent: parent)
+        let bins = add("Bins", minutes: 10, parent: parent)
+        repository.toggleDone(sweep, allJobs: all)
+        // 50 minutes left on the parent, so it fits a 50 minute slot. Bins is left out to keep
+        // the draw deterministic.
+        let pick = repository.drawJob(allJobs: all, maxMinutes: 50, categories: [], excludeIds: [bins.id], longOnly: false)
         XCTAssertEqual(pick?.job.id, parent.id)
-        XCTAssertEqual(pick?.minutesUsed, 20)
+        XCTAssertEqual(pick?.minutesUsed, 50)
 
         let parent2 = add("Shed", minutes: 60)
         add("Tidy", minutes: 10, parent: parent2)
         repository.toggleInProgress(parent2)
-        let excluded: Set<UUID> = [parent.id]
+        let excluded: Set<UUID> = [parent.id, bins.id]
         XCTAssertNil(repository.drawJob(allJobs: all, maxMinutes: 30, categories: [], excludeIds: excluded, longOnly: false))
     }
 
