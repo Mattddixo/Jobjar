@@ -361,9 +361,9 @@ class JobRepository(
      * or whose parent has been started. Parents count by their remaining minutes, so a big job gets
      * drawable for shorter slots as you chip away at it.
      *
-     * With [favourFill], jobs closer to a fair share of the time ([maxMinutes] over [picksLeft],
-     * see [drawWeight]) are more likely; otherwise every candidate is equally likely. 4+ hrs
-     * draws are always even.
+     * Priority always counts ([priorityWeight]). With [favourFill], jobs closer to a fair share of
+     * the time ([maxMinutes] over [picksLeft], see [drawWeight]) are also more likely; 4+ hrs draws
+     * ignore length, since every candidate is long.
      */
     suspend fun drawJob(
         maxMinutes: Int,
@@ -390,10 +390,10 @@ class JobRepository(
                 }
         }
 
-        val picked = if (favourFill && !longOnly) {
-            pickWeighted(candidates, random) { drawWeight(minutesNeeded(it, subtasksByParent), maxMinutes, picksLeft) }
-        } else {
-            candidates.randomOrNull(random)
+        val weighByFit = favourFill && !longOnly
+        val picked = pickWeighted(candidates, random) { job ->
+            val fit = if (weighByFit) drawWeight(minutesNeeded(job, subtasksByParent), maxMinutes, picksLeft) else 1.0
+            fit * priorityWeight(job.priority)
         } ?: return null
         dao.incrementDrawCount(picked.id)
         // A parent whose subtasks ran over has nothing left; it mustn't give time back to a batch.

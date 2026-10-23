@@ -489,9 +489,9 @@ struct JobRepository {
     /// more. Skips anything done, not due, started or booked, plus subtasks whose prerequisite
     /// isn't done or whose parent has been started. Parents count by their remaining minutes.
     ///
-    /// With `favourFill`, jobs closer to a fair share of the time (`maxMinutes` over `picksLeft`,
-    /// see `drawWeight`) are more likely; otherwise every candidate is equally likely. 4+ hrs draws
-    /// are always even.
+    /// Priority always counts (`priorityWeight`). With `favourFill`, jobs closer to a fair share of
+    /// the time (`maxMinutes` over `picksLeft`, see `drawWeight`) are also more likely; 4+ hrs draws
+    /// ignore length, since every candidate is long.
     func drawJob(
         allJobs: [Job], maxMinutes: Int, categories: Set<String>, excludeIds: Set<UUID>, longOnly: Bool,
         picksLeft: Int? = 1, favourFill: Bool = false
@@ -511,13 +511,12 @@ struct JobRepository {
             return longOnly ? needed >= longJobMinutes : needed <= maxMinutes
         }
 
-        let picked: Job?
-        if favourFill && !longOnly {
-            picked = pickWeighted(candidates, unit: randomUnit()) {
-                drawWeight(neededMinutes: minutesNeeded(job: $0, subtasksByParent: subtasksByParent), remainingMinutes: maxMinutes, picksLeft: picksLeft)
-            }
-        } else {
-            picked = candidates.isEmpty ? nil : candidates[min(Int(randomUnit() * Double(candidates.count)), candidates.count - 1)]
+        let weighByFit = favourFill && !longOnly
+        let picked = pickWeighted(candidates, unit: randomUnit()) { job in
+            let fit = weighByFit
+                ? drawWeight(neededMinutes: minutesNeeded(job: job, subtasksByParent: subtasksByParent), remainingMinutes: maxMinutes, picksLeft: picksLeft)
+                : 1
+            return fit * priorityWeight(job.priority)
         }
         guard let picked else { return nil }
         picked.timesDrawn += 1

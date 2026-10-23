@@ -119,6 +119,60 @@ final class DrawWeightingTests: XCTestCase {
         XCTAssertGreaterThan(Double(threeHours), Double(runs) * 0.25, "three hours: \(threeHours)")
     }
 
+    func testPriorityNudgesTheDrawWithOrWithoutTheTimeFit() throws {
+        XCTAssertEqual(priorityWeight(.high), 2)
+        XCTAssertEqual(priorityWeight(.normal), 1)
+        XCTAssertEqual(priorityWeight(.low), 0.5)
+
+        let (repository, container) = try makeRepository(seed: 5)
+        let high = Job(title: "High", estimatedMinutes: 30, priority: .high)
+        let normal = Job(title: "Normal", estimatedMinutes: 30)
+        let low = Job(title: "Low", estimatedMinutes: 30, priority: .low)
+        let jobs = [high, normal, low]
+        jobs.forEach { container.mainContext.insert($0) }
+        for favourFill in [true, false] {
+            var counts: [UUID: Int] = [:]
+            for _ in 0..<7_000 {
+                let id = try XCTUnwrap(repository.drawJob(allJobs: jobs, maxMinutes: 60, categories: [], excludeIds: [], longOnly: false, favourFill: favourFill)).job.id
+                counts[id, default: 0] += 1
+            }
+            // Same fit, so it's down to priority: 2 : 1 : 0.5 of 3.5.
+            XCTAssertEqual(Double(counts[high.id] ?? 0) / 7_000, 2 / 3.5, accuracy: 0.02, "high, fill=\(favourFill)")
+            XCTAssertEqual(Double(counts[normal.id] ?? 0) / 7_000, 1 / 3.5, accuracy: 0.02, "normal, fill=\(favourFill)")
+            XCTAssertEqual(Double(counts[low.id] ?? 0) / 7_000, 0.5 / 3.5, accuracy: 0.02, "low, fill=\(favourFill)")
+        }
+    }
+
+    func testTheTimeFitStillLeadsOverPriority() throws {
+        let (repository, container) = try makeRepository(seed: 9)
+        let urgent = Job(title: "Quick but urgent", estimatedMinutes: 15, priority: .high)
+        let fills = Job(title: "Fills the time", estimatedMinutes: 120)
+        [urgent, fills].forEach { container.mainContext.insert($0) }
+        var fillsCount = 0
+        for _ in 0..<2_000 {
+            if repository.drawJob(allJobs: [urgent, fills], maxMinutes: 120, categories: [], excludeIds: [], longOnly: false, favourFill: true)?.job.id == fills.id {
+                fillsCount += 1
+            }
+        }
+        // 1 vs 0.125 x 2 = 0.25: the job that uses the 2 hours wins about 80% of the time.
+        XCTAssertEqual(Double(fillsCount) / 2_000, 0.8, accuracy: 0.03)
+    }
+
+    func testPriorityCountsInLongJobDrawsToo() throws {
+        let (repository, container) = try makeRepository(seed: 11)
+        let urgent = Job(title: "Big urgent", estimatedMinutes: 300, priority: .high)
+        let big = Job(title: "Big", estimatedMinutes: 480)
+        [urgent, big].forEach { container.mainContext.insert($0) }
+        var urgentCount = 0
+        for _ in 0..<3_000 {
+            if repository.drawJob(allJobs: [urgent, big], maxMinutes: 0, categories: [], excludeIds: [], longOnly: true, favourFill: true)?.job.id == urgent.id {
+                urgentCount += 1
+            }
+        }
+        // Length is ignored in 4+ hrs mode, so it's 2 : 1 on priority alone.
+        XCTAssertEqual(Double(urgentCount) / 3_000, 2 / 3.0, accuracy: 0.03)
+    }
+
     func testAnOverrunParentNeverGivesTimeBack() throws {
         let (repository, container) = try makeRepository(seed: 1)
         let parent = Job(title: "Garage", estimatedMinutes: 30)

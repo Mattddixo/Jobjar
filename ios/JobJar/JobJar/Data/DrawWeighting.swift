@@ -22,6 +22,17 @@ func drawWeight(neededMinutes: Int, remainingMinutes: Int, picksLeft: Int?) -> D
     return min(max(weight, minDrawWeight), 1)
 }
 
+/// Priority's nudge on the draw, always applied: high-priority jobs come up twice as often as
+/// normal ones, low half as often. It multiplies with `drawWeight`, so how well a job fits the time
+/// still leads and priority tips the balance between similar fits.
+func priorityWeight(_ priority: Priority) -> Double {
+    switch priority {
+    case .high: return 2
+    case .normal: return 1
+    case .low: return 0.5
+    }
+}
+
 /// Picks one item at random, each with a chance proportional to `weight`. `unit` is a random
 /// number in 0..<1. Weights must be positive (as `drawWeight`'s are). Nil if `items` is empty.
 func pickWeighted<T>(_ items: [T], unit: Double, weight: (T) -> Double) -> T? {

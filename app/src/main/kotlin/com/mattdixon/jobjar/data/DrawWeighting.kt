@@ -32,6 +32,17 @@ fun drawWeight(neededMinutes: Int, remainingMinutes: Int, picksLeft: Int?): Doub
 }
 
 /**
+ * Priority's nudge on the draw, always applied: high-priority jobs come up twice as often as
+ * normal ones, low half as often. It multiplies with [drawWeight], so how well a job fits the time
+ * still leads and priority tips the balance between similar fits.
+ */
+fun priorityWeight(priority: Priority): Double = when (priority) {
+    Priority.HIGH -> 2.0
+    Priority.NORMAL -> 1.0
+    Priority.LOW -> 0.5
+}
+
+/**
  * Picks one item at random, each with a chance proportional to [weight]. Weights must be positive
  * (as [drawWeight]'s are). Null if [items] is empty.
  */

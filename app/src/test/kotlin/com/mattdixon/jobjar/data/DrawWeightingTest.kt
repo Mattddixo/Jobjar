@@ -100,6 +100,54 @@ class DrawWeightingTest {
     }
 
     @Test
+    fun priorityNudgesTheDrawWithOrWithoutTheTimeFit() = runTest {
+        assertEquals(2.0, priorityWeight(Priority.HIGH), 0.0)
+        assertEquals(1.0, priorityWeight(Priority.NORMAL), 0.0)
+        assertEquals(0.5, priorityWeight(Priority.LOW), 0.0)
+
+        val dao = FakeJobDao()
+        val high = dao.insert(Job(title = "High", estimatedMinutes = 30, priority = Priority.HIGH))
+        val normal = dao.insert(Job(title = "Normal", estimatedMinutes = 30))
+        val low = dao.insert(Job(title = "Low", estimatedMinutes = 30, priority = Priority.LOW))
+        val repo = repoWith(dao, 5)
+        for (favourFill in listOf(true, false)) {
+            val counts = mutableMapOf<Long, Int>()
+            repeat(7_000) {
+                val id = repo.drawJob(60, emptySet(), emptyList(), favourFill = favourFill)!!.job.id
+                counts[id] = (counts[id] ?: 0) + 1
+            }
+            // Same fit, so it's down to priority: 2 : 1 : 0.5 of 3.5.
+            assertEquals("high, fill=$favourFill", 2 / 3.5, counts.getValue(high) / 7_000.0, 0.02)
+            assertEquals("normal, fill=$favourFill", 1 / 3.5, counts.getValue(normal) / 7_000.0, 0.02)
+            assertEquals("low, fill=$favourFill", 0.5 / 3.5, counts.getValue(low) / 7_000.0, 0.02)
+        }
+    }
+
+    @Test
+    fun theTimeFitStillLeadsOverPriority() = runTest {
+        val dao = FakeJobDao()
+        dao.insert(Job(title = "Quick but urgent", estimatedMinutes = 15, priority = Priority.HIGH))
+        val fills = dao.insert(Job(title = "Fills the time", estimatedMinutes = 120))
+        val repo = repoWith(dao, 9)
+        var fillsCount = 0
+        repeat(2_000) { if (repo.drawJob(120, emptySet(), emptyList(), favourFill = true)!!.job.id == fills) fillsCount++ }
+        // 1 vs 0.125 x 2 = 0.25: the job that uses the 2 hours wins about 80% of the time.
+        assertEquals(0.8, fillsCount / 2_000.0, 0.03)
+    }
+
+    @Test
+    fun priorityCountsInLongJobDrawsToo() = runTest {
+        val dao = FakeJobDao()
+        val high = dao.insert(Job(title = "Big urgent", estimatedMinutes = 300, priority = Priority.HIGH))
+        dao.insert(Job(title = "Big", estimatedMinutes = 480))
+        val repo = repoWith(dao, 11)
+        var highCount = 0
+        repeat(3_000) { if (repo.drawJob(0, emptySet(), emptyList(), longOnly = true, favourFill = true)!!.job.id == high) highCount++ }
+        // Length is ignored in 4+ hrs mode, so it's 2 : 1 on priority alone.
+        assertEquals(2 / 3.0, highCount / 3_000.0, 0.03)
+    }
+
+    @Test
     fun anOverrunParentNeverGivesTimeBack() = runTest {
         val dao = FakeJobDao()
         val parent = dao.insert(Job(title = "Garage", estimatedMinutes = 30))

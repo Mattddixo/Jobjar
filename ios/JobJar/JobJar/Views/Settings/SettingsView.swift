@@ -59,7 +59,7 @@ struct SettingsView: View {
             } header: {
                 Text("Jar")
             } footer: {
-                Text("Draws lean toward jobs that suit the time you pick and how many you ask for. Turn off for fully random draws.")
+                Text("Draws lean toward jobs that suit the time you pick and how many you ask for. Turn off to ignore job length. Priority always counts: high-priority jobs come up more often.")
             }
 
             Section {
