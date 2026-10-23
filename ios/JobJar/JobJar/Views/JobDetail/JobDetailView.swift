@@ -146,6 +146,16 @@ struct JobDetailView: View {
                     Text(job.notes).font(.body)
                 }
 
+                ChecklistSection(
+                    items: job.checklist,
+                    onChange: { change in repository.updateChecklist(job, change) },
+                    onDelete: {
+                        if let snapshot = repository.deleteChecklist(job) {
+                            undoCenter.offer("Deleted checklist", snapshot)
+                        }
+                    }
+                )
+
                 if job.timesDrawn > 0 {
                     Text(job.timesDrawn == 1 ? "Drawn from the jar once" : "Drawn from the jar \(job.timesDrawn) times")
                         .font(.footnote)

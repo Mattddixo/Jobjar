@@ -61,6 +61,8 @@ final class Job: Identifiable {
     /// What the job costs, in hundredths of the currency (cents). Nil = no cost entered. A
     /// parent's own cost doesn't include its subtasks; see `totalCostCents`.
     var costCents: Int?
+    /// The checklist as JSON. Use `checklist`; this is just how it's stored.
+    var checklistJSON: String?
 
     init(
         id: UUID = UUID(),
@@ -82,7 +84,8 @@ final class Job: Identifiable {
         dependsOnSubtaskId: UUID? = nil,
         scheduledDate: Date? = nil,
         calendarEventId: String? = nil,
-        costCents: Int? = nil
+        costCents: Int? = nil,
+        checklist: [ChecklistItem] = []
     ) {
         self.id = id
         self.title = title
@@ -104,6 +107,54 @@ final class Job: Identifiable {
         self.scheduledDate = scheduledDate
         self.calendarEventId = calendarEventId
         self.costCents = costCents
+        self.checklist = checklist
+    }
+}
+
+/// Collapsed to this many items on the job page, with "Show all" for the rest.
+let checklistCollapsedItems = 8
+
+/// One line of a job's checklist. Checklists are lighter than subtasks: no time, no cost, never
+/// drawn, and ticking them doesn't finish the job.
+struct ChecklistItem: Codable, Equatable, Hashable {
+    var text: String
+    var checked: Bool = false
+
+    init(text: String, checked: Bool = false) {
+        self.text = text
+        self.checked = checked
+    }
+
+    /// Lenient, so a hand-edited backup with a missing field still imports.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        text = (try? container.decode(String.self, forKey: .text)) ?? ""
+        checked = (try? container.decode(Bool.self, forKey: .checked)) ?? false
+    }
+}
+
+/// Trims items and drops blank ones, so the stored list is always clean.
+func cleanChecklist(_ items: [ChecklistItem]) -> [ChecklistItem] {
+    items
+        .map { ChecklistItem(text: $0.text.trimmingCharacters(in: .whitespacesAndNewlines), checked: $0.checked) }
+        .filter { !$0.text.isEmpty }
+}
+
+extension Job {
+    /// Empty = no checklist. Only shown on the job page.
+    var checklist: [ChecklistItem] {
+        get {
+            guard let data = checklistJSON?.data(using: .utf8) else { return [] }
+            return (try? JSONDecoder().decode([ChecklistItem].self, from: data)) ?? []
+        }
+        set {
+            let cleaned = cleanChecklist(newValue)
+            if cleaned.isEmpty {
+                checklistJSON = nil
+            } else if let data = try? JSONEncoder().encode(cleaned) {
+                checklistJSON = String(data: data, encoding: .utf8)
+            }
+        }
     }
 }
 

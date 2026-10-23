@@ -85,6 +85,7 @@ object JobExport {
                 scheduledDate = if (repeats) null else job.scheduledDate,
                 calendarEventId = if (repeats || job.scheduledDate == null) null else job.calendarEventId,
                 costCents = job.costCents?.takeIf { it >= 0 },
+                checklist = cleanChecklist(job.checklist),
                 estimatedMinutes = job.estimatedMinutes.coerceAtLeast(1),
                 title = job.title.ifBlank { "Untitled job" }
             )
@@ -112,6 +113,7 @@ object JobExport {
         .put("scheduledDate", scheduledDate ?: JSONObject.NULL)
         .put("calendarEventId", calendarEventId ?: JSONObject.NULL)
         .put("costCents", costCents ?: JSONObject.NULL)
+        .put("checklist", checklistToJson(checklist))
 
     private fun JSONObject.longOrNull(key: String): Long? = if (has(key) && !isNull(key)) getLong(key) else null
     private fun JSONObject.intOrNull(key: String): Int? = if (has(key) && !isNull(key)) getInt(key) else null
@@ -136,6 +138,7 @@ object JobExport {
         dependsOnSubtaskId = longOrNull("dependsOnSubtaskId"),
         scheduledDate = longOrNull("scheduledDate"),
         calendarEventId = longOrNull("calendarEventId"),
-        costCents = longOrNull("costCents")
+        costCents = longOrNull("costCents"),
+        checklist = checklistFromJson(optJSONArray("checklist"))
     )
 }

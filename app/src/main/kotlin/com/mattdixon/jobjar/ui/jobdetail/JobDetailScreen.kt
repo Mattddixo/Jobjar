@@ -53,6 +53,7 @@ import com.mattdixon.jobjar.data.isPending
 import com.mattdixon.jobjar.data.remainingMinutes
 import com.mattdixon.jobjar.data.totalCostCents
 import com.mattdixon.jobjar.ui.components.CategoryBadge
+import com.mattdixon.jobjar.ui.components.ChecklistSection
 import com.mattdixon.jobjar.ui.components.InfoBadge
 import com.mattdixon.jobjar.ui.components.SchedulePickerDialog
 import com.mattdixon.jobjar.ui.components.SubtasksSection
@@ -274,6 +275,19 @@ fun JobDetailScreen(
                 if (currentJob.notes.isNotBlank()) {
                     Text(currentJob.notes, style = MaterialTheme.typography.bodyLarge)
                 }
+
+                val checklistUndoLabel = stringResource(R.string.checklist_undo_label)
+                ChecklistSection(
+                    items = currentJob.checklist,
+                    onChange = { change -> scope.launch { repository.updateChecklist(currentJob.id, change) } },
+                    onDelete = {
+                        scope.launch {
+                            repository.deleteChecklist(currentJob.id)?.let { snapshot ->
+                                undo.offer(UndoEvent(UndoKind.DELETED, checklistUndoLabel, snapshot))
+                            }
+                        }
+                    }
+                )
 
                 // Nothing to start on a done job or a resting repeating one.
                 if (currentJob.isPending()) {

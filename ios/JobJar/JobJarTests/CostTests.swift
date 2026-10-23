@@ -68,3 +68,77 @@ final class CostTests: XCTestCase {
         XCTAssertEqual(records.first?.costCents, 4550)
     }
 }
+
+@MainActor
+final class ChecklistTests: XCTestCase {
+    private var container: ModelContainer!
+    private var repository: JobRepository!
+
+    override func setUp() async throws {
+        container = try ModelContainer(for: Job.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+        repository = JobRepository(modelContext: container.mainContext, calendar: FakeCalendar())
+    }
+
+    private func add(_ title: String, repeatDays: Int? = nil) -> Job {
+        let edit = JobEdit(
+            title: title, notes: "", estimatedMinutes: 30, category: "", priority: .normal,
+            recurrenceDays: repeatDays, repeatWeekdays: nil, dependsOnSubtaskId: nil
+        )
+        return repository.addJob(edit, parentId: nil, allJobs: [])!
+    }
+
+    func testChecklistIsSavedTrimmedWithoutBlankLines() {
+        let job = add("Paint fence")
+        repository.updateChecklist(job) { _ in
+            [ChecklistItem(text: " Sandpaper "), ChecklistItem(text: "  "), ChecklistItem(text: "Brushes", checked: true)]
+        }
+        XCTAssertEqual(job.checklist, [ChecklistItem(text: "Sandpaper"), ChecklistItem(text: "Brushes", checked: true)])
+    }
+
+    func testEditsApplyToTheSavedList() {
+        let job = add("Paint fence")
+        repository.updateChecklist(job) { $0 + [ChecklistItem(text: "Sandpaper")] }
+        repository.updateChecklist(job) { $0 + [ChecklistItem(text: "Brushes")] }
+        XCTAssertEqual(job.checklist.map(\.text), ["Sandpaper", "Brushes"])
+    }
+
+    func testCompletingARepeatingJobUnticksItsChecklistAndUndoBringsTheTicksBack() {
+        let job = add("Weekly clean", repeatDays: 7)
+        repository.updateChecklist(job) { _ in [ChecklistItem(text: "Kitchen", checked: true), ChecklistItem(text: "Bathroom")] }
+        let snapshot = repository.toggleDone(job, allJobs: [job])
+        XCTAssertFalse(job.checklist.contains(where: \.checked))
+        repository.undo(snapshot)
+        XCTAssertEqual(job.checklist.first?.checked, true)
+    }
+
+    func testCompletingAOneOffJobLeavesItsTicksAlone() {
+        let job = add("Paint fence")
+        repository.updateChecklist(job) { _ in [ChecklistItem(text: "Sandpaper", checked: true)] }
+        repository.toggleDone(job, allJobs: [job])
+        XCTAssertEqual(job.checklist.first?.checked, true)
+    }
+
+    func testDeletingAChecklistCanBeUndone() {
+        let job = add("Paint fence")
+        repository.updateChecklist(job) { _ in [ChecklistItem(text: "Sandpaper")] }
+        let snapshot = repository.deleteChecklist(job)
+        XCTAssertTrue(job.checklist.isEmpty)
+        repository.undo(try! XCTUnwrap(snapshot))
+        XCTAssertEqual(job.checklist, [ChecklistItem(text: "Sandpaper")])
+        XCTAssertNil(repository.deleteChecklist(add("Other")))
+    }
+
+    func testBackupsKeepTheChecklistAndReadAndroidFiles() throws {
+        let job = Job(title: "Garage", estimatedMinutes: 60, checklist: [ChecklistItem(text: "Bin bags", checked: true)])
+        let records = try JobExport.decode(JobExport.encode([job])).get()
+        XCTAssertEqual(records.first?.checklist, [ChecklistItem(text: "Bin bags", checked: true)])
+
+        let android = """
+        {"format":"job-jar","version":1,"exportedAt":1,"jobs":[
+          {"id":1,"title":"Garage","estimatedMinutes":60,"checklist":[{"text":"Gloves","checked":false},{"text":" "},{"text":"Tape"}]}
+        ]}
+        """
+        let fromAndroid = try JobExport.decode(Data(android.utf8)).get()
+        XCTAssertEqual(fromAndroid.first?.checklist, [ChecklistItem(text: "Gloves"), ChecklistItem(text: "Tape")])
+    }
+}

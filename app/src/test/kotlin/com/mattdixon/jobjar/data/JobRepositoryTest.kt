@@ -246,6 +246,52 @@ class JobRepositoryTest {
         assertTrue(calendar.events.isEmpty())
     }
 
+    // --- Checklists ---
+
+    @Test
+    fun checklistIsSavedTrimmedWithoutBlankLines() = runTest {
+        val job = add("Paint fence")
+        repo.setChecklist(job, listOf(ChecklistItem(" Sandpaper "), ChecklistItem("  "), ChecklistItem("Brushes", checked = true)))
+        assertEquals(listOf(ChecklistItem("Sandpaper"), ChecklistItem("Brushes", checked = true)), dao.row(job).checklist)
+    }
+
+    @Test
+    fun editingTheJobKeepsItsChecklist() = runTest {
+        val job = add("Paint fence")
+        repo.setChecklist(job, listOf(ChecklistItem("Sandpaper")))
+        repo.updateJob(dao.row(job).copy(title = "Paint the fence", checklist = emptyList()))
+        assertEquals(listOf(ChecklistItem("Sandpaper")), dao.row(job).checklist)
+    }
+
+    @Test
+    fun completingARepeatingJobUnticksItsChecklistAndUndoBringsTheTicksBack() = runTest {
+        val job = add("Weekly clean", recurrenceDays = 7)
+        repo.setChecklist(job, listOf(ChecklistItem("Kitchen", checked = true), ChecklistItem("Bathroom")))
+        val snapshot = repo.toggleDone(job)!!
+        assertTrue(dao.row(job).checklist.none { it.checked })
+        repo.undo(snapshot)
+        assertTrue(dao.row(job).checklist.first().checked)
+    }
+
+    @Test
+    fun completingAOneOffJobLeavesItsTicksAlone() = runTest {
+        val job = add("Paint fence")
+        repo.setChecklist(job, listOf(ChecklistItem("Sandpaper", checked = true)))
+        repo.toggleDone(job)
+        assertTrue(dao.row(job).checklist.single().checked)
+    }
+
+    @Test
+    fun deletingAChecklistCanBeUndone() = runTest {
+        val job = add("Paint fence")
+        repo.setChecklist(job, listOf(ChecklistItem("Sandpaper")))
+        val snapshot = repo.deleteChecklist(job)!!
+        assertTrue(dao.row(job).checklist.isEmpty())
+        repo.undo(snapshot)
+        assertEquals(listOf(ChecklistItem("Sandpaper")), dao.row(job).checklist)
+        assertNull("nothing to delete", repo.deleteChecklist(add("Other")))
+    }
+
     @Test
     fun editingAJobSavesItsCost() = runTest {
         val job = add("Paint fence")

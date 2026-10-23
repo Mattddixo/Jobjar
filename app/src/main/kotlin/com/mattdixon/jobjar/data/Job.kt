@@ -50,7 +50,9 @@ data class Job(
      * What the job costs, in hundredths of the currency (cents). Null = no cost entered. A
      * parent's own cost doesn't include its subtasks; see [totalCostCents].
      */
-    val costCents: Long? = null
+    val costCents: Long? = null,
+    /** Empty = no checklist. Only shown on the job page. */
+    val checklist: List<ChecklistItem> = emptyList()
 )
 
 /** Due now? For repeating jobs that's about [nextDueAt], not [isDone]. */

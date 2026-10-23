@@ -36,6 +36,7 @@ struct JobRecord: Equatable {
     var scheduledDate: Date?
     var calendarEventId: String?
     var costCents: Int?
+    var checklist: [ChecklistItem] = []
 
     init(
         id: UUID, title: String, notes: String = "", estimatedMinutes: Int, category: String = "",
@@ -43,7 +44,7 @@ struct JobRecord: Equatable {
         completedAt: Date? = nil, timesDrawn: Int = 0, parentId: UUID? = nil, recurrenceDays: Int? = nil,
         repeatWeekdays: Int? = nil, nextDueAt: Date? = nil, completionCount: Int = 0,
         dependsOnSubtaskId: UUID? = nil, scheduledDate: Date? = nil, calendarEventId: String? = nil,
-        costCents: Int? = nil
+        costCents: Int? = nil, checklist: [ChecklistItem] = []
     ) {
         self.id = id
         self.title = title
@@ -65,6 +66,7 @@ struct JobRecord: Equatable {
         self.scheduledDate = scheduledDate
         self.calendarEventId = calendarEventId
         self.costCents = costCents
+        self.checklist = checklist
     }
 
     init(_ job: Job) {
@@ -75,7 +77,7 @@ struct JobRecord: Equatable {
             parentId: job.parentId, recurrenceDays: job.recurrenceDays, repeatWeekdays: job.repeatWeekdays,
             nextDueAt: job.nextDueAt, completionCount: job.completionCount,
             dependsOnSubtaskId: job.dependsOnSubtaskId, scheduledDate: job.scheduledDate,
-            calendarEventId: job.calendarEventId, costCents: job.costCents
+            calendarEventId: job.calendarEventId, costCents: job.costCents, checklist: job.checklist
         )
     }
 
@@ -99,6 +101,7 @@ struct JobRecord: Equatable {
         job.scheduledDate = scheduledDate
         job.calendarEventId = calendarEventId
         job.costCents = costCents
+        job.checklist = checklist
     }
 
     func makeJob() -> Job {
@@ -309,6 +312,10 @@ struct JobRepository {
                 job.nextDueAt = nextDueAfterCompletion(recurrenceDays: days, repeatWeekdays: job.repeatWeekdays, completedAt: now)
                 job.completionCount += 1
                 job.isInProgress = false
+                // Fresh ticks for next time.
+                if job.checklist.contains(where: \.checked) {
+                    job.checklist = job.checklist.map { ChecklistItem(text: $0.text, checked: false) }
+                }
             } else {
                 job.nextDueAt = nil
             }
@@ -407,6 +414,22 @@ struct JobRepository {
         }
         job.scheduledDate = nil
         job.calendarEventId = nil
+    }
+
+    /// Applies `change` to the job's checklist and saves it (trimmed, blank lines dropped).
+    func updateChecklist(_ job: Job, _ change: ([ChecklistItem]) -> [ChecklistItem]) {
+        job.checklist = change(job.checklist)
+        save()
+    }
+
+    /// Removes the whole checklist. Returns an undo snapshot, or nil if there wasn't one.
+    @discardableResult
+    func deleteChecklist(_ job: Job) -> UndoSnapshot? {
+        guard !job.checklist.isEmpty else { return nil }
+        let snapshot = UndoSnapshot(records: [JobRecord(job)])
+        job.checklist = []
+        save()
+        return snapshot
     }
 
     /// "Removing" a category just blanks it on every job that has it.

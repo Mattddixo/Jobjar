@@ -173,6 +173,17 @@
     <string name="job_not_found">This job has been deleted.</string>
     <string name="priority_display">%1$s priority</string>
     <string name="cost_display">Cost %1$s</string>
+    <string name="checklist_add">Add checklist</string>
+    <string name="checklist_title">Checklist</string>
+    <string name="checklist_progress">Checklist · %1$d of %2$d</string>
+    <string name="checklist_add_item">Add item</string>
+    <string name="checklist_show_all">Show all %1$d</string>
+    <string name="checklist_show_less">Show less</string>
+    <string name="checklist_untick_all">Untick all</string>
+    <string name="checklist_delete">Delete checklist</string>
+    <string name="checklist_undo_label">checklist</string>
+    <string name="cd_checklist_options">Checklist options</string>
+    <string name="cd_remove_item">Remove item</string>
     <string name="cost_display_with_subtasks">Total cost %1$s · %2$s for this job, %3$s from subtasks</string>
     <string name="cost_display_subtasks_only">Total cost %1$s from subtasks</string>
     <string name="action_mark_as_done">Mark complete</string>

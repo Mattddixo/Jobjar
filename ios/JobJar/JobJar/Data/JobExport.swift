@@ -53,6 +53,7 @@ enum JobExport {
         var dependsOnSubtaskId: Int64?
         var scheduledDate: Int64?
         var costCents: Int64?
+        var checklist: [ChecklistItem]?
     }
 
     private static func millis(_ date: Date) -> Int64 { Int64((date.timeIntervalSince1970 * 1000).rounded()) }
@@ -84,7 +85,8 @@ enum JobExport {
                 completionCount: job.completionCount,
                 dependsOnSubtaskId: job.dependsOnSubtaskId.flatMap { numbers[$0] },
                 scheduledDate: job.scheduledDate.map(millis),
-                costCents: job.costCents.map(Int64.init)
+                costCents: job.costCents.map(Int64.init),
+                checklist: job.checklist
             )
         }
         let encoder = JSONEncoder()
@@ -141,7 +143,8 @@ enum JobExport {
                 completionCount: entry.completionCount ?? 0,
                 dependsOnSubtaskId: validDependency ? entry.dependsOnSubtaskId.flatMap { uuids[$0] } : nil,
                 scheduledDate: repeats || isDone ? nil : entry.scheduledDate.map(date),
-                costCents: entry.costCents.flatMap { $0 >= 0 && $0 <= Int64(Int32.max) * 100 ? Int($0) : nil }
+                costCents: entry.costCents.flatMap { $0 >= 0 && $0 <= Int64(Int32.max) * 100 ? Int($0) : nil },
+                checklist: cleanChecklist(entry.checklist ?? [])
             )
         }
         return .success(records)

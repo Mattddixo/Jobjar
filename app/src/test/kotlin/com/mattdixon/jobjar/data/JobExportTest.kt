@@ -7,7 +7,10 @@ import org.junit.Test
 
 class JobExportTest {
     private val jobs = listOf(
-        Job(id = 1, title = "Garage", estimatedMinutes = 120, category = "Home", priority = Priority.HIGH, createdAt = 10, costCents = 4000),
+        Job(
+            id = 1, title = "Garage", estimatedMinutes = 120, category = "Home", priority = Priority.HIGH, createdAt = 10, costCents = 4000,
+            checklist = listOf(ChecklistItem("Bin bags", checked = true), ChecklistItem("Gloves"))
+        ),
         Job(id = 2, title = "Sweep", estimatedMinutes = 30, parentId = 1, isDone = true, completedAt = 20, createdAt = 11),
         Job(id = 3, title = "Haul", estimatedMinutes = 45, parentId = 1, dependsOnSubtaskId = 2, scheduledDate = 99, calendarEventId = 7, createdAt = 12),
         Job(id = 4, title = "Bins", estimatedMinutes = 5, recurrenceDays = 7, repeatWeekdays = WEEKDAYS_MASK, nextDueAt = 50, completionCount = 3, createdAt = 13)
@@ -17,6 +20,15 @@ class JobExportTest {
     fun roundTripKeepsEveryField() {
         val parsed = JobExport.parse(JobExport.write(jobs, exportedAt = 1)) as JobExport.ParseResult.Success
         assertEquals(jobs, parsed.jobs)
+    }
+
+    @Test
+    fun checklistStorageIsLenient() {
+        val items = listOf(ChecklistItem("Bin bags", checked = true), ChecklistItem("Gloves"))
+        assertEquals(items, decodeChecklist(encodeChecklist(items)))
+        assertEquals(emptyList<ChecklistItem>(), decodeChecklist(""))
+        assertEquals(emptyList<ChecklistItem>(), decodeChecklist("not json"))
+        assertEquals(listOf(ChecklistItem("Gloves")), decodeChecklist("""[{"text":"  "},{"text":"Gloves"},42]"""))
     }
 
     @Test

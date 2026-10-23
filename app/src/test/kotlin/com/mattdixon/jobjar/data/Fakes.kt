@@ -65,6 +65,7 @@ class FakeJobDao : JobDao {
     override suspend fun cycleRepeating(id: Long, completedAt: Long, nextDueAt: Long) = edit(id) {
         it.copy(completedAt = completedAt, nextDueAt = nextDueAt, completionCount = it.completionCount + 1, isInProgress = false)
     }
+    override suspend fun setChecklist(id: Long, checklist: List<ChecklistItem>) = edit(id) { it.copy(checklist = checklist) }
     override suspend fun setEstimatedMinutes(id: Long, minutes: Int) = edit(id) { it.copy(estimatedMinutes = minutes) }
     override suspend fun clearDependenciesOn(subtaskId: Long) {
         rows.value = rows.value.mapValues { (_, j) -> if (j.dependsOnSubtaskId == subtaskId) j.copy(dependsOnSubtaskId = null) else j }

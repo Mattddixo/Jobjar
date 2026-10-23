@@ -89,6 +89,9 @@ interface JobDao {
     @Query("UPDATE jobs SET completedAt = :completedAt, nextDueAt = :nextDueAt, completionCount = completionCount + 1, isInProgress = 0 WHERE id = :id")
     suspend fun cycleRepeating(id: Long, completedAt: Long, nextDueAt: Long)
 
+    @Query("UPDATE jobs SET checklist = :checklist WHERE id = :id")
+    suspend fun setChecklist(id: Long, checklist: List<ChecklistItem>)
+
     @Query("UPDATE jobs SET estimatedMinutes = :minutes WHERE id = :id")
     suspend fun setEstimatedMinutes(id: Long, minutes: Int)
 

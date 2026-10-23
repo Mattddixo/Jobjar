@@ -261,10 +261,32 @@ class JobRepository(
             .forEach { dao.markNotDone(it.id) }
     }
 
-    /** Next cycle: bump the count, set the next due date, clear in-progress. */
+    /** Next cycle: bump the count, set the next due date, clear in-progress and the checklist ticks. */
     private suspend fun cycleRepeatingJob(job: Job, now: Long) {
         val nextDue = nextDueAfterCompletion(job.recurrenceDays!!, job.repeatWeekdays, now, zone())
         dao.cycleRepeating(job.id, completedAt = now, nextDueAt = nextDue)
+        if (job.checklist.any { it.checked }) {
+            dao.setChecklist(job.id, job.checklist.map { it.copy(checked = false) })
+        }
+    }
+
+    /** Saves the job's checklist as given (trimmed, blank lines dropped). Empty removes it. */
+    suspend fun setChecklist(jobId: Long, items: List<ChecklistItem>) = updateChecklist(jobId) { items }
+
+    /**
+     * Applies [change] to the checklist as it is in the database right now, so quick edits in a
+     * row (adding items one after another) can't overwrite each other.
+     */
+    suspend fun updateChecklist(jobId: Long, change: (List<ChecklistItem>) -> List<ChecklistItem>) = transactions.run {
+        val job = dao.getJob(jobId) ?: return@run
+        dao.setChecklist(jobId, cleanChecklist(change(job.checklist)))
+    }
+
+    /** Removes the whole checklist. Returns an undo snapshot, or null if there wasn't one. */
+    suspend fun deleteChecklist(jobId: Long): UndoSnapshot? = transactions.run {
+        val job = dao.getJob(jobId)?.takeIf { it.checklist.isNotEmpty() } ?: return@run null
+        dao.setChecklist(jobId, emptyList())
+        UndoSnapshot(listOf(job))
     }
 
     private suspend fun autoCompleteParentIfFinished(parentId: Long, now: Long) {
