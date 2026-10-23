@@ -1,4 +1,8 @@
-<resources>
-    <!-- Base platform theme; actual Material 3 theming is applied at runtime by JobJarTheme (Compose). -->
-    <style name="Theme.JobJar" parent="android:Theme.Material.Light.NoActionBar" />
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base platform theme; actual Material 3 theming is applied at runtime by JobJarTheme (Compose).
+         This one only colours the start-up screen, so it has a dark version in values-night. -->
+    <style name="Theme.JobJar" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+        <item name="android:windowSplashScreenBackground" tools:targetApi="31">@color/window_background</item>
+    </style>
 </resources>

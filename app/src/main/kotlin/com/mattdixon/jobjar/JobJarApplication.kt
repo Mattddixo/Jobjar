@@ -5,6 +5,7 @@ import com.mattdixon.jobjar.data.CalendarScheduler
 import com.mattdixon.jobjar.data.JobDatabase
 import com.mattdixon.jobjar.data.JobRepository
 import com.mattdixon.jobjar.data.RoomTransactionRunner
+import com.mattdixon.jobjar.data.ThemePreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -20,6 +21,8 @@ class JobJarApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // Covers people who picked a theme before the start-up screen followed it.
+        ThemePreferences.applyToSystem(this)
         appScope.launch { repository.mergeCategoryCase() }
     }
 }
