@@ -3,6 +3,7 @@ import SwiftUI
 
 private let quickDurations = [5, 15, 30, 45, 60, 90, 120, 180]
 private let recurrencePresets = [1, 7, 14, 30]
+private let maxTitleLength = 80
 
 struct AddEditJobView: View {
     let jobId: UUID?
@@ -53,6 +54,16 @@ struct AddEditJobView: View {
         Form {
             Section {
                 TextField("What needs doing?", text: $title)
+                    .onChange(of: title) { _, new in
+                        if new.count > maxTitleLength { title = String(new.prefix(maxTitleLength)) }
+                    }
+                HStack {
+                    Spacer()
+                    Text("\(title.count)/\(maxTitleLength)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
                 TextField("Notes", text: $notes, axis: .vertical)
                     .lineLimit(2...4)
             }
@@ -78,6 +89,21 @@ struct AddEditJobView: View {
                     in: 0...1440,
                     step: 5
                 )
+
+                // Uses what's typed right now for this subtask, not its saved estimate.
+                if isLoaded, let parentId = resolvedParentId, let parent = allJobs.first(where: { $0.id == parentId }) {
+                    let others = allJobs.filter { $0.parentId == parentId && $0.id != savedJobId }
+                    AllocationSummary(
+                        estimatedMinutes: parent.estimatedMinutes,
+                        subtasksTotalMinutes: others.reduce(0) { $0 + $1.estimatedMinutes } + estimatedMinutes
+                    )
+                }
+                if resolvedParentId == nil, let savedJobId, hasSubtasks {
+                    AllocationSummary(
+                        estimatedMinutes: estimatedMinutes,
+                        subtasksTotalMinutes: allJobs.filter { $0.parentId == savedJobId }.reduce(0) { $0 + $1.estimatedMinutes }
+                    )
+                }
             }
 
             Section("Category") {

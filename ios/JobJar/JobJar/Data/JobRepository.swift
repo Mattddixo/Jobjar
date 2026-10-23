@@ -17,44 +17,30 @@ struct JobEdit {
 struct JobRecord: Equatable {
     var id: UUID
     var title: String
-    var notes: String
+    var notes: String = ""
     var estimatedMinutes: Int
-    var category: String
-    var priority: Priority
-    var isDone: Bool
-    var createdAt: Date
+    var category: String = ""
+    var priority: Priority = .normal
+    var isDone: Bool = false
+    var isInProgress: Bool = false
+    var createdAt: Date = .now
     var completedAt: Date?
-    var timesDrawn: Int
+    var timesDrawn: Int = 0
     var parentId: UUID?
     var recurrenceDays: Int?
     var repeatWeekdays: Int?
     var nextDueAt: Date?
-    var completionCount: Int
+    var completionCount: Int = 0
     var dependsOnSubtaskId: UUID?
-
-    init(_ job: Job) {
-        id = job.id
-        title = job.title
-        notes = job.notes
-        estimatedMinutes = job.estimatedMinutes
-        category = job.category
-        priority = job.priority
-        isDone = job.isDone
-        createdAt = job.createdAt
-        completedAt = job.completedAt
-        timesDrawn = job.timesDrawn
-        parentId = job.parentId
-        recurrenceDays = job.recurrenceDays
-        repeatWeekdays = job.repeatWeekdays
-        nextDueAt = job.nextDueAt
-        completionCount = job.completionCount
-        dependsOnSubtaskId = job.dependsOnSubtaskId
-    }
+    var scheduledDate: Date?
+    var calendarEventId: String?
 
     init(
-        id: UUID, title: String, notes: String, estimatedMinutes: Int, category: String, priority: Priority,
-        isDone: Bool, createdAt: Date, completedAt: Date?, timesDrawn: Int, parentId: UUID?,
-        recurrenceDays: Int?, repeatWeekdays: Int?, nextDueAt: Date?, completionCount: Int, dependsOnSubtaskId: UUID?
+        id: UUID, title: String, notes: String = "", estimatedMinutes: Int, category: String = "",
+        priority: Priority = .normal, isDone: Bool = false, isInProgress: Bool = false, createdAt: Date = .now,
+        completedAt: Date? = nil, timesDrawn: Int = 0, parentId: UUID? = nil, recurrenceDays: Int? = nil,
+        repeatWeekdays: Int? = nil, nextDueAt: Date? = nil, completionCount: Int = 0,
+        dependsOnSubtaskId: UUID? = nil, scheduledDate: Date? = nil, calendarEventId: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -63,6 +49,7 @@ struct JobRecord: Equatable {
         self.category = category
         self.priority = priority
         self.isDone = isDone
+        self.isInProgress = isInProgress
         self.createdAt = createdAt
         self.completedAt = completedAt
         self.timesDrawn = timesDrawn
@@ -72,6 +59,20 @@ struct JobRecord: Equatable {
         self.nextDueAt = nextDueAt
         self.completionCount = completionCount
         self.dependsOnSubtaskId = dependsOnSubtaskId
+        self.scheduledDate = scheduledDate
+        self.calendarEventId = calendarEventId
+    }
+
+    init(_ job: Job) {
+        self.init(
+            id: job.id, title: job.title, notes: job.notes, estimatedMinutes: job.estimatedMinutes,
+            category: job.category, priority: job.priority, isDone: job.isDone, isInProgress: job.isInProgress,
+            createdAt: job.createdAt, completedAt: job.completedAt, timesDrawn: job.timesDrawn,
+            parentId: job.parentId, recurrenceDays: job.recurrenceDays, repeatWeekdays: job.repeatWeekdays,
+            nextDueAt: job.nextDueAt, completionCount: job.completionCount,
+            dependsOnSubtaskId: job.dependsOnSubtaskId, scheduledDate: job.scheduledDate,
+            calendarEventId: job.calendarEventId
+        )
     }
 
     func apply(to job: Job) {
@@ -81,6 +82,7 @@ struct JobRecord: Equatable {
         job.category = category
         job.priority = priority
         job.isDone = isDone
+        job.isInProgress = isInProgress
         job.createdAt = createdAt
         job.completedAt = completedAt
         job.timesDrawn = timesDrawn
@@ -90,6 +92,8 @@ struct JobRecord: Equatable {
         job.nextDueAt = nextDueAt
         job.completionCount = completionCount
         job.dependsOnSubtaskId = dependsOnSubtaskId
+        job.scheduledDate = scheduledDate
+        job.calendarEventId = calendarEventId
     }
 
     func makeJob() -> Job {
@@ -104,11 +108,19 @@ struct UndoSnapshot: Equatable {
     let records: [JobRecord]
 }
 
+/// A drawn job and how many minutes it counts against the time budget.
+struct DrawPick {
+    let job: Job
+    let minutesUsed: Int
+}
+
 /// All the job rules live here (same as the Android repository). Views read through @Query
-/// and pass their `allJobs` in.
+/// and pass their `allJobs` in. Calendar calls go through `calendar` so tests can fake it.
 @MainActor
 struct JobRepository {
     let modelContext: ModelContext
+    var calendar: CalendarGateway = DeviceCalendar.shared
+    var now: () -> Date = { .now }
 
     private func fetchAll() -> [Job] {
         (try? modelContext.fetch(FetchDescriptor<Job>())) ?? []
@@ -129,6 +141,10 @@ struct JobRepository {
     private func validWeekdays(_ mask: Int?) -> Int? {
         guard let mask, mask & everyDayMask != 0 else { return nil }
         return mask
+    }
+
+    private func end(of job: Job, startingAt start: Date) -> Date {
+        start.addingTimeInterval(Double(job.estimatedMinutes) * 60)
     }
 
     /// Parent estimate grows to cover its subtasks. Never shrinks.
@@ -156,10 +172,11 @@ struct JobRepository {
             estimatedMinutes: edit.estimatedMinutes,
             category: canonicalCategory(edit.category, excluding: nil, allJobs: allJobs),
             priority: edit.priority,
+            createdAt: now(),
             parentId: parentId,
             recurrenceDays: repeats ? edit.recurrenceDays : nil,
             repeatWeekdays: weekdays,
-            nextDueAt: repeats ? initialNextDue(repeatWeekdays: weekdays) : nil,
+            nextDueAt: repeats ? initialNextDue(repeatWeekdays: weekdays, now: now()) : nil,
             dependsOnSubtaskId: parentId != nil ? edit.dependsOnSubtaskId : nil
         )
         modelContext.insert(job)
@@ -170,9 +187,14 @@ struct JobRepository {
         return job
     }
 
-    /// Saves the form onto `job`. Jobs with subtasks can't repeat, turning repeat on clears done,
-    /// and switching repeat type restarts the cycle.
+    /// Saves the form onto `job`.
+    ///
+    /// - Jobs with subtasks can't repeat.
+    /// - Turning repeat on clears done and any booking.
+    /// - Switching repeat type restarts the cycle. Changing the number of days doesn't.
+    /// - If it's booked, the calendar event gets the new title/length.
     func updateJob(_ job: Job, with edit: JobEdit, allJobs: [Job]) {
+        let before = JobRecord(job)
         let hasSubtasks = allJobs.contains { $0.parentId == job.id }
         let repeats = edit.recurrenceDays != nil && job.parentId == nil && !hasSubtasks
         let newDays = repeats ? edit.recurrenceDays : nil
@@ -182,19 +204,22 @@ struct JobRepository {
         if newDays == nil {
             nextDue = nil
         } else if newWeekdays != job.repeatWeekdays {
-            nextDue = initialNextDue(repeatWeekdays: newWeekdays)
+            nextDue = initialNextDue(repeatWeekdays: newWeekdays, now: now())
         } else if job.recurrenceDays == nil {
             nextDue = nil
         } else {
             nextDue = job.nextDueAt
         }
 
+        if newDays != nil {
+            job.isDone = false
+            clearSchedule(job)
+        }
         job.title = edit.title.trimmingCharacters(in: .whitespacesAndNewlines)
         job.notes = edit.notes.trimmingCharacters(in: .whitespacesAndNewlines)
         job.estimatedMinutes = edit.estimatedMinutes
         job.category = canonicalCategory(edit.category, excluding: job.id, allJobs: allJobs)
         job.priority = edit.priority
-        if newDays != nil { job.isDone = false }
         job.recurrenceDays = newDays
         job.repeatWeekdays = newWeekdays
         job.nextDueAt = nextDue
@@ -202,11 +227,16 @@ struct JobRepository {
         if let parentId = job.parentId {
             growParentToFitSubtasks(parentId: parentId, allJobs: allJobs)
         }
+
+        if let eventId = job.calendarEventId, let start = job.scheduledDate,
+           job.title != before.title || job.estimatedMinutes != before.estimatedMinutes {
+            _ = calendar.updateEvent(eventId, owner: job, title: job.title, start: start, end: end(of: job, startingAt: start))
+        }
         save()
     }
 
-    /// Deletes the job (and its subtasks if it's a parent). Siblings that depended on a deleted
-    /// subtask lose the dependency. Returns an undo snapshot.
+    /// Deletes the job (and its subtasks if it's a parent), plus their calendar events. Siblings
+    /// that depended on a deleted subtask lose the dependency. Returns an undo snapshot.
     @discardableResult
     func deleteJob(_ job: Job, allJobs: [Job]) -> UndoSnapshot {
         let removed = job.parentId == nil ? [job] + allJobs.filter { $0.parentId == job.id } : [job]
@@ -216,27 +246,44 @@ struct JobRepository {
             dependent.dependsOnSubtaskId = nil
         }
         for row in removed {
+            if let eventId = row.calendarEventId {
+                _ = calendar.deleteEvent(eventId, owner: row)
+            }
             modelContext.delete(row)
         }
         save()
         return snapshot
     }
 
-    /// Puts the jobs back, re-creating deleted ones.
+    /// Puts the jobs back, re-creating deleted ones and any calendar events the change removed.
     func undo(_ snapshot: UndoSnapshot) {
         let current = Dictionary(fetchAll().map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var restored: [Job] = []
         for record in snapshot.records {
             if let existing = current[record.id] {
                 record.apply(to: existing)
+                restored.append(existing)
             } else {
-                modelContext.insert(record.makeJob())
+                let job = record.makeJob()
+                modelContext.insert(job)
+                restored.append(job)
             }
+        }
+        for job in restored {
+            guard let start = job.scheduledDate else { continue }
+            if let eventId = job.calendarEventId, calendar.ownsEvent(eventId, owner: job) { continue }
+            job.calendarEventId = calendar.insertEvent(for: job, start: start, end: end(of: job, startingAt: start))
         }
         save()
     }
 
-    /// Done / not done. Repeating jobs cycle instead (or wake up if resting). A parent takes its
-    /// open subtasks with it, stamped with its own completedAt; reopening it reopens just those.
+    /// Done / not done.
+    ///
+    /// - Repeating: completes the cycle, or if it's resting, makes it due now.
+    /// - Otherwise flips isDone. Completing clears any booking, and a parent takes its open
+    ///   subtasks with it, stamped with its own completedAt. Reopening the parent reopens just
+    ///   those; ones you finished yourself stay done.
+    ///
     /// Returns an undo snapshot.
     @discardableResult
     func toggleDone(_ job: Job, allJobs: [Job]) -> UndoSnapshot {
@@ -247,13 +294,14 @@ struct JobRepository {
             family = [job] + allJobs.filter { $0.parentId == job.id }
         }
         let snapshot = UndoSnapshot(records: family.map(JobRecord.init))
-        let now = Date.now
+        let now = now()
 
         if let days = job.recurrenceDays {
             if job.isPending(now: now) {
                 job.completedAt = now
                 job.nextDueAt = nextDueAfterCompletion(recurrenceDays: days, repeatWeekdays: job.repeatWeekdays, completedAt: now)
                 job.completionCount += 1
+                job.isInProgress = false
             } else {
                 job.nextDueAt = nil
             }
@@ -270,19 +318,24 @@ struct JobRepository {
                 }
             }
         } else {
-            job.isDone = true
-            job.completedAt = now
+            markDone(job, at: now)
             if let parentId = job.parentId {
                 autoCompleteParentIfFinished(parentId: parentId, allJobs: allJobs, now: now)
             } else {
                 for subtask in allJobs where subtask.parentId == job.id && !subtask.isDone {
-                    subtask.isDone = true
-                    subtask.completedAt = now
+                    markDone(subtask, at: now)
                 }
             }
         }
         save()
         return snapshot
+    }
+
+    private func markDone(_ job: Job, at time: Date) {
+        clearSchedule(job)
+        job.isDone = true
+        job.isInProgress = false
+        job.completedAt = time
     }
 
     private func autoCompleteParentIfFinished(parentId: UUID, allJobs: [Job], now: Date) {
@@ -293,8 +346,7 @@ struct JobRepository {
         // A hair after the last subtask, so the parent never shares a timestamp with one you ticked
         // yourself.
         let latest = siblings.compactMap(\.completedAt).max() ?? now
-        parent.isDone = true
-        parent.completedAt = max(now, latest.addingTimeInterval(0.001))
+        markDone(parent, at: max(now, latest.addingTimeInterval(0.001)))
     }
 
     /// Reopening a subtask reopens its parent.
@@ -302,6 +354,60 @@ struct JobRepository {
         guard let parent = allJobs.first(where: { $0.id == parentId }), parent.isDone else { return }
         parent.isDone = false
         parent.completedAt = nil
+    }
+
+    /// Start / put back in the jar. Starting a booked job unbooks it.
+    func toggleInProgress(_ job: Job) {
+        if job.isInProgress {
+            job.isInProgress = false
+        } else {
+            clearSchedule(job)
+            job.isInProgress = true
+        }
+        save()
+    }
+
+    /// Books a job and writes a calendar event for it (moving the existing one if there is
+    /// one). Booked jobs stay out of the jar and aren't in progress. Repeating jobs can't be
+    /// booked. Returns whether a calendar event was written; the booking is saved either way.
+    @discardableResult
+    func scheduleJob(_ job: Job, at start: Date) -> Bool {
+        guard job.recurrenceDays == nil else { return false }
+        let finish = end(of: job, startingAt: start)
+        var eventId: String?
+        if let existing = job.calendarEventId,
+           calendar.updateEvent(existing, owner: job, title: job.title, start: start, end: finish) {
+            eventId = existing
+        } else {
+            eventId = calendar.insertEvent(for: job, start: start, end: finish)
+        }
+        job.scheduledDate = start
+        job.calendarEventId = eventId
+        job.isInProgress = false
+        save()
+        return eventId != nil
+    }
+
+    /// Unbooks a job and deletes its calendar event.
+    func unscheduleJob(_ job: Job) {
+        clearSchedule(job)
+        save()
+    }
+
+    private func clearSchedule(_ job: Job) {
+        if let eventId = job.calendarEventId {
+            _ = calendar.deleteEvent(eventId, owner: job)
+        }
+        job.scheduledDate = nil
+        job.calendarEventId = nil
+    }
+
+    /// "Removing" a category just blanks it on every job that has it.
+    func removeCategory(_ category: String, allJobs: [Job]) {
+        for job in allJobs where job.category == category {
+            job.category = ""
+        }
+        save()
     }
 
     /// Runs on launch: detaches subtasks from repeating jobs (older data) and merges categories
@@ -338,17 +444,21 @@ struct JobRepository {
         save()
     }
 
-    /// Random job that fits `maxMinutes`, or with `longOnly` one of `longJobMinutes` or more.
-    /// Skips anything not due, and subtasks waiting on a sibling.
-    func drawJob(allJobs: [Job], maxMinutes: Int, category: String?, excludeIds: Set<UUID>, longOnly: Bool) -> Job? {
+    /// Picks a random job that fits `maxMinutes`, or with `longOnly` one of `longJobMinutes` or
+    /// more. Skips anything done, not due, started or booked, plus subtasks whose prerequisite
+    /// isn't done or whose parent has been started. Parents count by their remaining minutes.
+    func drawJob(allJobs: [Job], maxMinutes: Int, categories: Set<String>, excludeIds: Set<UUID>, longOnly: Bool) -> DrawPick? {
+        let now = now()
+        let byId = Dictionary(allJobs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let subtasksByParent = Dictionary(grouping: allJobs.filter { $0.parentId != nil }) { $0.parentId! }
-        let subtasksById = Dictionary(uniqueKeysWithValues: subtasksByParent.values.flatMap { $0 }.map { ($0.id, $0) })
+        let subtasksById = Dictionary(subtasksByParent.values.flatMap { $0 }.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
 
         let candidates = allJobs.filter { job in
-            guard job.isPending() else { return false }
-            guard !excludeIds.contains(job.id) else { return false }
-            if let category, job.category != category { return false }
-            if job.parentId != nil && !job.isUnblocked(siblingsById: subtasksById) { return false }
+            guard job.isAvailableToDraw(now: now), !excludeIds.contains(job.id) else { return false }
+            if !categories.isEmpty && !categories.contains(job.category) { return false }
+            if let parentId = job.parentId {
+                guard job.isUnblocked(siblingsById: subtasksById), job.isParentAvailable(byId[parentId]) else { return false }
+            }
             let needed = minutesNeeded(job: job, subtasksByParent: subtasksByParent)
             return longOnly ? needed >= longJobMinutes : needed <= maxMinutes
         }
@@ -356,7 +466,7 @@ struct JobRepository {
         guard let picked = candidates.randomElement() else { return nil }
         picked.timesDrawn += 1
         save()
-        return picked
+        return DrawPick(job: picked, minutesUsed: minutesNeeded(job: picked, subtasksByParent: subtasksByParent))
     }
 
     private func minutesNeeded(job: Job, subtasksByParent: [UUID: [Job]]) -> Int {

@@ -43,14 +43,16 @@ struct StatsView: View {
                                 ProgressView(value: Double(stat.totalMinutes), total: Double(maxMinutes))
                             }
                             .padding(16)
-                            .background(RoundedRectangle(cornerRadius: 16).fill(Color(.secondarySystemBackground)))
+                            .cardStyle()
                         }
                     }
                 }
             }
             .padding(16)
         }
+        .pageBackground()
         .navigationTitle("Stats")
+        .todayDateButton()
     }
 }
 
@@ -65,7 +67,7 @@ private struct StatCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .background(RoundedRectangle(cornerRadius: 16).fill(Color(.secondarySystemBackground)))
+        .cardStyle()
     }
 }
 

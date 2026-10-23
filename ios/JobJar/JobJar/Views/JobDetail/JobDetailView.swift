@@ -13,6 +13,7 @@ struct JobDetailView: View {
     @Query private var allJobs: [Job]
     @State private var showDeleteDialog = false
     @State private var showForceCompleteDialog = false
+    @State private var jobToSchedule: Job? = nil
 
     private var repository: JobRepository { JobRepository(modelContext: modelContext) }
     private var currentJob: Job? { allJobs.first { $0.id == jobId } }
@@ -34,7 +35,10 @@ struct JobDetailView: View {
                 Text("This job has been deleted.")
             }
         }
+        .pageBackground()
         .navigationTitle("Job")
+        .navigationBarTitleDisplayMode(.inline)
+        .scheduleSheet(for: $jobToSchedule) { job, date in repository.scheduleJob(job, at: date) }
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button(action: onEdit) { Image(systemName: "pencil") }
@@ -69,7 +73,7 @@ struct JobDetailView: View {
             }
         } message: {
             let open = subtasks.filter { !$0.isDone }.count
-            Text(open == 1 ? "There's still 1 subtask open. It'll be marked done too." : "There are still \(open) subtasks open. They'll be marked done too.")
+            Text(forceCompleteMessage(openSubtasks: open))
         }
     }
 
@@ -79,7 +83,19 @@ struct JobDetailView: View {
             VStack(alignment: .leading, spacing: 16) {
                 Text(job.title).font(.title.weight(.bold))
 
-                HStack(spacing: 8) {
+                // Chevron so it reads as a link to the parent.
+                if let parent {
+                    Button { onOpenJob(parent.id) } label: {
+                        HStack(spacing: 2) {
+                            Text("Part of \(parent.title)")
+                            Image(systemName: "chevron.right").font(.caption.weight(.semibold))
+                        }
+                    }
+                    .font(.subheadline)
+                }
+
+                FlowLayout(spacing: 8) {
+                    if job.isInProgress { InProgressBadge() }
                     let displayMinutes = subtasks.isEmpty ? job.estimatedMinutes : job.remainingMinutes(subtasks: subtasks)
                     TimeBadge(minutes: displayMinutes)
                     if !job.category.isEmpty { CategoryBadge(category: job.category) }
@@ -101,9 +117,10 @@ struct JobDetailView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                if let parent {
-                    Button("Part of \(parent.title)") { onOpenJob(parent.id) }
+                if let scheduled = job.scheduledDate {
+                    Label("Scheduled \(formatScheduledDateTime(scheduled))", systemImage: "calendar")
                         .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
 
                 if let prerequisiteId = job.dependsOnSubtaskId,
@@ -127,6 +144,35 @@ struct JobDetailView: View {
                     Text(job.timesDrawn == 1 ? "Drawn from the jar once" : "Drawn from the jar \(job.timesDrawn) times")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                }
+
+                // Nothing to start on a done job or a resting repeating one.
+                if job.isPending() {
+                    HStack(spacing: 10) {
+                        Button { repository.toggleInProgress(job) } label: {
+                            Label(job.isInProgress ? "Put back in jar" : "Start", systemImage: job.isInProgress ? "arrow.uturn.backward" : "play.fill")
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 6)
+                        }
+                        // Repeating jobs can't be scheduled, so Start gets the full width.
+                        if job.recurrenceDays == nil {
+                            Button {
+                                if job.scheduledDate != nil {
+                                    repository.unscheduleJob(job)
+                                } else {
+                                    jobToSchedule = job
+                                }
+                            } label: {
+                                Label(
+                                    job.scheduledDate != nil ? "Unschedule" : "Schedule",
+                                    systemImage: job.scheduledDate != nil ? "calendar.badge.minus" : "calendar.badge.plus"
+                                )
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 6)
+                            }
+                        }
+                    }
+                    .buttonStyle(.bordered)
                 }
 
                 Button(action: {
@@ -160,8 +206,9 @@ struct JobDetailView: View {
     /// Only completing offers Undo. Reopening is its own undo.
     private func toggleDone(_ job: Job) {
         let completing = job.isPending()
+        let title = job.title
         let snapshot = repository.toggleDone(job, allJobs: allJobs)
-        if completing { undoCenter.offerCompleted(job.title, snapshot) }
+        if completing { undoCenter.offerCompleted(title, snapshot) }
     }
 
     private func buttonLabel(for job: Job) -> String {

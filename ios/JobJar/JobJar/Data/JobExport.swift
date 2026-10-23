@@ -10,8 +10,9 @@ import UniformTypeIdentifiers
 /// ```
 ///
 /// Ids in the file are numbers. UUIDs get numbered 1, 2, 3... on export and new UUIDs are made
-/// on import. Dates are epoch ms. In-progress and schedule fields aren't on iOS yet, so they're
-/// written empty and ignored when reading.
+/// on import. Dates are epoch ms. Calendar event ids only mean something on the phone that made
+/// them, so they're left out; a booked job comes back booked and a new event is written the next
+/// time it's rescheduled.
 enum JobExport {
     static let version = 1
     private static let format = "job-jar"
@@ -50,6 +51,7 @@ enum JobExport {
         var nextDueAt: Int64?
         var completionCount: Int?
         var dependsOnSubtaskId: Int64?
+        var scheduledDate: Int64?
     }
 
     private static func millis(_ date: Date) -> Int64 { Int64((date.timeIntervalSince1970 * 1000).rounded()) }
@@ -70,7 +72,7 @@ enum JobExport {
                 category: job.category,
                 priority: job.priority.rawValue.uppercased(),
                 isDone: job.isDone,
-                isInProgress: false,
+                isInProgress: job.isInProgress,
                 createdAt: millis(job.createdAt),
                 completedAt: job.completedAt.map(millis),
                 timesDrawn: job.timesDrawn,
@@ -79,7 +81,8 @@ enum JobExport {
                 repeatWeekdays: job.repeatWeekdays,
                 nextDueAt: job.nextDueAt.map(millis),
                 completionCount: job.completionCount,
-                dependsOnSubtaskId: job.dependsOnSubtaskId.flatMap { numbers[$0] }
+                dependsOnSubtaskId: job.dependsOnSubtaskId.flatMap { numbers[$0] },
+                scheduledDate: job.scheduledDate.map(millis)
             )
         }
         let encoder = JSONEncoder()
@@ -116,6 +119,7 @@ enum JobExport {
             let repeats = parentNumber == nil && (entry.recurrenceDays ?? 0) > 0
             let weekdays = entry.repeatWeekdays.flatMap { $0 & everyDayMask != 0 ? $0 : nil }
             let title = entry.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            let isDone = repeats ? false : (entry.isDone ?? false)
             return JobRecord(
                 id: uuids[entry.id]!,
                 title: title.isEmpty ? "Untitled job" : title,
@@ -123,7 +127,8 @@ enum JobExport {
                 estimatedMinutes: max(entry.estimatedMinutes, 1),
                 category: entry.category ?? "",
                 priority: Priority(rawValue: (entry.priority ?? "").lowercased()) ?? .normal,
-                isDone: repeats ? false : (entry.isDone ?? false),
+                isDone: isDone,
+                isInProgress: (entry.isInProgress ?? false) && !isDone,
                 createdAt: entry.createdAt.map(date) ?? .now,
                 completedAt: entry.completedAt.map(date),
                 timesDrawn: entry.timesDrawn ?? 0,
@@ -132,7 +137,8 @@ enum JobExport {
                 repeatWeekdays: repeats ? weekdays : nil,
                 nextDueAt: repeats ? entry.nextDueAt.map(date) : nil,
                 completionCount: entry.completionCount ?? 0,
-                dependsOnSubtaskId: validDependency ? entry.dependsOnSubtaskId.flatMap { uuids[$0] } : nil
+                dependsOnSubtaskId: validDependency ? entry.dependsOnSubtaskId.flatMap { uuids[$0] } : nil,
+                scheduledDate: repeats || isDone ? nil : entry.scheduledDate.map(date)
             )
         }
         return .success(records)

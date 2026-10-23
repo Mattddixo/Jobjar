@@ -107,8 +107,27 @@ private struct SubtaskRow: View {
                     .foregroundStyle(.secondary)
             }
             .padding(8)
-            .background(RoundedRectangle(cornerRadius: 12).fill(Color(.secondarySystemBackground)))
+            .cardStyle(cornerRadius: 12)
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// How the subtask estimates compare with the job's total. For 4hr+ jobs there's no real target,
+/// so it just shows the running total.
+struct AllocationSummary: View {
+    let estimatedMinutes: Int
+    let subtasksTotalMinutes: Int
+
+    private var text: String {
+        if estimatedMinutes >= longJobMinutes { return "Subtasks: \(formatMinutes(subtasksTotalMinutes))" }
+        let unallocated = estimatedMinutes - subtasksTotalMinutes
+        if unallocated == 0 { return "\(formatMinutes(estimatedMinutes)) total" }
+        if unallocated > 0 { return "\(formatMinutes(unallocated)) unassigned · \(formatMinutes(estimatedMinutes)) total" }
+        return "\(formatMinutes(-unallocated)) over · \(formatMinutes(estimatedMinutes)) total"
+    }
+
+    var body: some View {
+        Text(text).font(.footnote).foregroundStyle(.secondary)
     }
 }

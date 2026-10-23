@@ -41,6 +41,8 @@ final class Job: Identifiable {
     var category: String = ""
     var priority: Priority = Priority.normal
     var isDone: Bool = false
+    /// Being worked on right now. Never true at the same time as `isDone`.
+    var isInProgress: Bool = false
     var createdAt: Date = Date.now
     var completedAt: Date?
     var timesDrawn: Int = 0
@@ -52,6 +54,10 @@ final class Job: Identifiable {
     var completionCount: Int = 0
     /// Subtasks only: a sibling that has to be done first.
     var dependsOnSubtaskId: UUID?
+    /// When the job is booked for. Booked jobs stay out of the jar. Never set on repeating jobs.
+    var scheduledDate: Date?
+    /// The calendar event for `scheduledDate`, if one was written (EventKit's identifier).
+    var calendarEventId: String?
 
     init(
         id: UUID = UUID(),
@@ -61,6 +67,7 @@ final class Job: Identifiable {
         category: String = "",
         priority: Priority = .normal,
         isDone: Bool = false,
+        isInProgress: Bool = false,
         createdAt: Date = .now,
         completedAt: Date? = nil,
         timesDrawn: Int = 0,
@@ -69,7 +76,9 @@ final class Job: Identifiable {
         repeatWeekdays: Int? = nil,
         nextDueAt: Date? = nil,
         completionCount: Int = 0,
-        dependsOnSubtaskId: UUID? = nil
+        dependsOnSubtaskId: UUID? = nil,
+        scheduledDate: Date? = nil,
+        calendarEventId: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -78,6 +87,7 @@ final class Job: Identifiable {
         self.category = category
         self.priority = priority
         self.isDone = isDone
+        self.isInProgress = isInProgress
         self.createdAt = createdAt
         self.completedAt = completedAt
         self.timesDrawn = timesDrawn
@@ -87,6 +97,8 @@ final class Job: Identifiable {
         self.nextDueAt = nextDueAt
         self.completionCount = completionCount
         self.dependsOnSubtaskId = dependsOnSubtaskId
+        self.scheduledDate = scheduledDate
+        self.calendarEventId = calendarEventId
     }
 }
 
@@ -98,6 +110,16 @@ extension Job {
             return nextDueAt <= now
         }
         return !isDone
+    }
+
+    /// Could the jar hand this out right now? Due, and not already started or booked.
+    func isAvailableToDraw(now: Date = .now) -> Bool {
+        isPending(now: now) && !isInProgress && scheduledDate == nil
+    }
+
+    /// Subtasks of a job you've already started don't get drawn on their own.
+    func isParentAvailable(_ parent: Job?) -> Bool {
+        parent?.isInProgress != true
     }
 
     /// Is the prerequisite done? Only affects the draw, you can still tick it off.
