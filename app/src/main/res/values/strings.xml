@@ -215,6 +215,9 @@
     <string name="theme_system">Auto</string>
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
+    <string name="settings_jar">Jar</string>
+    <string name="settings_favour_fill">Favour jobs that fill my time</string>
+    <string name="settings_favour_fill_explainer">Draws lean toward jobs that suit the time you pick and how many you ask for. Turn off for fully random draws.</string>
     <string name="settings_your_data">Backup</string>
     <string name="settings_data_explainer">Your jobs are only stored on this phone. Export a copy to keep somewhere safe, or to move to a new phone.</string>
     <string name="settings_export">Export</string>
