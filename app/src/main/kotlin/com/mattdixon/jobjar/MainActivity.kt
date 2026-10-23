@@ -1,10 +1,13 @@
 package com.mattdixon.jobjar
 
+import android.graphics.Color
 import android.os.Bundle
+import androidx.activity.SystemBarStyle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,6 +34,15 @@ class MainActivity : ComponentActivity() {
                 ThemeMode.DARK -> true
             }
 
+            // Status bar icons follow the app's theme, which can differ from the phone's.
+            DisposableEffect(darkTheme) {
+                enableEdgeToEdge(
+                    statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { darkTheme },
+                    navigationBarStyle = SystemBarStyle.auto(LIGHT_SCRIM, DARK_SCRIM) { darkTheme }
+                )
+                onDispose {}
+            }
+
             JobJarTheme(darkTheme = darkTheme) {
                 JobJarApp(
                     repository = repository,
@@ -44,3 +56,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+
+// The default scrims enableEdgeToEdge uses for 3-button navigation.
+private val LIGHT_SCRIM = Color.argb(0xe6, 0xFF, 0xFF, 0xFF)
+private val DARK_SCRIM = Color.argb(0x80, 0x1b, 0x1b, 0x1b)

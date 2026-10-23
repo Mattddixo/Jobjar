@@ -7,7 +7,9 @@ import androidx.compose.material.icons.filled.ListAlt
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.annotation.StringRes
@@ -36,6 +38,7 @@ import com.mattdixon.jobjar.ui.jobdetail.JobDetailScreen
 import com.mattdixon.jobjar.ui.joblist.JobListScreen
 import com.mattdixon.jobjar.ui.settings.SettingsScreen
 import com.mattdixon.jobjar.ui.stats.StatsScreen
+import com.mattdixon.jobjar.ui.theme.LocalAppColors
 
 private const val SETTINGS_ROUTE = "settings"
 
@@ -63,7 +66,7 @@ fun JobJarApp(
             bottomBar = {
                 val backStackEntry by navController.currentBackStackEntryAsState()
                 val currentDestination = backStackEntry?.destination
-                NavigationBar {
+                NavigationBar(containerColor = LocalAppColors.current.card) {
                     topLevelDestinations.forEach { destination ->
                         NavigationBarItem(
                             selected = currentDestination?.hierarchy?.any { it.route == destination.route } == true,
@@ -75,7 +78,12 @@ fun JobJarApp(
                                 }
                             },
                             icon = { Icon(destination.icon, contentDescription = null) },
-                            label = { Text(stringResource(destination.labelRes)) }
+                            label = { Text(stringResource(destination.labelRes)) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                                indicatorColor = MaterialTheme.colorScheme.primaryContainer
+                            )
                         )
                     }
                 }

@@ -54,6 +54,7 @@ import com.mattdixon.jobjar.ui.components.AllocationSummary
 import com.mattdixon.jobjar.ui.components.SubtasksSection
 import com.mattdixon.jobjar.ui.components.recurrenceLabel
 import com.mattdixon.jobjar.ui.theme.Spacing
+import com.mattdixon.jobjar.ui.theme.appTopBarColors
 import com.mattdixon.jobjar.util.formatMinutes
 import kotlinx.coroutines.flow.flowOf
 import java.time.DayOfWeek
@@ -113,6 +114,7 @@ fun AddEditJobScreen(
     Scaffold(
         topBar = {
             TopAppBar(
+                colors = appTopBarColors(),
                 title = { Text(stringResource(titleRes)) },
                 navigationIcon = {
                     IconButton(onClick = onDone) {

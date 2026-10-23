@@ -45,6 +45,7 @@ import com.mattdixon.jobjar.data.JobRepository
 import com.mattdixon.jobjar.data.ThemeMode
 import com.mattdixon.jobjar.ui.components.plural
 import com.mattdixon.jobjar.ui.theme.Spacing
+import com.mattdixon.jobjar.ui.theme.appTopBarColors
 import java.time.LocalDate
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -80,6 +81,7 @@ fun SettingsScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
+                colors = appTopBarColors(),
                 title = { Text(stringResource(R.string.settings_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {

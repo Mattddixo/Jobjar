@@ -5,6 +5,9 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.CardColors
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.TopAppBarColors
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
@@ -24,10 +27,10 @@ private val LightColorScheme = lightColorScheme(
     onPrimary = TealOnPrimaryLight,
     primaryContainer = TealContainerLight,
     onPrimaryContainer = TealOnContainerLight,
-    secondary = SlateSecondaryLight,
-    onSecondary = SlateOnSecondaryLight,
-    secondaryContainer = SlateContainerLight,
-    onSecondaryContainer = SlateOnContainerLight,
+    secondary = SeaSecondaryLight,
+    onSecondary = SeaOnSecondaryLight,
+    secondaryContainer = SeaContainerLight,
+    onSecondaryContainer = SeaOnContainerLight,
     tertiary = HoneyTertiaryLight,
     onTertiary = HoneyOnTertiaryLight,
     tertiaryContainer = HoneyContainerLight,
@@ -56,10 +59,10 @@ private val DarkColorScheme = darkColorScheme(
     onPrimary = TealOnPrimaryDark,
     primaryContainer = TealContainerDark,
     onPrimaryContainer = TealOnContainerDark,
-    secondary = SlateSecondaryDark,
-    onSecondary = SlateOnSecondaryDark,
-    secondaryContainer = SlateContainerDark,
-    onSecondaryContainer = SlateOnContainerDark,
+    secondary = SeaSecondaryDark,
+    onSecondary = SeaOnSecondaryDark,
+    secondaryContainer = SeaContainerDark,
+    onSecondaryContainer = SeaOnContainerDark,
     tertiary = HoneyTertiaryDark,
     onTertiary = HoneyOnTertiaryDark,
     tertiaryContainer = HoneyContainerDark,
@@ -84,14 +87,27 @@ private val DarkColorScheme = darkColorScheme(
 )
 
 /**
- * Colours Material doesn't have a slot for. Material's filled cards are a heavy grey, so cards
- * here are white with a thin border instead: use [appCardColors] and [appCardBorder].
+ * Colours Material doesn't have a slot for: white bordered cards (Material's filled cards are a
+ * heavy grey), the header bars, and the jar picture. Use [appCardColors], [appCardBorder] and
+ * [appTopBarColors].
  */
 @Immutable
-data class AppColors(val card: Color, val cardBorder: Color)
+data class AppColors(
+    val card: Color,
+    val cardBorder: Color,
+    val header: Color,
+    val onHeader: Color,
+    val onHeaderMuted: Color,
+    val jarGlass: Color,
+    val jarGlassEdge: Color
+)
 
-private val LightAppColors = AppColors(card = CardLight, cardBorder = CardBorderLight)
-private val DarkAppColors = AppColors(card = CardDark, cardBorder = CardBorderDark)
+private val LightAppColors = AppColors(
+    CardLight, CardBorderLight, HeaderLight, OnHeaderLight, OnHeaderMutedLight, JarGlassLight, JarGlassEdgeLight
+)
+private val DarkAppColors = AppColors(
+    CardDark, CardBorderDark, HeaderDark, OnHeaderDark, OnHeaderMutedDark, JarGlassDark, JarGlassEdgeDark
+)
 
 val LocalAppColors = staticCompositionLocalOf { LightAppColors }
 
@@ -101,6 +117,19 @@ fun appCardBorder(): BorderStroke = BorderStroke(1.dp, LocalAppColors.current.ca
 
 @Composable
 fun appCardColors(): CardColors = CardDefaults.cardColors(containerColor = LocalAppColors.current.card)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun appTopBarColors(): TopAppBarColors {
+    val colors = LocalAppColors.current
+    return TopAppBarDefaults.topAppBarColors(
+        containerColor = colors.header,
+        scrolledContainerColor = colors.header,
+        titleContentColor = colors.onHeader,
+        navigationIconContentColor = colors.onHeader,
+        actionIconContentColor = colors.onHeader
+    )
+}
 
 @Composable
 fun JobJarTheme(

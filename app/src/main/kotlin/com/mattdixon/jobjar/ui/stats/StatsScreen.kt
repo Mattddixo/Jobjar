@@ -33,6 +33,7 @@ import com.mattdixon.jobjar.data.JobRepository
 import com.mattdixon.jobjar.ui.components.TodayDateButton
 import com.mattdixon.jobjar.ui.theme.AppShapes
 import com.mattdixon.jobjar.ui.theme.Spacing
+import com.mattdixon.jobjar.ui.theme.appTopBarColors
 import com.mattdixon.jobjar.ui.theme.appCardBorder
 import com.mattdixon.jobjar.ui.theme.appCardColors
 import com.mattdixon.jobjar.util.formatMinutes
@@ -49,6 +50,7 @@ fun StatsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
+                colors = appTopBarColors(),
                 title = {
                     Column {
                         TodayDateButton()

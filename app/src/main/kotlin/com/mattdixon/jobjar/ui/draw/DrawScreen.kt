@@ -55,11 +55,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -79,11 +77,17 @@ import com.mattdixon.jobjar.ui.components.TimeBucketBadge
 import com.mattdixon.jobjar.ui.components.TodayDateButton
 import com.mattdixon.jobjar.ui.theme.AppShapes
 import com.mattdixon.jobjar.ui.theme.Spacing
+import com.mattdixon.jobjar.ui.theme.appTopBarColors
+import com.mattdixon.jobjar.ui.theme.JarLid
+import com.mattdixon.jobjar.ui.theme.JarLidBand
+import com.mattdixon.jobjar.ui.theme.JarSlips
+import com.mattdixon.jobjar.ui.theme.LocalAppColors
 import com.mattdixon.jobjar.ui.theme.appCardBorder
 import com.mattdixon.jobjar.ui.theme.appCardColors
 import com.mattdixon.jobjar.util.formatMinutes
 import com.mattdixon.jobjar.ui.components.plural
 import com.mattdixon.jobjar.ui.components.recurrenceLabel
+import kotlin.math.ceil
 
 private val TIME_PRESETS = listOf(15, 30, 45, 60, 90, 120)
 
@@ -105,6 +109,7 @@ fun DrawScreen(
     Scaffold(
         topBar = {
             TopAppBar(
+                colors = appTopBarColors(),
                 title = {
                     Column {
                         TodayDateButton()
@@ -201,86 +206,81 @@ fun DrawScreen(
  */
 @Composable
 private fun JarHero(pendingCount: Int, inProgressCount: Int, isLoaded: Boolean, modifier: Modifier = Modifier) {
-    val fraction = (pendingCount.toFloat() / JAR_FILL_CAP).coerceIn(0f, 1f)
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically
+    val slips = if (pendingCount == 0) 0 else ceil(pendingCount * JAR_SLIPS.size / JAR_FILL_CAP.toFloat()).toInt().coerceIn(1, JAR_SLIPS.size)
+    Card(
+        shape = AppShapes.panel,
+        colors = appCardColors(),
+        border = appCardBorder(),
+        modifier = modifier.fillMaxWidth()
     ) {
-        JarGlyph(fraction = fraction, modifier = Modifier.size(width = 52.dp, height = 70.dp))
-        Spacer(modifier = Modifier.width(Spacing.lg))
-        Column {
-            Text(
-                // Blank until loaded rather than flashing "0 jobs".
-                if (isLoaded) plural(R.plurals.draw_jar_count, pendingCount, pendingCount) else "",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold
-            )
-            if (inProgressCount > 0) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.xl, vertical = Spacing.lg),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            JarGlyph(slips = slips, modifier = Modifier.size(width = 56.dp, height = 68.dp))
+            Spacer(modifier = Modifier.width(Spacing.xl))
+            Column {
                 Text(
-                    plural(R.plurals.draw_in_progress_count, inProgressCount, inProgressCount),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    // Blank until loaded rather than flashing "0 jobs".
+                    if (isLoaded) plural(R.plurals.draw_jar_count, pendingCount, pendingCount) else "",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold
                 )
+                if (inProgressCount > 0) {
+                    Text(
+                        plural(R.plurals.draw_in_progress_count, inProgressCount, inProgressCount),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
     }
 }
 
-/** [fraction] 0..1. */
+/** A job slip in the jar, in the app icon's 108-unit grid: centre, size, tilt. */
+private class Slip(val cx: Float, val cy: Float, val w: Float, val h: Float, val degrees: Float)
+
+// Bottom row first, so the jar fills from the bottom up.
+private val JAR_SLIPS = listOf(
+    Slip(42f, 77.5f, 13f, 7f, -6f),
+    Slip(60.5f, 77.5f, 16f, 7f, 10f),
+    Slip(50.5f, 66.5f, 18f, 8f, 5f),
+    Slip(68.5f, 66f, 8f, 8f, -12f),
+    Slip(46f, 55.5f, 15f, 8f, -10f),
+    Slip(63f, 54.5f, 16f, 8f, 8f)
+)
+
+/** The app icon's jar, without the background. Shows the first [slips] slips. */
 @Composable
-private fun JarGlyph(fraction: Float, modifier: Modifier = Modifier) {
-    val fillColor = MaterialTheme.colorScheme.primary
-    val outlineColor = MaterialTheme.colorScheme.outline
-    val trackColor = MaterialTheme.colorScheme.surfaceVariant
+private fun JarGlyph(slips: Int, modifier: Modifier = Modifier) {
+    val glass = LocalAppColors.current.jarGlass
+    val edge = LocalAppColors.current.jarGlassEdge
 
     Canvas(modifier = modifier) {
-        val neckWidth = size.width * 0.46f
-        val neckLeft = (size.width - neckWidth) / 2f
-        val bodyTop = size.height * 0.2f
-        val bodyCorner = size.width * 0.18f
+        // The jar sits in x 28..80, y 24..87 of the icon grid.
+        val scale = minOf(size.width / 52f, size.height / 63f)
+        val left = (size.width - 52f * scale) / 2f - 28f * scale
+        val top = (size.height - 63f * scale) / 2f - 24f * scale
+        fun at(x: Float, y: Float) = Offset(left + x * scale, top + y * scale)
+        fun dims(w: Float, h: Float) = Size(w * scale, h * scale)
+        val outline = Stroke(width = 1.5.dp.toPx())
 
-        val bodyPath = Path().apply {
-            addRoundRect(
-                RoundRect(
-                    left = 0f,
-                    top = bodyTop,
-                    right = size.width,
-                    bottom = size.height,
-                    cornerRadius = CornerRadius(bodyCorner, bodyCorner)
-                )
-            )
-        }
-        val neckPath = Path().apply {
-            addRoundRect(
-                RoundRect(
-                    left = neckLeft,
-                    top = 0f,
-                    right = neckLeft + neckWidth,
-                    bottom = bodyTop + bodyCorner,
-                    cornerRadius = CornerRadius(bodyCorner * 0.6f, bodyCorner * 0.6f)
-                )
-            )
-        }
+        drawRoundRect(glass, at(36f, 35f), dims(36f, 8f), CornerRadius(3f * scale))
+        drawRoundRect(edge, at(36f, 35f), dims(36f, 8f), CornerRadius(3f * scale), style = outline)
+        drawRoundRect(glass, at(30f, 41f), dims(48f, 44f), CornerRadius(11f * scale))
+        drawRoundRect(edge, at(30f, 41f), dims(48f, 44f), CornerRadius(11f * scale), style = outline)
 
-        clipPath(bodyPath) { drawRect(color = trackColor) }
-        drawPath(neckPath, color = trackColor)
-
-        val bodyHeight = size.height - bodyTop
-        val fillHeight = bodyHeight * fraction
-        if (fillHeight > 0f) {
-            clipPath(bodyPath) {
-                drawRect(
-                    color = fillColor,
-                    topLeft = Offset(0f, size.height - fillHeight),
-                    size = Size(size.width, fillHeight)
-                )
+        JAR_SLIPS.take(slips).forEachIndexed { i, slip ->
+            rotate(slip.degrees, pivot = at(slip.cx, slip.cy)) {
+                drawRect(JarSlips[i % JarSlips.size], at(slip.cx - slip.w / 2, slip.cy - slip.h / 2), dims(slip.w, slip.h))
             }
         }
 
-        val strokeWidth = 2.dp.toPx()
-        drawPath(bodyPath, color = outlineColor, style = Stroke(width = strokeWidth))
-        drawPath(neckPath, color = outlineColor, style = Stroke(width = strokeWidth))
+        drawRoundRect(JarLid, at(33f, 26f), dims(42f, 10f), CornerRadius(3.5f * scale))
+        drawRoundRect(JarLidBand, at(33f, 32f), dims(42f, 4f), CornerRadius(1.5f * scale))
     }
 }
 

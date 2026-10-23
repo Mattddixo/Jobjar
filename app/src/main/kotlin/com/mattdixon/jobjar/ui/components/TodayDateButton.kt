@@ -4,6 +4,7 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.provider.CalendarContract
 import androidx.compose.foundation.clickable
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -18,7 +19,7 @@ fun TodayDateButton() {
     Text(
         text = formatTodayLabel(),
         style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        color = LocalContentColor.current.copy(alpha = 0.7f),
         modifier = Modifier.clickable {
             val uri = CalendarContract.CONTENT_URI.buildUpon()
                 .appendPath("time")

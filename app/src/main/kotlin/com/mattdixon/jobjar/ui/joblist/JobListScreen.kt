@@ -99,6 +99,7 @@ import com.mattdixon.jobjar.ui.UndoEvent
 import com.mattdixon.jobjar.ui.UndoKind
 import com.mattdixon.jobjar.ui.UndoSnackbarEffect
 import com.mattdixon.jobjar.ui.theme.Spacing
+import com.mattdixon.jobjar.ui.theme.appTopBarColors
 import com.mattdixon.jobjar.ui.theme.appCardBorder
 import com.mattdixon.jobjar.ui.theme.appCardColors
 import com.mattdixon.jobjar.util.formatScheduledDateTime
@@ -144,6 +145,7 @@ fun JobListScreen(
                 )
             } else {
                 TopAppBar(
+                    colors = appTopBarColors(),
                     title = {
                         Column {
                             TodayDateButton()
@@ -178,7 +180,11 @@ fun JobListScreen(
             }
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = onAddJob) {
+            FloatingActionButton(
+                onClick = onAddJob,
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            ) {
                 Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.cd_add_job))
             }
         }
@@ -476,6 +482,7 @@ private fun SearchTopBar(
     }
 
     TopAppBar(
+        colors = appTopBarColors(),
         title = {
             TextField(
                 value = query,

@@ -58,6 +58,7 @@ import com.mattdixon.jobjar.ui.components.SubtasksSection
 import com.mattdixon.jobjar.ui.components.TimeBucketBadge
 import com.mattdixon.jobjar.ui.theme.AppShapes
 import com.mattdixon.jobjar.ui.theme.Spacing
+import com.mattdixon.jobjar.ui.theme.appTopBarColors
 import com.mattdixon.jobjar.util.formatMinutes
 import com.mattdixon.jobjar.ui.LocalUndoController
 import com.mattdixon.jobjar.ui.UndoEvent
@@ -121,6 +122,7 @@ fun JobDetailScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
+                colors = appTopBarColors(),
                 title = { Text(stringResource(R.string.jobdetail_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
