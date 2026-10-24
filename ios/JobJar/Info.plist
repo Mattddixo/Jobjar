@@ -4,7 +4,19 @@
 <dict>
 	<!-- Launch screen: the app icon on the app's page colour. Everything else in the Info.plist
 	     is generated from the INFOPLIST_KEY_ settings in project.yml. -->
-	<key>UILaunchScreen</key>
+	<!-- jobjar://job/<id>: the link on calendar events opens that job. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.mattdixon.jobjar</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>jobjar</string>
+			</array>
+		</dict>
+	</array>
+		<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>
 		<string>LaunchBackground</string>

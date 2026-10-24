@@ -48,12 +48,17 @@ struct InProgressBadge: View {
     }
 }
 
-/// "Scheduled Nov 4, 2:00 PM".
+/// "Scheduled Nov 4, 2:00 PM", or "Missed …" once the slot has passed with the job still to do.
 struct ScheduledBadge: View {
     let date: Date
+    var missed: Bool = false
     var compact: Bool = false
 
     var body: some View {
-        InfoBadge(text: "Scheduled \(formatScheduledDateTime(date))", compact: compact, systemImage: "calendar")
+        InfoBadge(
+            text: "\(missed ? "Missed" : "Scheduled") \(formatScheduledDateTime(date))",
+            compact: compact,
+            systemImage: missed ? "calendar.badge.exclamationmark" : "calendar"
+        )
     }
 }

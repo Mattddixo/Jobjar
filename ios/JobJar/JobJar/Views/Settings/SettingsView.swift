@@ -62,6 +62,8 @@ struct SettingsView: View {
                 Text("Draws lean toward jobs that suit the time you pick and how many you ask for. Turn off to ignore job length. Priority always counts: high-priority jobs come up more often.")
             }
 
+            CalendarSettingsSection()
+
             Section {
                 Button {
                     if let data = try? JobExport.encode(allJobs) {

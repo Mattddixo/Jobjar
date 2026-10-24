@@ -41,6 +41,32 @@ final class FakeCalendar: CalendarGateway {
     func ownsEvent(_ eventId: String, owner: Job) -> Bool {
         hasAccess && events[eventId]?.ownerId == owner.id
     }
+
+    func findEvent(_ eventId: String, owner: Job) -> EventLookup {
+        guard hasAccess else { return .unknown }
+        if let event = events[eventId], event.ownerId == owner.id { return .found(eventId: eventId, start: event.start) }
+        if let moved = events.first(where: { $0.value.ownerId == owner.id }) {
+            return .found(eventId: moved.key, start: moved.value.start)
+        }
+        return .missing
+    }
+
+    /// What someone dragging the event in the Calendar app does.
+    func moveEvent(_ eventId: String, to start: Date) {
+        var event = events[eventId]!
+        let length = event.end.timeIntervalSince(event.start)
+        event.start = start
+        event.end = start.addingTimeInterval(length)
+        events[eventId] = event
+    }
+
+    /// Calendars can hand an event a new identifier when they sync.
+    func rekeyEvent(_ eventId: String) -> String {
+        let newId = "event-\(nextId)"
+        nextId += 1
+        events[newId] = events.removeValue(forKey: eventId)
+        return newId
+    }
 }
 
 @MainActor
@@ -330,6 +356,110 @@ final class JobRepositoryTests: XCTestCase {
         let bins = add("Bins", repeatDays: 7)
         XCTAssertFalse(repository.scheduleJob(bins, at: clock + 3600))
         XCTAssertNil(bins.scheduledDate)
+    }
+
+    // MARK: Missed bookings
+
+    private let hour: TimeInterval = 3600
+
+    func testABookedJobStaysOutOfTheJarUntilItsSlotIsOverThenComesBack() {
+        let target = add("Paint fence", minutes: 60)
+        repository.scheduleJob(target, at: clock + hour)
+        XCTAssertFalse(target.isAvailableToDraw(now: clock))
+        clock += 90 * 60
+        XCTAssertTrue(target.isBooked(now: clock), "still booked mid-slot")
+        clock += hour
+        XCTAssertTrue(target.isMissed(now: clock))
+        XCTAssertFalse(target.isBooked(now: clock))
+        XCTAssertTrue(target.isAvailableToDraw(now: clock))
+        XCTAssertEqual(repository.drawJob(allJobs: all, maxMinutes: 120, categories: [], excludeIds: [], longOnly: false)?.job.id, target.id)
+    }
+
+    func testStartingAMissedJobKeepsItsPastEventButUnlinksIt() {
+        let target = add("Paint fence", minutes: 30)
+        repository.scheduleJob(target, at: clock + hour)
+        clock += 3 * hour
+        repository.toggleInProgress(target)
+        XCTAssertNil(target.scheduledDate)
+        XCTAssertEqual(calendar.events.count, 1, "the past event stays as a record")
+    }
+
+    func testCompletingOrDeletingOnlyRemovesUpcomingEvents() {
+        let upcoming = add("Upcoming", minutes: 30)
+        let past = add("Past", minutes: 30)
+        repository.scheduleJob(upcoming, at: clock + 5 * hour)
+        repository.scheduleJob(past, at: clock + hour)
+        clock += 3 * hour
+        repository.toggleDone(upcoming, allJobs: all)
+        repository.deleteJob(past, allJobs: all)
+        XCTAssertEqual(calendar.events.values.map(\.title), ["Past"])
+    }
+
+    func testUndoingAMissedJobsCompletionDoesNotAddASecondEvent() {
+        let target = add("Paint fence", minutes: 30)
+        repository.scheduleJob(target, at: clock + hour)
+        clock += 3 * hour
+        let snapshot = repository.toggleDone(target, allJobs: all)
+        repository.undo(snapshot)
+        XCTAssertEqual(calendar.events.count, 1)
+        XCTAssertTrue(target.isMissed(now: clock))
+    }
+
+    func testReschedulingAMissedJobMovesItsEvent() {
+        let target = add("Paint fence", minutes: 30)
+        repository.scheduleJob(target, at: clock + hour)
+        let eventId = target.calendarEventId
+        clock += 3 * hour
+        repository.scheduleJob(target, at: clock + hour)
+        XCTAssertEqual(target.calendarEventId, eventId)
+        XCTAssertEqual(calendar.events.count, 1)
+        XCTAssertTrue(target.isBooked(now: clock))
+    }
+
+    // MARK: Picking up calendar changes
+
+    func testMovingTheEventInTheCalendarMovesTheBooking() {
+        let target = add("Dentist")
+        repository.scheduleJob(target, at: clock + hour)
+        calendar.moveEvent(target.calendarEventId!, to: clock + 26 * hour)
+        repository.syncCalendar()
+        XCTAssertEqual(target.scheduledDate, clock + 26 * hour)
+    }
+
+    func testDeletingTheEventInTheCalendarUnbooksTheJob() {
+        let target = add("Dentist")
+        repository.scheduleJob(target, at: clock + hour)
+        calendar.events.removeAll()
+        repository.syncCalendar()
+        XCTAssertNil(target.scheduledDate)
+        XCTAssertNil(target.calendarEventId)
+        XCTAssertTrue(target.isAvailableToDraw(now: clock))
+    }
+
+    func testAnEventWithANewIdGetsRelinked() {
+        let target = add("Dentist")
+        repository.scheduleJob(target, at: clock + hour)
+        let newId = calendar.rekeyEvent(target.calendarEventId!)
+        repository.syncCalendar()
+        XCTAssertEqual(target.calendarEventId, newId)
+        XCTAssertEqual(target.scheduledDate, clock + hour)
+    }
+
+    func testWithoutCalendarAccessBookingsAreLeftAlone() {
+        let target = add("Dentist")
+        repository.scheduleJob(target, at: clock + hour)
+        calendar.events.removeAll()
+        calendar.hasAccess = false
+        repository.syncCalendar()
+        XCTAssertEqual(target.scheduledDate, clock + hour)
+    }
+
+    func testCalendarLinksParseBackToTheJob() {
+        let target = add("Dentist")
+        let url = URL(string: "jobjar://job/\(target.id.uuidString)")!
+        XCTAssertEqual(DeviceCalendar.jobId(from: url), target.id)
+        XCTAssertNil(DeviceCalendar.jobId(from: URL(string: "https://example.com/job/\(target.id.uuidString)")!))
+        XCTAssertNil(DeviceCalendar.jobId(from: URL(string: "jobjar://job/not-a-job")!))
     }
 
     // MARK: Categories

@@ -5,23 +5,43 @@ enum Route: Hashable {
     case addEditJob(jobId: UUID?, parentId: UUID?)
 }
 
+enum AppTab: Hashable {
+    case jar, jobs, stats
+}
+
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var selectedTab = AppTab.jar
+    /// A job to open on the Jobs tab, from a calendar event's `jobjar://job/<id>` link.
+    @State private var jobToOpen: UUID? = nil
 
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             DrawTab()
                 .tabItem { Label("Jar", systemImage: "shuffle") }
-            JobsTab()
+                .tag(AppTab.jar)
+            JobsTab(jobToOpen: $jobToOpen)
                 .tabItem { Label("Jobs", systemImage: "list.bullet") }
+                .tag(AppTab.jobs)
             NavigationStack {
                 StatsView()
                     .settingsButton()
             }
             .tabItem { Label("Stats", systemImage: "chart.bar") }
+            .tag(AppTab.stats)
         }
         .overlay(alignment: .bottom) { UndoToast() }
         .task { JobRepository(modelContext: modelContext).applyLaunchRules() }
+        .onOpenURL { url in
+            guard let id = DeviceCalendar.jobId(from: url) else { return }
+            selectedTab = .jobs
+            jobToOpen = id
+        }
+        // Pick up anything moved or deleted in the Calendar app while we were away.
+        .onChange(of: scenePhase, initial: true) { _, phase in
+            if phase == .active { JobRepository(modelContext: modelContext).syncCalendar() }
+        }
     }
 }
 
@@ -41,6 +61,7 @@ private struct DrawTab: View {
 }
 
 private struct JobsTab: View {
+    @Binding var jobToOpen: UUID?
     @State private var path = NavigationPath()
 
     var body: some View {
@@ -53,6 +74,12 @@ private struct JobsTab: View {
             .navigationDestination(for: Route.self) { route in
                 RouteDestination(route: route, path: $path)
             }
+        }
+        // Initial too: on a cold start the link can arrive before this tab exists.
+        .onChange(of: jobToOpen, initial: true) { _, id in
+            guard let id else { return }
+            path = NavigationPath([Route.jobDetail(id)])
+            jobToOpen = nil
         }
     }
 }

@@ -7,6 +7,7 @@ struct DrawView: View {
     var onOpenJob: (UUID) -> Void
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(UndoCenter.self) private var undoCenter
     @Query(sort: \Job.createdAt, order: .reverse) private var allJobs: [Job]
     @State private var viewModel = DrawViewModel()
     @State private var jobToSchedule: Job? = nil
@@ -66,7 +67,7 @@ struct DrawView: View {
         .navigationTitle("Job Jar")
         .todayDateButton()
         .scheduleSheet(for: $jobToSchedule) { job, date in
-            viewModel.scheduleJob(job, at: date, repository: repository)
+            undoCenter.noticeCalendarResult(viewModel.scheduleJob(job, at: date, repository: repository))
         }
         .onChange(of: categories, initial: true) { _, current in viewModel.pruneCategories(to: current) }
         .onChange(of: availableIds) { viewModel.dropStaleCards(allJobs: allJobs) }

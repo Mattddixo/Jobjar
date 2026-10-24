@@ -25,6 +25,9 @@ struct ScheduleSheet: View {
                     Form {
                         DatePicker("When", selection: $date, in: Date.now..., displayedComponents: [.date, .hourAndMinute])
                             .datePickerStyle(.graphical)
+                        if date <= .now {
+                            Text("That time has already passed.").foregroundStyle(.red)
+                        }
                     }
                 case .denied:
                     VStack(alignment: .leading, spacing: 16) {
@@ -54,6 +57,8 @@ struct ScheduleSheet: View {
                             onConfirm(date)
                             dismiss()
                         }
+                        // The sheet can sit open past the chosen time.
+                        .disabled(date <= .now)
                     }
                 }
             }

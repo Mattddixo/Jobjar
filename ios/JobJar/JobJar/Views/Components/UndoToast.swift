@@ -1,14 +1,16 @@
 import SwiftData
 import SwiftUI
 
-/// Undo for complete and delete. A screen offers the snapshot and UndoToast shows it.
+/// Undo for complete and delete. A screen offers the snapshot and UndoToast shows it. Also
+/// carries plain notices (no Undo button) like "couldn't add it to your calendar".
 @Observable
 @MainActor
 final class UndoCenter {
     struct Offer: Identifiable, Equatable {
         let id = UUID()
         let message: String
-        let snapshot: UndoSnapshot
+        /// Nil for a plain notice.
+        let snapshot: UndoSnapshot?
     }
 
     private(set) var current: Offer?
@@ -20,6 +22,15 @@ final class UndoCenter {
     func dismiss(_ offer: Offer) {
         guard current?.id == offer.id else { return }
         withAnimation(.easeIn(duration: 0.2)) { current = nil }
+    }
+
+    func notice(_ message: String) {
+        withAnimation(.easeOut(duration: 0.2)) { current = Offer(message: message, snapshot: nil) }
+    }
+
+    /// Pass scheduleJob's result: says so when the booking was saved without a calendar event.
+    func noticeCalendarResult(_ wroteEvent: Bool) {
+        if !wroteEvent { notice("Booked, but it couldn't be added to your calendar.") }
     }
 
     func offerCompleted(_ title: String, _ snapshot: UndoSnapshot) {
@@ -42,11 +53,13 @@ struct UndoToast: View {
                     .font(.subheadline)
                     .lineLimit(2)
                 Spacer(minLength: 8)
-                Button("Undo") {
-                    JobRepository(modelContext: modelContext).undo(offer.snapshot)
-                    undoCenter.dismiss(offer)
+                if let snapshot = offer.snapshot {
+                    Button("Undo") {
+                        JobRepository(modelContext: modelContext).undo(snapshot)
+                        undoCenter.dismiss(offer)
+                    }
+                    .font(.subheadline.weight(.semibold))
                 }
-                .font(.subheadline.weight(.semibold))
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
