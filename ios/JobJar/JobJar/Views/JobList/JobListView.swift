@@ -104,7 +104,9 @@ struct JobListView: View {
                 .accessibilityLabel("Add job")
             }
         }
-        .scheduleSheet(for: $jobToSchedule) { job, date in repository.scheduleJob(job, at: date) }
+        .scheduleSheet(for: $jobToSchedule) { job, date in
+            undoCenter.noticeCalendarResult(repository.scheduleJob(job, at: date))
+        }
         .sheet(isPresented: $showManageCategories) {
             ManageCategoriesSheet(allJobs: allJobs) { category in
                 repository.removeCategory(category, allJobs: allJobs)
@@ -241,7 +243,7 @@ private struct JobRow: View {
                     if !job.category.isEmpty { CategoryBadge(category: job.category) }
                     if item.subtaskTotal > 0 { InfoBadge(text: "\(item.subtaskDone)/\(item.subtaskTotal) completed") }
                     if let days = job.recurrenceDays { InfoBadge(text: formatRecurrence(days: days, weekdays: job.repeatWeekdays)) }
-                    if let scheduled = job.scheduledDate { ScheduledBadge(date: scheduled) }
+                    if let scheduled = job.scheduledDate { ScheduledBadge(date: scheduled, missed: job.isMissed()) }
                 }
                 if let waitingOnTitle = item.waitingOnTitle {
                     Label("Waiting on \(waitingOnTitle)", systemImage: "lock.fill")
@@ -280,7 +282,8 @@ private struct JobRow: View {
                 }
                 // Repeating jobs can't be scheduled.
                 if job.recurrenceDays == nil {
-                    if job.scheduledDate != nil {
+                    // A missed booking offers Schedule again.
+                    if job.isBooked() {
                         Button(action: onUnschedule) { Label("Unschedule", systemImage: "calendar.badge.minus") }
                     } else {
                         Button(action: onSchedule) { Label("Schedule", systemImage: "calendar.badge.plus") }

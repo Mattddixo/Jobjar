@@ -17,6 +17,23 @@ interface CalendarGateway {
     suspend fun deleteEvent(eventId: Long, owner: Job): Boolean
 
     suspend fun ownsEvent(eventId: Long, owner: Job): Boolean
+
+    /**
+     * Where [owner]'s event is now, for picking up changes made in the calendar app. Looks it up by
+     * [eventId] first, then by the job's tag in case the id changed. [EventLookup.Unknown] whenever
+     * it can't tell (no permission, an old untagged event), so callers never unschedule on a guess.
+     */
+    suspend fun findEvent(eventId: Long, owner: Job): EventLookup
+}
+
+sealed interface EventLookup {
+    /** Couldn't check. Leave the booking alone. */
+    data object Unknown : EventLookup
+
+    /** Checked, and the event is gone (deleted in the calendar app). */
+    data object Missing : EventLookup
+
+    data class Found(val eventId: Long, val startMillis: Long) : EventLookup
 }
 
 /** What goes in the event's description: the job's notes, then where the event came from. */

@@ -197,8 +197,11 @@ final class DrawViewModel {
 
     /// Schedules a drawn job and takes its card off the list.
     @MainActor
-    func scheduleJob(_ job: Job, at date: Date, repository: JobRepository) {
-        repository.scheduleJob(job, at: date)
+    /// Returns whether a calendar event was written.
+    @discardableResult
+    func scheduleJob(_ job: Job, at date: Date, repository: JobRepository) -> Bool {
+        let wroteEvent = repository.scheduleJob(job, at: date)
         drawnJobs.removeAll { $0.id == job.id }
+        return wroteEvent
     }
 }

@@ -258,9 +258,7 @@ struct JobRepository {
             dependent.dependsOnSubtaskId = nil
         }
         for row in removed {
-            if let eventId = row.calendarEventId {
-                _ = calendar.deleteEvent(eventId, owner: row)
-            }
+            removeUpcomingEvent(row)
             modelContext.delete(row)
         }
         save()
@@ -281,8 +279,10 @@ struct JobRepository {
                 restored.append(job)
             }
         }
+        let now = now()
         for job in restored {
-            guard let start = job.scheduledDate else { continue }
+            // Past slots were never deleted (see removeUpcomingEvent), so there's nothing to re-add.
+            guard let start = job.scheduledDate, !job.bookingIsOver(now: now) else { continue }
             if let eventId = job.calendarEventId, calendar.ownsEvent(eventId, owner: job) { continue }
             job.calendarEventId = calendar.insertEvent(for: job, start: start, end: end(of: job, startingAt: start))
         }
@@ -411,11 +411,42 @@ struct JobRepository {
     }
 
     private func clearSchedule(_ job: Job) {
-        if let eventId = job.calendarEventId {
-            _ = calendar.deleteEvent(eventId, owner: job)
-        }
+        removeUpcomingEvent(job)
         job.scheduledDate = nil
         job.calendarEventId = nil
+    }
+
+    /// Deletes the job's calendar event, unless its slot is already over. A past event is a record
+    /// of when you'd planned it, so unbooking only unlinks it.
+    private func removeUpcomingEvent(_ job: Job) {
+        guard let eventId = job.calendarEventId, !job.bookingIsOver(now: now()) else { return }
+        _ = calendar.deleteEvent(eventId, owner: job)
+    }
+
+    /// Picks up changes made in the Calendar app, for every booked job with an event: a moved event
+    /// moves the booking, a deleted one unbooks the job, and an event whose id changed gets
+    /// relinked. Anything the calendar can't vouch for is left alone. Run when the app becomes
+    /// active.
+    func syncCalendar() {
+        var changed = false
+        for job in fetchAll() {
+            guard job.scheduledDate != nil, let eventId = job.calendarEventId else { continue }
+            switch calendar.findEvent(eventId, owner: job) {
+            case .unknown:
+                continue
+            case .missing:
+                job.scheduledDate = nil
+                job.calendarEventId = nil
+                changed = true
+            case .found(let foundId, let start):
+                if foundId != eventId || start != job.scheduledDate {
+                    job.calendarEventId = foundId
+                    job.scheduledDate = start
+                    changed = true
+                }
+            }
+        }
+        if changed { save() }
     }
 
     /// Applies `change` to the job's checklist and saves it (trimmed, blank lines dropped).
@@ -469,9 +500,7 @@ struct JobRepository {
     /// bookings in the file get new events on this phone (event ids aren't kept in backups).
     func replaceAll(with records: [JobRecord]) {
         for job in fetchAll() {
-            if let eventId = job.calendarEventId {
-                _ = calendar.deleteEvent(eventId, owner: job)
-            }
+            removeUpcomingEvent(job)
             modelContext.delete(job)
         }
         let now = now()

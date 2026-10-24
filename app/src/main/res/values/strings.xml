@@ -67,6 +67,9 @@
     <string name="dialog_calendar_permission_body">To schedule a job, Job Jar adds it to your calendar. Turn on calendar access in settings to use this.</string>
     <string name="dialog_pick_time_title">What time?</string>
     <string name="badge_scheduled">Scheduled %1$s</string>
+    <string name="badge_missed">Missed %1$s</string>
+    <string name="schedule_time_passed">That time has already passed.</string>
+    <string name="schedule_no_event">Booked, but it couldn\'t be added to your calendar.</string>
 
     <!-- Jar tab -->
     <string name="draw_screen_title">Job Jar</string>
@@ -218,6 +221,16 @@
     <string name="settings_jar">Jar</string>
     <string name="settings_favour_fill">Favour jobs that fill my time</string>
     <string name="settings_favour_fill_explainer">Draws lean toward jobs that suit the time you pick and how many you ask for. Turn off to ignore job length. Priority always counts: high-priority jobs come up more often.</string>
+    <string name="settings_calendar">Calendar</string>
+    <string name="settings_calendar_target">Add bookings to</string>
+    <string name="settings_calendar_automatic">Phone\'s main calendar</string>
+    <string name="settings_calendar_alert">Alert</string>
+    <string name="settings_calendar_explainer">Applies to new bookings. You can still change any single event in your calendar app.</string>
+    <string name="alert_none">None</string>
+    <string name="alert_at_start">At start</string>
+    <string name="alert_minutes_before">%1$d minutes before</string>
+    <string name="alert_hour_before">1 hour before</string>
+    <string name="alert_day_before">1 day before</string>
     <string name="settings_your_data">Backup</string>
     <string name="settings_data_explainer">Your jobs are only stored on this phone. Export a copy to keep somewhere safe, or to move to a new phone.</string>
     <string name="settings_export">Export</string>

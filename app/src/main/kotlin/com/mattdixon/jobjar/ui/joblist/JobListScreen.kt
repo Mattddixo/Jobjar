@@ -85,10 +85,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mattdixon.jobjar.R
 import com.mattdixon.jobjar.data.JobRepository
 import com.mattdixon.jobjar.data.UndoSnapshot
+import com.mattdixon.jobjar.data.isBooked
+import com.mattdixon.jobjar.data.isMissed
 import com.mattdixon.jobjar.data.isPending
 import com.mattdixon.jobjar.ui.components.CategoryBadge
 import com.mattdixon.jobjar.ui.components.InfoBadge
 import com.mattdixon.jobjar.ui.components.SchedulePickerDialog
+import com.mattdixon.jobjar.ui.components.rememberCalendarResultNotice
 import com.mattdixon.jobjar.ui.components.TimeBucketBadge
 import com.mattdixon.jobjar.ui.components.TodayDateButton
 import com.mattdixon.jobjar.ui.components.dueStatusLabel
@@ -125,6 +128,7 @@ fun JobListScreen(
     var manageCategoriesOpen by remember { mutableStateOf(false) }
     var categoryPendingRemoval by remember { mutableStateOf<String?>(null) }
     var itemPendingSchedule by remember { mutableStateOf<JobListItem?>(null) }
+    val calendarNotice = rememberCalendarResultNotice()
     val undo = LocalUndoController.current
     val snackbarHostState = remember { SnackbarHostState() }
     UndoSnackbarEffect(snackbarHostState, isJobList = true)
@@ -413,7 +417,7 @@ fun JobListScreen(
         SchedulePickerDialog(
             onDismiss = { itemPendingSchedule = null },
             onConfirm = { dateTimeMillis ->
-                viewModel.scheduleJob(item.job, dateTimeMillis)
+                viewModel.scheduleJob(item.job, dateTimeMillis, calendarNotice)
                 itemPendingSchedule = null
             }
         )
@@ -587,7 +591,8 @@ private fun JobRow(
                     if (item.subtaskTotal > 0) InfoBadge(text = stringResource(R.string.subtasks_done_count, item.subtaskDone, item.subtaskTotal))
                     job.recurrenceDays?.let { InfoBadge(text = recurrenceLabel(it, job.repeatWeekdays)) }
                     if (item.scheduledDate != null) {
-                        InfoBadge(text = stringResource(R.string.badge_scheduled, formatScheduledDateTime(item.scheduledDate)))
+                        val label = if (job.isMissed()) R.string.badge_missed else R.string.badge_scheduled
+                        InfoBadge(text = stringResource(label, formatScheduledDateTime(item.scheduledDate)))
                     }
                 }
                 if (item.waitingOnTitle != null) {
@@ -662,9 +667,9 @@ private fun JobRow(
                             onClick = { menuExpanded = false; onToggleInProgress() }
                         )
                     }
-                    // Repeating jobs can't be scheduled.
+                    // Repeating jobs can't be scheduled. A missed booking offers Schedule again.
                     if (job.recurrenceDays == null) {
-                        if (job.scheduledDate != null) {
+                        if (job.isBooked()) {
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.action_unschedule)) },
                                 leadingIcon = { Icon(Icons.Filled.EventBusy, contentDescription = null) },

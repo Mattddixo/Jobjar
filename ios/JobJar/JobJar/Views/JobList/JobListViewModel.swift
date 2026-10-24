@@ -88,7 +88,8 @@ final class JobListViewModel {
     }
 
     /// Repeating jobs never stay done, so isPending() decides To do vs Done. The Repeating filter
-    /// ignores that split and shows them all. Scheduled is just scheduledDate != nil.
+    /// ignores that split and shows them all. Scheduled is jobs booked for a slot that hasn't
+    /// finished; a missed booking is back in To do.
     func items(allJobs: [Job]) -> [JobListItem] {
         let byId = Dictionary(allJobs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let subtasksByParent = Dictionary(grouping: allJobs.filter { $0.parentId != nil }) { $0.parentId! }
@@ -126,7 +127,7 @@ final class JobListViewModel {
             if showRepeatingOnly && job.recurrenceDays == nil { return false }
             if showInProgressOnly && !job.isInProgress { return false }
             switch view {
-            case .scheduled: if job.scheduledDate == nil { return false }
+            case .scheduled: if !job.isBooked() { return false }
             case .active: if !showRepeatingOnly && !job.isPending() { return false }
             case .completed: if !showRepeatingOnly && job.isPending() { return false }
             }

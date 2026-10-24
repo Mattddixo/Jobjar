@@ -165,9 +165,23 @@ extension Job {
         return !isDone
     }
 
-    /// Could the jar hand this out right now? Due, and not already started or booked.
+    /// When the booked slot ends: start plus the job's estimate. Nil if it isn't booked.
+    var bookingEnd: Date? { scheduledDate?.addingTimeInterval(Double(estimatedMinutes) * 60) }
+
+    /// The booked slot has finished (whether or not the job got done).
+    func bookingIsOver(now: Date = .now) -> Bool { bookingEnd.map { $0 < now } ?? false }
+
+    /// The booked slot came and went with the job still to do. A missed job is back in the jar and
+    /// shows a "Missed" note until it's started, finished or booked again.
+    func isMissed(now: Date = .now) -> Bool { isPending(now: now) && bookingIsOver(now: now) }
+
+    /// Booked for a slot that hasn't finished yet. Booked jobs stay out of the jar.
+    func isBooked(now: Date = .now) -> Bool { scheduledDate != nil && !bookingIsOver(now: now) }
+
+    /// Could the jar hand this out right now? Due, and not already started or booked. A missed
+    /// booking counts as not booked.
     func isAvailableToDraw(now: Date = .now) -> Bool {
-        isPending(now: now) && !isInProgress && scheduledDate == nil
+        isPending(now: now) && !isInProgress && !isBooked(now: now)
     }
 
     /// Subtasks of a job you've already started don't get drawn on their own.

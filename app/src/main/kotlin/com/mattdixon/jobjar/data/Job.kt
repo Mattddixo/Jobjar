@@ -63,12 +63,28 @@ fun Job.isPending(now: Long = System.currentTimeMillis()): Boolean =
         !isDone
     }
 
+/** When the booked slot ends: start plus the job's estimate. Null if it isn't booked. */
+fun Job.bookingEnd(): Long? = scheduledDate?.let { it + estimatedMinutes * 60_000L }
+
+/** The booked slot has finished (whether or not the job got done). */
+fun Job.bookingIsOver(now: Long = System.currentTimeMillis()): Boolean = bookingEnd()?.let { it < now } ?: false
+
 /**
- * Could the jar hand this out right now? Pending, and not already started or booked.
- * (The Jobs list still counts started/booked jobs as to-do, hence two functions.)
+ * The booked slot came and went with the job still to do. A missed job is back in the jar and
+ * shows a "Missed" note until it's started, finished or booked again.
+ */
+fun Job.isMissed(now: Long = System.currentTimeMillis()): Boolean = isPending(now) && bookingIsOver(now)
+
+/** Booked for a slot that hasn't finished yet. Booked jobs stay out of the jar. */
+fun Job.isBooked(now: Long = System.currentTimeMillis()): Boolean = scheduledDate != null && !bookingIsOver(now)
+
+/**
+ * Could the jar hand this out right now? Pending, and not already started or booked. A missed
+ * booking counts as not booked. (The Jobs list still counts started/booked jobs as to-do, hence
+ * two functions.)
  */
 fun Job.isAvailableToDraw(now: Long = System.currentTimeMillis()): Boolean =
-    isPending(now) && !isInProgress && scheduledDate == null
+    isPending(now) && !isInProgress && !isBooked(now)
 
 /**
  * Is this subtask's prerequisite done? Only matters for the draw, you can still tick it off

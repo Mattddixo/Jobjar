@@ -38,7 +38,9 @@ struct JobDetailView: View {
         .pageBackground()
         .navigationTitle("Job")
         .navigationBarTitleDisplayMode(.inline)
-        .scheduleSheet(for: $jobToSchedule) { job, date in repository.scheduleJob(job, at: date) }
+        .scheduleSheet(for: $jobToSchedule) { job, date in
+            undoCenter.noticeCalendarResult(repository.scheduleJob(job, at: date))
+        }
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button(action: onEdit) { Image(systemName: "pencil") }
@@ -118,7 +120,10 @@ struct JobDetailView: View {
                 }
 
                 if let scheduled = job.scheduledDate {
-                    Label("Scheduled \(formatScheduledDateTime(scheduled))", systemImage: "calendar")
+                    Label(
+                        "\(job.isMissed() ? "Missed" : "Scheduled") \(formatScheduledDateTime(scheduled))",
+                        systemImage: job.isMissed() ? "calendar.badge.exclamationmark" : "calendar"
+                    )
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -173,15 +178,15 @@ struct JobDetailView: View {
                         // Repeating jobs can't be scheduled, so Start gets the full width.
                         if job.recurrenceDays == nil {
                             Button {
-                                if job.scheduledDate != nil {
+                                if job.isBooked() {
                                     repository.unscheduleJob(job)
                                 } else {
                                     jobToSchedule = job
                                 }
                             } label: {
                                 Label(
-                                    job.scheduledDate != nil ? "Unschedule" : "Schedule",
-                                    systemImage: job.scheduledDate != nil ? "calendar.badge.minus" : "calendar.badge.plus"
+                                    job.isBooked() ? "Unschedule" : "Schedule",
+                                    systemImage: job.isBooked() ? "calendar.badge.minus" : "calendar.badge.plus"
                                 )
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 6)

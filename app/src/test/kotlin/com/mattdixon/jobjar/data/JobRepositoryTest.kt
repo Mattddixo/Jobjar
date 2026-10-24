@@ -368,6 +368,116 @@ class JobRepositoryTest {
         assertTrue(eventDescription(" Bring the forms ").startsWith("Bring the forms\n\nScheduled from Job Jar"))
     }
 
+    // --- Missed bookings ---
+
+    private val hour = 3_600_000L
+
+    @Test
+    fun aBookedJobStaysOutOfTheJarUntilItsSlotIsOverThenComesBack() = runTest {
+        val job = add("Paint fence", 60)
+        repo.scheduleJob(job, now + hour)
+        assertFalse(dao.row(job).isAvailableToDraw(now))
+        assertTrue(dao.row(job).isBooked(now))
+
+        // Slot is 1-2 hours from the start; during it, still booked.
+        now += 90 * 60_000
+        assertTrue(dao.row(job).isBooked(now))
+
+        now += hour
+        val row = dao.row(job)
+        assertTrue(row.isMissed(now))
+        assertFalse(row.isBooked(now))
+        assertTrue(row.isAvailableToDraw(now))
+        assertEquals(job, repo.drawJob(120, emptySet(), emptyList())?.job?.id)
+    }
+
+    @Test
+    fun startingAMissedJobKeepsItsPastEventButUnlinksIt() = runTest {
+        val job = add("Paint fence", 30)
+        repo.scheduleJob(job, now + hour)
+        now += 3 * hour
+        repo.toggleInProgress(job)
+        assertNull(dao.row(job).scheduledDate)
+        assertEquals("the past event stays as a record", 1, calendar.events.size)
+    }
+
+    @Test
+    fun completingOrDeletingOnlyRemovesUpcomingEvents() = runTest {
+        val upcoming = add("Upcoming", 30)
+        val past = add("Past", 30)
+        repo.scheduleJob(upcoming, now + 5 * hour)
+        repo.scheduleJob(past, now + hour)
+        now += 3 * hour
+        repo.toggleDone(upcoming)
+        repo.deleteJob(past)
+        assertEquals(listOf("Past"), calendar.events.values.map { it.title })
+    }
+
+    @Test
+    fun undoingAMissedJobsStartDoesNotAddASecondEvent() = runTest {
+        val job = add("Paint fence", 30)
+        repo.scheduleJob(job, now + hour)
+        now += 3 * hour
+        val snapshot = repo.toggleDone(job)!!
+        repo.undo(snapshot)
+        assertEquals(1, calendar.events.size)
+        assertTrue(dao.row(job).isMissed(now))
+    }
+
+    @Test
+    fun reschedulingAMissedJobMovesItsEvent() = runTest {
+        val job = add("Paint fence", 30)
+        repo.scheduleJob(job, now + hour)
+        val eventId = dao.row(job).calendarEventId
+        now += 3 * hour
+        repo.scheduleJob(job, now + hour)
+        assertEquals(eventId, dao.row(job).calendarEventId)
+        assertEquals(1, calendar.events.size)
+        assertTrue(dao.row(job).isBooked(now))
+    }
+
+    // --- Picking up calendar changes ---
+
+    @Test
+    fun movingTheEventInTheCalendarMovesTheBooking() = runTest {
+        val job = add("Dentist")
+        repo.scheduleJob(job, now + hour)
+        calendar.moveEvent(dao.row(job).calendarEventId!!, now + 26 * hour)
+        repo.syncCalendar()
+        assertEquals(now + 26 * hour, dao.row(job).scheduledDate)
+    }
+
+    @Test
+    fun deletingTheEventInTheCalendarUnbooksTheJob() = runTest {
+        val job = add("Dentist")
+        repo.scheduleJob(job, now + hour)
+        calendar.events.clear()
+        repo.syncCalendar()
+        assertNull(dao.row(job).scheduledDate)
+        assertNull(dao.row(job).calendarEventId)
+        assertTrue(dao.row(job).isAvailableToDraw(now))
+    }
+
+    @Test
+    fun anEventWithANewIdGetsRelinked() = runTest {
+        val job = add("Dentist")
+        repo.scheduleJob(job, now + hour)
+        val newId = calendar.rekeyEvent(dao.row(job).calendarEventId!!)
+        repo.syncCalendar()
+        assertEquals(newId, dao.row(job).calendarEventId)
+        assertEquals(now + hour, dao.row(job).scheduledDate)
+    }
+
+    @Test
+    fun withoutCalendarAccessBookingsAreLeftAlone() = runTest {
+        val job = add("Dentist")
+        repo.scheduleJob(job, now + hour)
+        calendar.events.clear()
+        calendar.permissionGranted = false
+        repo.syncCalendar()
+        assertEquals(now + hour, dao.row(job).scheduledDate)
+    }
+
     @Test
     fun schedulingWithoutCalendarPermissionStillBooksInApp() = runTest {
         calendar.permissionGranted = false

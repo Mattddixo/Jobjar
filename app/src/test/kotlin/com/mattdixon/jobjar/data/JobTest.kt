@@ -29,8 +29,15 @@ class JobTest {
 
     @Test
     fun scheduledOrStartedJobsAreNotDrawable() {
-        assertFalse(Job(title = "a", estimatedMinutes = 5, scheduledDate = 1).isAvailableToDraw())
-        assertFalse(Job(title = "a", estimatedMinutes = 5, isInProgress = true).isAvailableToDraw())
+        val now = 1_000_000_000L
+        assertFalse(Job(title = "a", estimatedMinutes = 5, scheduledDate = now + 60_000).isAvailableToDraw(now))
+        assertFalse(Job(title = "a", estimatedMinutes = 5, isInProgress = true).isAvailableToDraw(now))
+        // A slot that ended with the job still to do is missed: back in the jar.
+        val missed = Job(title = "a", estimatedMinutes = 5, scheduledDate = now - 10 * 60_000)
+        assertTrue(missed.isMissed(now))
+        assertTrue(missed.isAvailableToDraw(now))
+        // Mid-slot is still booked.
+        assertTrue(Job(title = "a", estimatedMinutes = 30, scheduledDate = now - 10 * 60_000).isBooked(now))
     }
 
     @Test

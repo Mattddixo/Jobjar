@@ -49,6 +49,8 @@ import androidx.compose.ui.unit.dp
 import com.mattdixon.jobjar.R
 import com.mattdixon.jobjar.data.Job
 import com.mattdixon.jobjar.data.JobRepository
+import com.mattdixon.jobjar.data.isBooked
+import com.mattdixon.jobjar.data.isMissed
 import com.mattdixon.jobjar.data.isPending
 import com.mattdixon.jobjar.data.remainingMinutes
 import com.mattdixon.jobjar.data.totalCostCents
@@ -56,6 +58,7 @@ import com.mattdixon.jobjar.ui.components.CategoryBadge
 import com.mattdixon.jobjar.ui.components.ChecklistSection
 import com.mattdixon.jobjar.ui.components.InfoBadge
 import com.mattdixon.jobjar.ui.components.SchedulePickerDialog
+import com.mattdixon.jobjar.ui.components.rememberCalendarResultNotice
 import com.mattdixon.jobjar.ui.components.SubtasksSection
 import com.mattdixon.jobjar.ui.components.TimeBucketBadge
 import com.mattdixon.jobjar.ui.theme.AppShapes
@@ -108,6 +111,7 @@ fun JobDetailScreen(
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showForceCompleteDialog by remember { mutableStateOf(false) }
     var showSchedulePicker by remember { mutableStateOf(false) }
+    val calendarNotice = rememberCalendarResultNotice()
 
     val currentJob = job
     val parentFlow = remember(currentJob?.parentId) {
@@ -222,7 +226,10 @@ fun JobDetailScreen(
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            stringResource(R.string.badge_scheduled, formatScheduledDateTime(currentJob.scheduledDate)),
+                            stringResource(
+                                if (currentJob.isMissed()) R.string.badge_missed else R.string.badge_scheduled,
+                                formatScheduledDateTime(currentJob.scheduledDate)
+                            ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -310,7 +317,7 @@ fun JobDetailScreen(
                             }
                             OutlinedButton(
                                 onClick = {
-                                    if (currentJob.scheduledDate != null) {
+                                    if (currentJob.isBooked()) {
                                         scope.launch { repository.unscheduleJob(currentJob.id) }
                                     } else {
                                         showSchedulePicker = true
@@ -320,10 +327,10 @@ fun JobDetailScreen(
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Icon(
-                                    if (currentJob.scheduledDate != null) Icons.Filled.EventBusy else Icons.Filled.Event,
+                                    if (currentJob.isBooked()) Icons.Filled.EventBusy else Icons.Filled.Event,
                                     contentDescription = null
                                 )
-                                Text(stringResource(if (currentJob.scheduledDate != null) R.string.action_unschedule else R.string.action_schedule))
+                                Text(stringResource(if (currentJob.isBooked()) R.string.action_unschedule else R.string.action_schedule))
                             }
                         }
                     } else {
@@ -428,7 +435,7 @@ fun JobDetailScreen(
                 SchedulePickerDialog(
                     onDismiss = { showSchedulePicker = false },
                     onConfirm = { dateTimeMillis ->
-                        scope.launch { repository.scheduleJob(currentJob.id, dateTimeMillis) }
+                        scope.launch { calendarNotice(repository.scheduleJob(currentJob.id, dateTimeMillis)) }
                         showSchedulePicker = false
                     }
                 )

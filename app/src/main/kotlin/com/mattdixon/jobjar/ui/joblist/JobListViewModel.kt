@@ -8,6 +8,7 @@ import com.mattdixon.jobjar.R
 import com.mattdixon.jobjar.data.Job
 import com.mattdixon.jobjar.data.JobRepository
 import com.mattdixon.jobjar.data.UndoSnapshot
+import com.mattdixon.jobjar.data.isBooked
 import com.mattdixon.jobjar.data.isPending
 import com.mattdixon.jobjar.data.isUnblocked
 import com.mattdixon.jobjar.data.remainingMinutes
@@ -148,14 +149,15 @@ class JobListViewModel(private val repository: JobRepository) : ViewModel() {
         val query = currentFilters.searchQuery.trim()
 
         // Repeating jobs never stay done, so isPending() decides To do vs Done. The Repeating filter
-        // ignores that split and shows them all. Scheduled is just scheduledDate != null.
+        // ignores that split and shows them all. Scheduled is jobs booked for a slot that hasn't
+        // finished; a missed booking is back in To do.
         val filtered = items
             .filter { currentFilters.categories.isEmpty() || it.job.category in currentFilters.categories }
             .filter { !currentFilters.repeatingOnly || it.job.recurrenceDays != null }
             .filter { !currentFilters.inProgressOnly || it.job.isInProgress }
             .filter {
                 when (currentFilters.view) {
-                    JobsView.SCHEDULED -> it.job.scheduledDate != null
+                    JobsView.SCHEDULED -> it.job.isBooked()
                     JobsView.ACTIVE -> currentFilters.repeatingOnly || it.job.isPending()
                     JobsView.COMPLETED -> currentFilters.repeatingOnly || !it.job.isPending()
                 }
@@ -252,8 +254,8 @@ class JobListViewModel(private val repository: JobRepository) : ViewModel() {
         viewModelScope.launch { repository.deleteJob(job.id)?.let(onDeleted) }
     }
 
-    fun scheduleJob(job: Job, dateTimeMillis: Long) {
-        viewModelScope.launch { repository.scheduleJob(job.id, dateTimeMillis) }
+    fun scheduleJob(job: Job, dateTimeMillis: Long, onResult: (wroteEvent: Boolean) -> Unit) {
+        viewModelScope.launch { onResult(repository.scheduleJob(job.id, dateTimeMillis)) }
     }
 
     fun unscheduleJob(job: Job) {
