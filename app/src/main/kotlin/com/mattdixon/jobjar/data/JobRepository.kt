@@ -130,7 +130,7 @@ class JobRepository(
         if (recurrenceDays != null) {
             merged = merged.copy(isDone = false)
             if (merged.scheduledDate != null) {
-                fresh.calendarEventId?.let { sync.deleteEvent(it, fresh) }
+                removeUpcomingEvent(fresh, sync)
                 merged = merged.copy(scheduledDate = null, calendarEventId = null)
             }
         }
@@ -170,7 +170,7 @@ class JobRepository(
         }
         dao.clearDependenciesOn(job.id)
         removed.forEach { row ->
-            row.calendarEventId?.let { sync.deleteEvent(it, row) }
+            removeUpcomingEvent(row, sync)
             dao.delete(row)
         }
         UndoSnapshot(removed + dependents)
@@ -179,7 +179,10 @@ class JobRepository(
     /** Puts the rows back and re-adds any calendar events the change removed. */
     suspend fun undo(snapshot: UndoSnapshot) {
         transactions.run { dao.upsertAll(snapshot.rows) }
+        val now = clock()
         snapshot.rows.forEach { row ->
+            // Past slots were never deleted (see removeUpcomingEvent), so there's nothing to re-add.
+            if (row.bookingIsOver(now)) return@forEach
             val start = row.scheduledDate ?: return@forEach
             val eventId = row.calendarEventId
             if (eventId == null || !calendar.ownsEvent(eventId, row)) {
@@ -236,8 +239,46 @@ class JobRepository(
 
     private suspend fun clearSchedule(job: Job, sync: CalendarSync) {
         if (job.scheduledDate == null && job.calendarEventId == null) return
-        job.calendarEventId?.let { sync.deleteEvent(it, job) }
+        removeUpcomingEvent(job, sync)
         dao.clearSchedule(job.id)
+    }
+
+    /**
+     * Deletes the job's calendar event, unless its slot is already over. A past event is a record
+     * of when you'd planned it, so unbooking only unlinks it.
+     */
+    private fun removeUpcomingEvent(job: Job, sync: CalendarSync) {
+        val eventId = job.calendarEventId ?: return
+        if (!job.bookingIsOver(clock())) sync.deleteEvent(eventId, job)
+    }
+
+    /**
+     * Picks up changes made in the calendar app, for every booked job with an event: a moved event
+     * moves the booking, a deleted one unbooks the job, and an event whose id changed gets
+     * relinked. Anything the calendar can't vouch for is left alone. Run when the app comes to the
+     * front.
+     */
+    suspend fun syncCalendar() {
+        val linked = dao.getAllJobs().filter { it.scheduledDate != null && it.calendarEventId != null }
+        linked.forEach { job ->
+            val eventId = job.calendarEventId ?: return@forEach
+            val lookup = calendar.findEvent(eventId, job)
+            if (lookup == EventLookup.Unknown) return@forEach
+            transactions.run {
+                // Only act if nothing has changed the booking since we looked.
+                val current = dao.getJob(job.id)
+                    ?.takeIf { it.calendarEventId == eventId && it.scheduledDate == job.scheduledDate }
+                    ?: return@run
+                when (lookup) {
+                    EventLookup.Missing -> dao.clearSchedule(current.id)
+                    is EventLookup.Found ->
+                        if (lookup.eventId != eventId || lookup.startMillis != current.scheduledDate) {
+                            dao.setSchedule(current.id, lookup.startMillis, lookup.eventId)
+                        }
+                    EventLookup.Unknown -> Unit
+                }
+            }
+        }
     }
 
     /**
@@ -425,11 +466,11 @@ class JobRepository(
         val keptEvents = jobs.mapNotNullTo(mutableSetOf()) { job ->
             job.calendarEventId?.takeIf { job.scheduledDate != null }?.let { job.id to it }
         }
+        val now = clock()
         old.forEach { row ->
             val eventId = row.calendarEventId ?: return@forEach
-            if ((row.id to eventId) !in keptEvents) calendar.deleteEvent(eventId, row)
+            if ((row.id to eventId) !in keptEvents && !row.bookingIsOver(now)) calendar.deleteEvent(eventId, row)
         }
-        val now = clock()
         jobs.forEach { row ->
             val start = row.scheduledDate?.takeIf { it > now } ?: return@forEach
             val eventId = row.calendarEventId

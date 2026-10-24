@@ -14,6 +14,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -54,9 +55,18 @@ private val topLevelDestinations = listOf(TopLevelDestination.Draw, TopLevelDest
 fun JobJarApp(
     repository: JobRepository,
     themeMode: ThemeMode,
-    onThemeModeChange: (ThemeMode) -> Unit
+    onThemeModeChange: (ThemeMode) -> Unit,
+    /** A job to open, e.g. from "Open in Job Jar" on a calendar event. */
+    openJobId: Long? = null,
+    onOpenJobHandled: () -> Unit = {}
 ) {
     val navController = rememberNavController()
+    LaunchedEffect(openJobId) {
+        if (openJobId != null) {
+            navController.navigate("job/$openJobId") { launchSingleTop = true }
+            onOpenJobHandled()
+        }
+    }
     val appScope = rememberCoroutineScope()
     val undoController = remember(repository) { UndoController(repository, appScope) }
     val openSettings = { navController.navigate(SETTINGS_ROUTE) { launchSingleTop = true } }

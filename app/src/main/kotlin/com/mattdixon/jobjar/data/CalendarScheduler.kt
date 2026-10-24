@@ -37,10 +37,25 @@ class CalendarScheduler(private val context: Context) : CalendarGateway {
             put(CalendarContract.Events.DTEND, endMillis)
             put(CalendarContract.Events.EVENT_TIMEZONE, TimeZone.getDefault().id)
         }
+        val alertMinutes = CalendarPreferences.alertMinutes(context)
+        if (alertMinutes != null) values.put(CalendarContract.Events.HAS_ALARM, 1)
         // Some providers reject the custom app columns. An untagged event is better than none.
         val uri = runCatching { resolver.insert(CalendarContract.Events.CONTENT_URI, values.tagged(job)) }.getOrNull()
             ?: runCatching { resolver.insert(CalendarContract.Events.CONTENT_URI, values) }.getOrNull()
-        uri?.let { ContentUris.parseId(it) }
+        val eventId = uri?.let { ContentUris.parseId(it) } ?: return@withContext null
+        if (alertMinutes != null) addAlert(eventId, alertMinutes)
+        eventId
+    }
+
+    /** The alert from Settings. It stays with the event when it's moved; edit it in the calendar app. */
+    private fun addAlert(eventId: Long, minutesBefore: Int) {
+        val reminder = ContentValues().apply {
+            put(CalendarContract.Reminders.EVENT_ID, eventId)
+            put(CalendarContract.Reminders.MINUTES, minutesBefore)
+            put(CalendarContract.Reminders.METHOD, CalendarContract.Reminders.METHOD_ALERT)
+        }
+        // The event is already saved; a calendar that won't take the alert just doesn't get one.
+        runCatching { resolver.insert(CalendarContract.Reminders.CONTENT_URI, reminder) }
     }
 
     override suspend fun updateEvent(eventId: Long, owner: Job, title: String, notes: String, startMillis: Long, endMillis: Long): Boolean =
@@ -66,6 +81,96 @@ class CalendarScheduler(private val context: Context) : CalendarGateway {
 
     override suspend fun ownsEvent(eventId: Long, owner: Job): Boolean = withContext(Dispatchers.IO) {
         hasPermission() && isOurs(eventId, owner)
+    }
+
+    override suspend fun findEvent(eventId: Long, owner: Job): EventLookup = withContext(Dispatchers.IO) {
+        if (!hasPermission()) return@withContext EventLookup.Unknown
+        val projection = arrayOf(
+            CalendarContract.Events.TITLE,
+            CalendarContract.Events.DTSTART,
+            CalendarContract.Events.CUSTOM_APP_PACKAGE,
+            CalendarContract.Events.CUSTOM_APP_URI,
+            CalendarContract.Events.DELETED
+        )
+        val uri = ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, eventId)
+        val byId = runCatching { resolver.query(uri, projection, null, null, null) }.getOrNull()
+            ?: return@withContext EventLookup.Unknown
+        byId.use {
+            if (it.moveToFirst() && it.getInt(4) == 0) {
+                val pkg = it.getString(2)
+                val appUri = it.getString(3)
+                if (pkg == null && appUri == null) {
+                    // Untagged (from before tagging, or a provider that drops the columns). It only
+                    // provably matches while it's untouched; if it was moved, we can't tell it from
+                    // someone else's event, so leave the booking alone.
+                    val untouched = it.getString(0) == owner.title && !it.isNull(1) && it.getLong(1) == owner.scheduledDate
+                    return@withContext if (untouched) EventLookup.Found(eventId, it.getLong(1)) else EventLookup.Unknown
+                }
+                if (pkg == context.packageName && appUri == jobUri(owner.id)) {
+                    return@withContext if (it.isNull(1)) EventLookup.Unknown else EventLookup.Found(eventId, it.getLong(1))
+                }
+            }
+        }
+        // Not under that id (deleted, or the id now belongs to someone else's event). It may still
+        // exist under a new id, so look for our tag before calling it gone.
+        val selection = "${CalendarContract.Events.CUSTOM_APP_PACKAGE} = ? AND ${CalendarContract.Events.CUSTOM_APP_URI} = ? AND " +
+            "${CalendarContract.Events.DELETED} = 0"
+        val byTag = runCatching {
+            resolver.query(
+                CalendarContract.Events.CONTENT_URI,
+                arrayOf(CalendarContract.Events._ID, CalendarContract.Events.DTSTART),
+                selection,
+                arrayOf(context.packageName, jobUri(owner.id)),
+                null
+            )
+        }.getOrNull() ?: return@withContext EventLookup.Unknown
+        byTag.use {
+            if (it.moveToFirst() && !it.isNull(1)) EventLookup.Found(it.getLong(0), it.getLong(1)) else EventLookup.Missing
+        }
+    }
+
+    /** The job an event belongs to, from its tag. For opening the job from the calendar app. */
+    fun jobIdForEvent(eventId: Long): Long? {
+        if (!hasPermission()) return null
+        val uri = ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, eventId)
+        val cursor = runCatching {
+            resolver.query(uri, arrayOf(CalendarContract.Events.CUSTOM_APP_PACKAGE, CalendarContract.Events.CUSTOM_APP_URI), null, null, null)
+        }.getOrNull() ?: return null
+        cursor.use {
+            if (!it.moveToFirst() || it.getString(0) != context.packageName) return null
+            return jobIdFromUri(it.getString(1))
+        }
+    }
+
+    /** Calendars new bookings can go to: visible ones you can add events to, for Settings. */
+    fun writableCalendars(): List<CalendarOption> {
+        if (!hasPermission()) return emptyList()
+        val projection = arrayOf(
+            CalendarContract.Calendars._ID,
+            CalendarContract.Calendars.CALENDAR_DISPLAY_NAME,
+            CalendarContract.Calendars.ACCOUNT_NAME,
+            CalendarContract.Calendars.CALENDAR_ACCESS_LEVEL,
+            CalendarContract.Calendars.VISIBLE,
+            CalendarContract.Calendars.IS_PRIMARY
+        )
+        val cursor = runCatching {
+            resolver.query(CalendarContract.Calendars.CONTENT_URI, projection, null, null, null)
+        }.getOrNull() ?: return emptyList()
+        return cursor.use {
+            buildList {
+                while (it.moveToNext()) {
+                    if (it.getInt(3) < CalendarContract.Calendars.CAL_ACCESS_CONTRIBUTOR || it.getInt(4) == 0) continue
+                    add(
+                        CalendarOption(
+                            id = it.getLong(0),
+                            name = it.getString(1) ?: "",
+                            account = it.getString(2) ?: "",
+                            isPrimary = it.getInt(5) != 0
+                        )
+                    )
+                }
+            }
+        }
     }
 
     private fun ContentValues.tagged(job: Job) = ContentValues(this).apply {
@@ -97,12 +202,26 @@ class CalendarScheduler(private val context: Context) : CalendarGateway {
         }
     }
 
-    /** Primary calendar if there is one, otherwise the first one we're allowed to write to. */
+    /**
+     * Where new events go: the calendar picked in Settings if it's still there, otherwise the
+     * phone's main calendar.
+     */
     private fun findWritableCalendarId(): Long? {
+        val chosen = CalendarPreferences.calendarId(context)
+        if (chosen != null && writableCalendars().any { it.id == chosen }) return chosen
+        return findDefaultCalendarId()
+    }
+
+    /**
+     * The phone's main calendar: a visible primary calendar if there is one, then any visible
+     * calendar we can write to, then any we can write to at all.
+     */
+    private fun findDefaultCalendarId(): Long? {
         val projection = arrayOf(
             CalendarContract.Calendars._ID,
             CalendarContract.Calendars.IS_PRIMARY,
-            CalendarContract.Calendars.CALENDAR_ACCESS_LEVEL
+            CalendarContract.Calendars.CALENDAR_ACCESS_LEVEL,
+            CalendarContract.Calendars.VISIBLE
         )
         val cursor = runCatching {
             resolver.query(CalendarContract.Calendars.CONTENT_URI, projection, null, null, null)
@@ -111,19 +230,29 @@ class CalendarScheduler(private val context: Context) : CalendarGateway {
             val idIndex = it.getColumnIndexOrThrow(CalendarContract.Calendars._ID)
             val primaryIndex = it.getColumnIndex(CalendarContract.Calendars.IS_PRIMARY)
             val accessIndex = it.getColumnIndexOrThrow(CalendarContract.Calendars.CALENDAR_ACCESS_LEVEL)
-            var fallbackId: Long? = null
+            val visibleIndex = it.getColumnIndex(CalendarContract.Calendars.VISIBLE)
+            var visibleFallback: Long? = null
+            var anyFallback: Long? = null
             while (it.moveToNext()) {
                 if (it.getInt(accessIndex) < CalendarContract.Calendars.CAL_ACCESS_CONTRIBUTOR) continue
                 val id = it.getLong(idIndex)
                 val isPrimary = primaryIndex >= 0 && it.getInt(primaryIndex) != 0
-                if (isPrimary) return id
-                if (fallbackId == null) fallbackId = id
+                val isVisible = visibleIndex < 0 || it.getInt(visibleIndex) != 0
+                if (isPrimary && isVisible) return id
+                if (isVisible && visibleFallback == null) visibleFallback = id
+                if (anyFallback == null) anyFallback = id
             }
-            return fallbackId
+            return visibleFallback ?: anyFallback
         }
     }
 
     companion object {
         fun jobUri(jobId: Long) = "jobjar://job/$jobId"
+
+        /** The job id in a `jobjar://job/<id>` link, or null if it isn't one. */
+        fun jobIdFromUri(uri: String?): Long? = uri?.removePrefix("jobjar://job/")?.takeIf { it != uri }?.toLongOrNull()
     }
 }
+
+/** A calendar you can pick in Settings. */
+data class CalendarOption(val id: Long, val name: String, val account: String, val isPrimary: Boolean)

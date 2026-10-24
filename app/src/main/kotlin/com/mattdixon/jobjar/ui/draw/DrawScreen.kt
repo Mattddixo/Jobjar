@@ -73,6 +73,7 @@ import com.mattdixon.jobjar.data.LONG_JOB_MINUTES
 import com.mattdixon.jobjar.ui.components.CategoryBadge
 import com.mattdixon.jobjar.ui.components.InfoBadge
 import com.mattdixon.jobjar.ui.components.SchedulePickerDialog
+import com.mattdixon.jobjar.ui.components.rememberCalendarResultNotice
 import com.mattdixon.jobjar.ui.components.TimeBucketBadge
 import com.mattdixon.jobjar.ui.components.TodayDateButton
 import com.mattdixon.jobjar.ui.theme.AppShapes
@@ -105,6 +106,7 @@ fun DrawScreen(
     val viewModel: DrawViewModel = viewModel(factory = DrawViewModel.Factory(repository, appContext))
     val state by viewModel.uiState.collectAsState()
     var jobIdPendingSchedule by remember { mutableStateOf<Long?>(null) }
+    val calendarNotice = rememberCalendarResultNotice()
 
     Scaffold(
         topBar = {
@@ -193,7 +195,7 @@ fun DrawScreen(
         SchedulePickerDialog(
             onDismiss = { jobIdPendingSchedule = null },
             onConfirm = { dateTimeMillis ->
-                viewModel.scheduleJob(jobId, dateTimeMillis)
+                viewModel.scheduleJob(jobId, dateTimeMillis, calendarNotice)
                 jobIdPendingSchedule = null
             }
         )

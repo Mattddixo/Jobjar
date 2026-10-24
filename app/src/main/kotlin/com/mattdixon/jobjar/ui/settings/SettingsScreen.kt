@@ -152,6 +152,12 @@ fun SettingsScreen(
 
             HorizontalDivider()
 
+            Section(title = stringResource(R.string.settings_calendar)) {
+                CalendarSettings()
+            }
+
+            HorizontalDivider()
+
             Section(title = stringResource(R.string.settings_your_data)) {
                 Text(
                     stringResource(R.string.settings_data_explainer),

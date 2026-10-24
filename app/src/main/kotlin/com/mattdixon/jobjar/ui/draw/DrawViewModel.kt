@@ -221,10 +221,10 @@ class DrawViewModel(
     }
 
     /** Schedules a drawn job and takes its card off the list. */
-    fun scheduleJob(jobId: Long, dateTimeMillis: Long) {
+    fun scheduleJob(jobId: Long, dateTimeMillis: Long, onResult: (wroteEvent: Boolean) -> Unit) {
         val entry = _uiState.value.drawnJobs.find { it.job.id == jobId } ?: return
         viewModelScope.launch {
-            repository.scheduleJob(entry.job.id, dateTimeMillis)
+            onResult(repository.scheduleJob(entry.job.id, dateTimeMillis))
             _uiState.value = _uiState.value.copy(
                 drawnJobs = _uiState.value.drawnJobs.filterNot { it.job.id == jobId }
             )

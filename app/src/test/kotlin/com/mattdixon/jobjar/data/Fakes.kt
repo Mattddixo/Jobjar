@@ -97,6 +97,26 @@ class FakeCalendar : CalendarGateway {
         ownsEvent(eventId, owner) && events.remove(eventId) != null
 
     override suspend fun ownsEvent(eventId: Long, owner: Job): Boolean = events[eventId]?.jobId == owner.id
+
+    override suspend fun findEvent(eventId: Long, owner: Job): EventLookup {
+        if (!permissionGranted) return EventLookup.Unknown
+        events[eventId]?.takeIf { it.jobId == owner.id }?.let { return EventLookup.Found(eventId, it.start) }
+        val moved = events.entries.firstOrNull { it.value.jobId == owner.id }
+        return if (moved != null) EventLookup.Found(moved.key, moved.value.start) else EventLookup.Missing
+    }
+
+    /** What someone dragging the event in their calendar app does. */
+    fun moveEvent(eventId: Long, start: Long) {
+        val event = events.getValue(eventId)
+        events[eventId] = event.copy(start = start, end = start + (event.end - event.start))
+    }
+
+    /** Some calendars hand an event a new id when it syncs. */
+    fun rekeyEvent(eventId: Long): Long {
+        val newId = nextId++
+        events[newId] = events.remove(eventId)!!
+        return newId
+    }
 }
 
 object DirectTransactions : TransactionRunner {
