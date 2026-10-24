@@ -89,7 +89,7 @@ import com.mattdixon.jobjar.ui.components.plural
 import com.mattdixon.jobjar.ui.components.recurrenceLabel
 import kotlin.math.ceil
 
-private val TIME_PRESETS = listOf(15, 30, 45, 60, 90, 120)
+private val TIME_PRESETS = listOf(15, 30, 45, 60, 90, 120, 150, 180, 210)
 
 /** Jar looks full from this many jobs up. Only affects the picture. */
 private const val JAR_FILL_CAP = 15

@@ -1,7 +1,7 @@
 import SwiftData
 import SwiftUI
 
-private let timePresets = [15, 30, 45, 60, 90, 120]
+private let timePresets = [15, 30, 45, 60, 90, 120, 150, 180, 210]
 
 struct DrawView: View {
     var onOpenJob: (UUID) -> Void
