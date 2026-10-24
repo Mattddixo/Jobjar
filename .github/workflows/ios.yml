@@ -92,7 +92,11 @@ jobs:
           tag_name: ios-build-${{ github.run_number }}
           target_commitish: ${{ github.sha }}
           name: Job Jar for iPhone (build ${{ github.run_number }})
-          prerelease: true
+          # A full release marked Latest, so this link always gets the newest build:
+          # https://github.com/Mattddixo/Jobjar/releases/latest/download/JobJar.ipa
+          # (The Releases page sorts by name, so build 9 would otherwise sit above build 22.)
+          prerelease: false
+          make_latest: true
           files: JobJar.ipa
           body: |
             Unsigned iPhone build. Install it with Sideloadly or AltStore using your own Apple ID.

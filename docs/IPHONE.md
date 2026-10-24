@@ -32,8 +32,12 @@ app switched on:
 
 ## 2. Download the app
 
-Go to https://github.com/Mattddixo/Jobjar/releases, open the newest "Job Jar for iPhone"
-release and download `JobJar.ipa`. No GitHub account needed.
+Download the newest `JobJar.ipa` with this link (it always gets the latest build):
+
+https://github.com/Mattddixo/Jobjar/releases/latest/download/JobJar.ipa
+
+Or go to https://github.com/Mattddixo/Jobjar/releases and download `JobJar.ipa` from the release
+marked **Latest**. No GitHub account needed.
 
 ## 3. Install it
 
@@ -74,5 +78,5 @@ A free Apple ID can have up to 3 apps installed this way at once.
 
 ## Updates
 
-When there's a new version, download the new `JobJar.ipa` from the releases page and install
-it the same way, with the same Apple ID. Your jobs stay put.
+When there's a new version, download `JobJar.ipa` again with the link in step 2 and install it
+the same way, with the same Apple ID. Your jobs stay put.
