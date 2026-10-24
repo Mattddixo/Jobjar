@@ -24,6 +24,9 @@ interface CalendarGateway {
      * it can't tell (no permission, an old untagged event), so callers never unschedule on a guess.
      */
     suspend fun findEvent(eventId: Long, owner: Job): EventLookup
+
+    /** Asks the calendar to fetch changes made elsewhere (e.g. deletions in the calendar app). */
+    suspend fun refresh() {}
 }
 
 sealed interface EventLookup {

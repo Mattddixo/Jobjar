@@ -383,19 +383,19 @@ struct JobRepository {
         save()
     }
 
-    /// Books a job and writes a calendar event for it (moving the existing one if there is
-    /// one). Booked jobs stay out of the jar and aren't in progress. Repeating jobs can't be
-    /// booked. Returns whether a calendar event was written; the booking is saved either way.
+    /// Books a job and writes a calendar event for it. Booked jobs stay out of the jar and aren't
+    /// in progress. Repeating jobs can't be booked. Returns whether a calendar event was written;
+    /// the booking is saved either way.
+    ///
+    /// Rescheduling writes a fresh event and removes the old one, same as Android (where moving an
+    /// event deleted in the calendar app but not yet synced would leave the booking without one).
+    /// A missed booking's past event stays as a record (see removeUpcomingEvent).
     @discardableResult
     func scheduleJob(_ job: Job, at start: Date) -> Bool {
         guard job.recurrenceDays == nil else { return false }
-        let finish = end(of: job, startingAt: start)
-        var eventId: String?
-        if let existing = job.calendarEventId,
-           calendar.updateEvent(existing, owner: job, title: job.title, notes: job.notes, start: start, end: finish) {
-            eventId = existing
-        } else {
-            eventId = calendar.insertEvent(for: job, start: start, end: finish)
+        let eventId = calendar.insertEvent(for: job, start: start, end: end(of: job, startingAt: start))
+        if let previous = job.calendarEventId, previous != eventId {
+            removeUpcomingEvent(job)
         }
         job.scheduledDate = start
         job.calendarEventId = eventId
