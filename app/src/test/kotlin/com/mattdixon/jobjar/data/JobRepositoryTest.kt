@@ -205,14 +205,37 @@ class JobRepositoryTest {
     }
 
     @Test
-    fun reschedulingMovesTheSameEvent() = runTest {
+    fun reschedulingReplacesTheEvent() = runTest {
         val job = add("Dentist")
         repo.scheduleJob(job, now + 3_600_000)
-        val id = dao.row(job).calendarEventId
+        val oldId = dao.row(job).calendarEventId
         repo.scheduleJob(job, now + 7_200_000)
-        assertEquals(id, dao.row(job).calendarEventId)
-        assertEquals(1, calendar.events.size)
-        assertEquals(now + 7_200_000, calendar.events.getValue(id!!).start)
+        val newId = dao.row(job).calendarEventId!!
+        assertTrue(newId != oldId)
+        assertEquals("the old one is gone", setOf(newId), calendar.events.keys)
+        assertEquals(now + 7_200_000, calendar.events.getValue(newId).start)
+    }
+
+    @Test
+    fun reschedulingAfterTheEventWasDeletedInTheCalendarStillWritesOne() = runTest {
+        val job = add("Dentist")
+        repo.scheduleJob(job, now + 3_600_000)
+        // Deleted in the calendar app; the app hasn't noticed yet.
+        calendar.events.clear()
+        assertTrue(repo.scheduleJob(job, now + 7_200_000))
+        assertEquals(now + 7_200_000, calendar.events.values.single().start)
+        assertEquals(calendar.events.keys.single(), dao.row(job).calendarEventId)
+    }
+
+    @Test
+    fun unschedulingThenReschedulingWritesANewEvent() = runTest {
+        val job = add("Dentist")
+        repo.scheduleJob(job, now + 3_600_000)
+        repo.unscheduleJob(job)
+        assertTrue(calendar.events.isEmpty())
+        repo.scheduleJob(job, now + 7_200_000)
+        assertEquals(now + 7_200_000, calendar.events.values.single().start)
+        assertEquals(calendar.events.keys.single(), dao.row(job).calendarEventId)
     }
 
     @Test
@@ -425,14 +448,15 @@ class JobRepositoryTest {
     }
 
     @Test
-    fun reschedulingAMissedJobMovesItsEvent() = runTest {
+    fun reschedulingAMissedJobKeepsThePastEventAndAddsANewOne() = runTest {
         val job = add("Paint fence", 30)
         repo.scheduleJob(job, now + hour)
-        val eventId = dao.row(job).calendarEventId
+        val pastId = dao.row(job).calendarEventId!!
         now += 3 * hour
         repo.scheduleJob(job, now + hour)
-        assertEquals(eventId, dao.row(job).calendarEventId)
-        assertEquals(1, calendar.events.size)
+        assertEquals(2, calendar.events.size)
+        assertTrue("the past one stays as a record", pastId in calendar.events)
+        assertTrue(dao.row(job).calendarEventId != pastId)
         assertTrue(dao.row(job).isBooked(now))
     }
 

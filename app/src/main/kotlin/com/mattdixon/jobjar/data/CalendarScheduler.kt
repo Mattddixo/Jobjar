@@ -1,10 +1,13 @@
 package com.mattdixon.jobjar.data
 
 import android.Manifest
+import android.accounts.Account
+import android.content.ContentResolver
 import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
 import android.content.pm.PackageManager
+import android.os.Bundle
 import android.provider.CalendarContract
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
@@ -44,6 +47,7 @@ class CalendarScheduler(private val context: Context) : CalendarGateway {
             ?: runCatching { resolver.insert(CalendarContract.Events.CONTENT_URI, values) }.getOrNull()
         val eventId = uri?.let { ContentUris.parseId(it) } ?: return@withContext null
         if (alertMinutes != null) addAlert(eventId, alertMinutes)
+        requestSync(calendarId)
         eventId
     }
 
@@ -70,13 +74,52 @@ class CalendarScheduler(private val context: Context) : CalendarGateway {
             }
             val updated = runCatching { resolver.update(uri, values.tagged(owner), null, null) }.getOrNull()
                 ?: runCatching { resolver.update(uri, values, null, null) }.getOrNull()
+            calendarIdOfEvent(eventId)?.let(::requestSync)
             (updated ?: 0) > 0
         }
 
     override suspend fun deleteEvent(eventId: Long, owner: Job): Boolean = withContext(Dispatchers.IO) {
         if (!hasPermission() || !isOurs(eventId, owner)) return@withContext false
+        val calendarId = calendarIdOfEvent(eventId)
         val uri = ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, eventId)
-        (runCatching { resolver.delete(uri, null, null) }.getOrNull() ?: 0) > 0
+        val deleted = (runCatching { resolver.delete(uri, null, null) }.getOrNull() ?: 0) > 0
+        calendarId?.let(::requestSync)
+        deleted
+    }
+
+    override suspend fun refresh() {
+        withContext(Dispatchers.IO) {
+            if (hasPermission()) findWritableCalendarId()?.let(::requestSync)
+        }
+    }
+
+    /**
+     * Asks Android to sync the calendar's account now. Changes we write go into the phone's
+     * calendar storage, but calendar apps like Google Calendar mostly show what has synced with
+     * their servers, so without this a new or moved event can take a while to appear. Local
+     * (phone-only) calendars don't sync and need nothing.
+     */
+    private fun requestSync(calendarId: Long) {
+        val uri = ContentUris.withAppendedId(CalendarContract.Calendars.CONTENT_URI, calendarId)
+        val projection = arrayOf(CalendarContract.Calendars.ACCOUNT_NAME, CalendarContract.Calendars.ACCOUNT_TYPE)
+        val cursor = runCatching { resolver.query(uri, projection, null, null, null) }.getOrNull() ?: return
+        val account = cursor.use {
+            if (!it.moveToFirst()) return
+            Account(it.getString(0) ?: return, it.getString(1) ?: return)
+        }
+        if (account.type == CalendarContract.ACCOUNT_TYPE_LOCAL) return
+        val extras = Bundle().apply {
+            putBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, true)
+            putBoolean(ContentResolver.SYNC_EXTRAS_EXPEDITED, true)
+        }
+        runCatching { ContentResolver.requestSync(account, CalendarContract.AUTHORITY, extras) }
+    }
+
+    private fun calendarIdOfEvent(eventId: Long): Long? {
+        val uri = ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, eventId)
+        val cursor = runCatching { resolver.query(uri, arrayOf(CalendarContract.Events.CALENDAR_ID), null, null, null) }.getOrNull()
+            ?: return null
+        return cursor.use { if (it.moveToFirst() && !it.isNull(0)) it.getLong(0) else null }
     }
 
     override suspend fun ownsEvent(eventId: Long, owner: Job): Boolean = withContext(Dispatchers.IO) {

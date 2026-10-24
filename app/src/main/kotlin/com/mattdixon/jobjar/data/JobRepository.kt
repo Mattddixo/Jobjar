@@ -259,6 +259,9 @@ class JobRepository(
      * front.
      */
     suspend fun syncCalendar() {
+        // Changes made in the calendar app can take a sync to reach the phone's calendar storage.
+        // This asks for one now, so the next check sees them sooner; this one uses what's there.
+        calendar.refresh()
         val linked = dao.getAllJobs().filter { it.scheduledDate != null && it.calendarEventId != null }
         linked.forEach { job ->
             val eventId = job.calendarEventId ?: return@forEach
@@ -362,8 +365,13 @@ class JobRepository(
     }
 
     /**
-     * Books a job and writes a calendar event for it (moving the existing event if there is one).
-     * Booked jobs stay out of the jar and aren't in progress. Repeating jobs can't be booked.
+     * Books a job and writes a calendar event for it. Booked jobs stay out of the jar and aren't
+     * in progress. Repeating jobs can't be booked.
+     *
+     * Rescheduling writes a fresh event and removes the old one rather than moving it: if the old
+     * one was deleted in the calendar app and that hasn't synced to the phone yet, moving it would
+     * be undone moments later by the sync, leaving the booking with no event. A missed booking's
+     * past event stays as a record, like everywhere else (see removeUpcomingEvent).
      *
      * Returns whether a calendar event was written. The booking is saved either way.
      */
@@ -371,11 +379,10 @@ class JobRepository(
         val job = dao.getJob(jobId) ?: return false
         if (job.recurrenceDays != null) return false
         val end = dateTimeMillis + job.estimatedMinutes * MINUTE_MILLIS
-        val existing = job.calendarEventId
-        val eventId = if (existing != null && calendar.updateEvent(existing, job, job.title, job.notes, dateTimeMillis, end)) {
-            existing
-        } else {
-            calendar.insertEvent(job, dateTimeMillis, end)
+        val eventId = calendar.insertEvent(job, dateTimeMillis, end)
+        val previous = job.calendarEventId
+        if (previous != null && previous != eventId && !job.bookingIsOver(clock())) {
+            calendar.deleteEvent(previous, job)
         }
         val stillExists = transactions.run {
             val current = dao.getJob(jobId)

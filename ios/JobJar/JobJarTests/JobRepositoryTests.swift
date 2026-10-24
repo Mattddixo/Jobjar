@@ -303,14 +303,34 @@ final class JobRepositoryTests: XCTestCase {
 
     // MARK: Scheduling
 
-    func testReschedulingMovesTheSameEvent() {
+    func testReschedulingReplacesTheEvent() {
         let target = add("Dentist")
         repository.scheduleJob(target, at: clock + 3600)
-        let eventId = target.calendarEventId
+        let oldId = target.calendarEventId
         repository.scheduleJob(target, at: clock + 7200)
-        XCTAssertEqual(target.calendarEventId, eventId)
+        let newId = target.calendarEventId!
+        XCTAssertNotEqual(newId, oldId)
+        XCTAssertEqual(Set(calendar.events.keys), [newId], "the old one is gone")
+        XCTAssertEqual(calendar.events[newId]?.start, clock + 7200)
+    }
+
+    func testReschedulingAfterTheEventWasDeletedInTheCalendarStillWritesOne() {
+        let target = add("Dentist")
+        repository.scheduleJob(target, at: clock + 3600)
+        calendar.events.removeAll()
+        XCTAssertTrue(repository.scheduleJob(target, at: clock + 7200))
+        XCTAssertEqual(calendar.events.values.first?.start, clock + 7200)
+        XCTAssertEqual(calendar.events.keys.first, target.calendarEventId)
+    }
+
+    func testUnschedulingThenReschedulingWritesANewEvent() {
+        let target = add("Dentist")
+        repository.scheduleJob(target, at: clock + 3600)
+        repository.unscheduleJob(target)
+        XCTAssertTrue(calendar.events.isEmpty)
+        repository.scheduleJob(target, at: clock + 7200)
         XCTAssertEqual(calendar.events.count, 1)
-        XCTAssertEqual(calendar.events[eventId!]?.start, clock + 7200)
+        XCTAssertEqual(calendar.events.keys.first, target.calendarEventId)
     }
 
     func testAnEventIdThatIsntOursIsNeverDeleted() {
@@ -405,14 +425,15 @@ final class JobRepositoryTests: XCTestCase {
         XCTAssertTrue(target.isMissed(now: clock))
     }
 
-    func testReschedulingAMissedJobMovesItsEvent() {
+    func testReschedulingAMissedJobKeepsThePastEventAndAddsANewOne() {
         let target = add("Paint fence", minutes: 30)
         repository.scheduleJob(target, at: clock + hour)
-        let eventId = target.calendarEventId
+        let pastId = target.calendarEventId!
         clock += 3 * hour
         repository.scheduleJob(target, at: clock + hour)
-        XCTAssertEqual(target.calendarEventId, eventId)
-        XCTAssertEqual(calendar.events.count, 1)
+        XCTAssertEqual(calendar.events.count, 2)
+        XCTAssertNotNil(calendar.events[pastId], "the past one stays as a record")
+        XCTAssertNotEqual(target.calendarEventId, pastId)
         XCTAssertTrue(target.isBooked(now: clock))
     }
 
