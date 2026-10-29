@@ -5,12 +5,15 @@ private let timePresets = [15, 30, 45, 60, 90, 120, 150, 180, 210]
 
 struct DrawView: View {
     var onOpenJob: (UUID) -> Void
+    var onOpenComingUp: () -> Void = {}
 
     @Environment(\.modelContext) private var modelContext
     @Environment(UndoCenter.self) private var undoCenter
     @Query(sort: \Job.createdAt, order: .reverse) private var allJobs: [Job]
     @State private var viewModel = DrawViewModel()
     @State private var jobToSchedule: Job? = nil
+    @AppStorage(showComingUpKey) private var showComingUp = false
+    @AppStorage(comingUpRangeKey) private var comingUpRange = defaultComingUpRange
 
     private var repository: JobRepository { JobRepository(modelContext: modelContext) }
 
@@ -26,6 +29,19 @@ struct DrawView: View {
         ScrollView {
             VStack(spacing: 14) {
                 JarSummaryCard(available: availableIds.count, inProgress: allJobs.filter(\.isInProgress).count)
+
+                if showComingUp {
+                    ComingUpCard(
+                        jobs: allJobs,
+                        rangeDays: comingUpRanges.contains(comingUpRange) ? comingUpRange : defaultComingUpRange,
+                        onOpenJob: onOpenJob,
+                        onComplete: { job in
+                            let title = job.title
+                            if let snapshot = repository.completeCycle(job) { undoCenter.offerCompleted(title, snapshot) }
+                        },
+                        onSeeAll: onOpenComingUp
+                    )
+                }
 
                 PickerPanel(viewModel: viewModel, categories: categories)
 
@@ -239,8 +255,8 @@ private struct BatchJobCard: View {
                     HStack(spacing: 6) {
                         TimeBadge(minutes: context.remainingMinutes ?? job.estimatedMinutes, compact: true)
                         if !job.category.isEmpty { CategoryBadge(category: job.category, compact: true) }
-                        if let days = job.recurrenceDays {
-                            InfoBadge(text: formatRecurrence(days: days, weekdays: job.repeatWeekdays), compact: true)
+                        if job.recurrenceDays != nil {
+                            InfoBadge(text: formatRecurrence(job), compact: true)
                         }
                     }
                     if let parentTitle = context.parentTitle {

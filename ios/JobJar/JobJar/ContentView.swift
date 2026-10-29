@@ -3,6 +3,7 @@ import SwiftUI
 enum Route: Hashable {
     case jobDetail(UUID)
     case addEditJob(jobId: UUID?, parentId: UUID?)
+    case comingUp
 }
 
 enum AppTab: Hashable {
@@ -51,7 +52,10 @@ private struct DrawTab: View {
 
     var body: some View {
         NavigationStack(path: $path) {
-            DrawView(onOpenJob: { id in path.append(Route.jobDetail(id)) })
+            DrawView(
+                onOpenJob: { id in path.append(Route.jobDetail(id)) },
+                onOpenComingUp: { path.append(Route.comingUp) }
+            )
                 .settingsButton()
                 .navigationDestination(for: Route.self) { route in
                     RouteDestination(route: route, path: $path)
@@ -107,6 +111,8 @@ private struct RouteDestination: View {
                 onOpenSubtask: { openId in path.append(Route.jobDetail(openId)) },
                 onAddSubtask: { newParentId in path.append(Route.addEditJob(jobId: nil, parentId: newParentId)) }
             )
+        case .comingUp:
+            ComingUpView(onOpenJob: { id in path.append(Route.jobDetail(id)) })
         }
     }
 }

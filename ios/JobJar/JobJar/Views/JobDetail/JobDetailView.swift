@@ -101,7 +101,7 @@ struct JobDetailView: View {
                     let displayMinutes = subtasks.isEmpty ? job.estimatedMinutes : job.remainingMinutes(subtasks: subtasks)
                     TimeBadge(minutes: displayMinutes)
                     if !job.category.isEmpty { CategoryBadge(category: job.category) }
-                    if let days = job.recurrenceDays { InfoBadge(text: formatRecurrence(days: days, weekdays: job.repeatWeekdays)) }
+                    if job.recurrenceDays != nil { InfoBadge(text: formatRecurrence(job)) }
                 }
 
                 if !subtasks.isEmpty {
@@ -114,9 +114,9 @@ struct JobDetailView: View {
                 if job.recurrenceDays != nil {
                     let suffix = job.completionCount == 0 ? ""
                         : job.completionCount == 1 ? " · completed once" : " · completed \(job.completionCount) times"
-                    Text(formatDueStatus(job.nextDueAt) + suffix)
+                    Text(formatDueStatus(job) + suffix)
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(job.isOverdue() ? AnyShapeStyle(Color.red) : AnyShapeStyle(.secondary))
                 }
 
                 if let scheduled = job.scheduledDate {

@@ -292,6 +292,75 @@ final class JobRepositoryTests: XCTestCase {
         XCTAssertFalse(job.isPending(now: clock))
     }
 
+    /// Yearly, due 10 days from now, with a 30-day lead window.
+    private var rego: RepeatRule {
+        let due = Calendar.current.date(byAdding: .day, value: 10, to: clock)!
+        let dueParts = Calendar.current.dateComponents([.month, .day], from: due)
+        return RepeatRule(interval: 1, unit: .year, anchor: .schedule, monthDay: dueParts.day, month: dueParts.month, leadDays: 30)
+    }
+
+    private func addRule(_ title: String, _ rule: RepeatRule) -> Job {
+        var change = edit(title)
+        change.rule = rule
+        return repository.addJob(change, parentId: nil, allJobs: all)!
+    }
+
+    private func dueDay(_ job: Job) -> Date? { job.nextDueAt.map { Calendar.current.startOfDay(for: $0) } }
+
+    func testYearlyJobShowsInItsLeadWindowAndKeepsItsDate() {
+        let job = addRule("Car registration", rego)
+        let firstDue = Calendar.current.startOfDay(for: Calendar.current.date(byAdding: .day, value: 10, to: clock)!)
+        XCTAssertEqual(dueDay(job), firstDue)
+        XCTAssertTrue(job.isPending(now: clock), "inside the 30 days before")
+        repository.toggleDone(job, allJobs: all)
+        // Done early: next year's date, not a year from today.
+        XCTAssertEqual(dueDay(job), Calendar.current.date(byAdding: .year, value: 1, to: firstDue))
+        XCTAssertFalse(job.isPending(now: clock))
+    }
+
+    func testChangingJustTheNumberOrLeadKeepsTheDueDate() {
+        let job = addRule("Car registration", rego)
+        repository.toggleDone(job, allJobs: all)
+        let kept = job.nextDueAt
+        var change = edit("Car registration")
+        var longer = rego
+        longer.interval = 2
+        longer.leadDays = 7
+        change.rule = longer
+        repository.updateJob(job, with: change, allJobs: all)
+        XCTAssertEqual(job.nextDueAt, kept)
+        XCTAssertEqual(job.repeatRule, longer)
+    }
+
+    func testCompletingFromComingUpFinishesTheCycleEvenBeforeItsDue() {
+        var rule = rego
+        rule.leadDays = 0
+        let job = addRule("Car registration", rule)
+        XCTAssertFalse(job.isPending(now: clock))
+        let firstDue = job.nextDueAt
+        XCTAssertNotNil(repository.completeCycle(job))
+        XCTAssertEqual(job.completionCount, 1)
+        XCTAssertEqual(dueDay(job), firstDue.flatMap { Calendar.current.date(byAdding: .year, value: 1, to: $0) })
+        XCTAssertNil(repository.completeCycle(add("Shelf")))
+    }
+
+    func testOverdueJobsAreDrawnLikeHighPriority() {
+        let filter = add("Filter", repeatDays: 7)
+        filter.nextDueAt = Calendar.current.date(byAdding: .day, value: -3, to: clock)
+        var shelfEdit = edit("Shelf")
+        shelfEdit.priority = .low
+        repository.addJob(shelfEdit, parentId: nil, allJobs: all)
+        XCTAssertTrue(filter.isOverdue(now: clock))
+        let seed = SeededUnit(seed: 11)
+        let seeded = JobRepository(modelContext: container.mainContext, calendar: calendar, now: { [unowned self] in clock }, randomUnit: { seed.next() })
+        let picks = (0..<400).compactMap { _ in
+            seeded.drawJob(allJobs: all, maxMinutes: 60, categories: [], excludeIds: [], longOnly: false)?.job.id
+        }
+        let share = Double(picks.filter { $0 == filter.id }.count) / Double(picks.count)
+        let expected = priorityWeight(.high) / (priorityWeight(.high) + priorityWeight(.low))
+        XCTAssertEqual(share, expected, accuracy: 0.07)
+    }
+
     func testTurningRepeatOnClearsScheduleAndCalendarEvent() {
         let target = add("Mow")
         repository.scheduleJob(target, at: clock + 3600)

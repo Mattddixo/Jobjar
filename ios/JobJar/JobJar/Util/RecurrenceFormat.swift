@@ -10,35 +10,39 @@ let everyDayMask = 0b1111111
 /// Calendar weekday numbers, Monday first.
 let mondayFirstWeekdays = [2, 3, 4, 5, 6, 7, 1]
 
-private func nextMatchingDay(after date: Date, mask: Int, calendar: Calendar) -> Date {
-    var day = calendar.startOfDay(for: date)
-    repeat {
-        day = calendar.date(byAdding: .day, value: 1, to: day) ?? day.addingTimeInterval(86_400)
-    } while mask & weekdayBit(calendarWeekday: calendar.component(.weekday, from: day)) == 0
-    return day
-}
-
-/// Next due date after finishing at `completedAt`.
-/// Every N days: N calendar days later, same time (DST-safe).
-/// Set weekdays: start of the next chosen day, even if you were late.
-func nextDueAfterCompletion(recurrenceDays: Int, repeatWeekdays: Int?, completedAt: Date, calendar: Calendar = .current) -> Date {
-    if let mask = repeatWeekdays, mask & everyDayMask != 0 {
-        return nextMatchingDay(after: completedAt, mask: mask, calendar: calendar)
+/// 1st, 2nd, 3rd, 4th... 11th, 12th, 13th... 21st.
+func ordinal(_ n: Int) -> String {
+    let suffix: String
+    if (11...13).contains(n % 100) {
+        suffix = "th"
+    } else {
+        switch n % 10 {
+        case 1: suffix = "st"
+        case 2: suffix = "nd"
+        case 3: suffix = "rd"
+        default: suffix = "th"
+        }
     }
-    return calendar.date(byAdding: .day, value: recurrenceDays, to: completedAt)
-        ?? completedAt.addingTimeInterval(Double(recurrenceDays) * 86_400)
+    return "\(n)\(suffix)"
 }
 
-/// Starting due date for a weekday schedule: now if today's one of the days, else the next one.
-func initialNextDue(repeatWeekdays: Int?, now: Date = .now, calendar: Calendar = .current) -> Date? {
-    guard let mask = repeatWeekdays, mask & everyDayMask != 0 else { return nil }
-    if mask & weekdayBit(calendarWeekday: calendar.component(.weekday, from: now)) != 0 { return nil }
-    return nextMatchingDay(after: now, mask: mask, calendar: calendar)
+/// "Mar 3".
+func formatMonthDay(month: Int, day: Int, calendar: Calendar = .current) -> String {
+    "\(calendar.shortMonthSymbols[month - 1]) \(day)"
 }
 
-/// "Weekly", "Every 3 days", "Mon, Thu", "Weekdays" etc.
-func formatRecurrence(days: Int, weekdays: Int? = nil) -> String {
-    if let mask = weekdays, mask & everyDayMask != 0 {
+/// Days in a month, Feb counted as 29 (a yearly date can be Feb 29).
+func maxDaysInMonth(_ month: Int) -> Int {
+    switch month {
+    case 2: return 29
+    case 4, 6, 9, 11: return 30
+    default: return 31
+    }
+}
+
+/// "Weekly", "Every 3 days", "Mon, Thu", "Monthly on the 15th", "Yearly on Mar 3" etc.
+func formatRecurrence(_ rule: RepeatRule) -> String {
+    if rule.onWeekdays, let mask = rule.weekdays {
         switch mask & everyDayMask {
         case everyDayMask: return "Every day"
         case weekdaysMask: return "Weekdays"
@@ -50,25 +54,61 @@ func formatRecurrence(days: Int, weekdays: Int? = nil) -> String {
             return picked.map { calendar.shortWeekdaySymbols[$0 - 1] }.joined(separator: ", ")
         }
     }
-    switch days {
-    case 1: return "Daily"
-    case 7: return "Weekly"
-    case 14: return "Every 2 weeks"
-    case 30: return "Monthly"
-    default: return "Every \(days) days"
+    let n = rule.interval
+    let onSchedule = rule.anchor == .schedule
+    switch rule.unit {
+    case .day:
+        switch n {
+        case 1: return "Daily"
+        case 7: return "Weekly"
+        case 14: return "Every 2 weeks"
+        default: return "Every \(n) days"
+        }
+    case .week:
+        return n == 1 ? "Weekly" : "Every \(n) weeks"
+    case .month:
+        let every = n == 1 ? "Monthly" : "Every \(n) months"
+        guard onSchedule, let day = rule.monthDay else { return every }
+        return day == lastDayOfMonth ? "\(every) on the last day" : "\(every) on the \(ordinal(day))"
+    case .year:
+        let every = n == 1 ? "Yearly" : "Every \(n) years"
+        guard onSchedule, let day = rule.monthDay, let month = rule.month else { return every }
+        let dayOfMonth = day == lastDayOfMonth ? maxDaysInMonth(month) : day
+        return "\(every) on \(formatMonthDay(month: month, day: dayOfMonth))"
     }
 }
 
-func formatRecurrenceInterval(_ days: Int) -> String { formatRecurrence(days: days) }
+/// The job's rule as a label. Empty if it doesn't repeat.
+func formatRecurrence(_ job: Job) -> String { job.repeatRule.map { formatRecurrence($0) } ?? "" }
 
-/// "Due now", or how many calendar days until it's back.
-func formatDueStatus(_ nextDueAt: Date?, now: Date = .now, calendar: Calendar = .current) -> String {
-    guard let nextDueAt, nextDueAt > now else { return "Due now" }
-    let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: now), to: calendar.startOfDay(for: nextDueAt)).day ?? 0
+/// Where a repeating job is in its cycle.
+///
+/// - "Overdue 2 days" once the due date has passed.
+/// - Jobs that count from when you finish, with no lead window: "Due now", "Back later today",
+///   "Back tomorrow", "Back in 5 days", as before.
+/// - Everything else: "Due today", "Due tomorrow", "Due Fri" within a week, then "Due Mar 3".
+func formatDueStatus(_ job: Job, now: Date = .now, calendar: Calendar = .current) -> String {
+    guard let due = job.nextDueAt, let rule = job.repeatRule else { return "Due now" }
+    let days = job.daysUntilDue(now: now, calendar: calendar) ?? 0
+    if days < 0 { return -days == 1 ? "Overdue 1 day" : "Overdue \(-days) days" }
+    let countsFromFinish = !rule.onWeekdays && rule.anchor == .completion && rule.leadDays == 0
+    if countsFromFinish {
+        if due <= now { return "Due now" }
+        switch days {
+        case 0: return "Back later today"
+        case 1: return "Back tomorrow"
+        default: return "Back in \(days) days"
+        }
+    }
     switch days {
-    case ...0: return "Back later today"
-    case 1: return "Back tomorrow"
-    default: return "Back in \(days) days"
+    case 0: return "Due today"
+    case 1: return "Due tomorrow"
+    case 2..<7: return "Due \(calendar.shortWeekdaySymbols[calendar.component(.weekday, from: due) - 1])"
+    default:
+        let parts = calendar.dateComponents([.year, .month, .day], from: due)
+        let monthDay = formatMonthDay(month: parts.month ?? 1, day: parts.day ?? 1, calendar: calendar)
+        let sameYear = parts.year == calendar.component(.year, from: now)
+        return sameYear ? "Due \(monthDay)" : "Due \(monthDay), \(parts.year ?? 0)"
     }
 }
 

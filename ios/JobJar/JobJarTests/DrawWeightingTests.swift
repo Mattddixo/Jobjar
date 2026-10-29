@@ -3,7 +3,7 @@ import XCTest
 @testable import JobJar
 
 /// Small seeded generator so the odds tests give the same answer every run.
-private struct SplitMix64 {
+struct SplitMix64 {
     var state: UInt64
     mutating func nextUnit() -> Double {
         state &+= 0x9E37_79B9_7F4A_7C15
@@ -15,8 +15,9 @@ private struct SplitMix64 {
     }
 }
 
-private final class SeededUnit {
-    var generator: SplitMix64
+/// Repeatable random numbers for draw tests.
+final class SeededUnit {
+    private var generator: SplitMix64
     init(seed: UInt64) { generator = SplitMix64(state: seed) }
     func next() -> Double { generator.nextUnit() }
 }

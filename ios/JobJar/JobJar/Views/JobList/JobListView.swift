@@ -242,7 +242,7 @@ private struct JobRow: View {
                     if let cost = item.costCents { InfoBadge(text: formatCost(cost)) }
                     if !job.category.isEmpty { CategoryBadge(category: job.category) }
                     if item.subtaskTotal > 0 { InfoBadge(text: "\(item.subtaskDone)/\(item.subtaskTotal) completed") }
-                    if let days = job.recurrenceDays { InfoBadge(text: formatRecurrence(days: days, weekdays: job.repeatWeekdays)) }
+                    if job.recurrenceDays != nil { InfoBadge(text: formatRecurrence(job)) }
                     if let scheduled = job.scheduledDate { ScheduledBadge(date: scheduled, missed: job.isMissed()) }
                 }
                 if let waitingOnTitle = item.waitingOnTitle {
@@ -252,7 +252,7 @@ private struct JobRow: View {
                         .lineLimit(1)
                 }
                 if job.recurrenceDays != nil {
-                    Text(formatDueStatus(job.nextDueAt)).font(.caption).foregroundStyle(.secondary)
+                    Text(formatDueStatus(job)).font(.caption).foregroundStyle(job.isOverdue() ? AnyShapeStyle(Color.red) : AnyShapeStyle(.secondary))
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
