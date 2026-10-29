@@ -19,7 +19,11 @@ class RecurrenceTest {
     private fun day(millis: Long?) = millis?.let { Instant.ofEpochMilli(it).atZone(zone).toLocalDate() }
 
     private val days7 = RepeatRule(interval = 7)
-    private fun weekdays(mask: Int) = RepeatRule(interval = 1, unit = RepeatUnit.WEEK, weekdays = mask)
+    private fun weekdays(mask: Int, every: Int = 1) =
+        RepeatRule(interval = every, unit = RepeatUnit.WEEK, weekdays = mask, anchor = RepeatAnchor.SCHEDULE)
+    private fun nthWeekday(week: Int, day: DayOfWeek, every: Int = 1) = RepeatRule(
+        interval = every, unit = RepeatUnit.MONTH, anchor = RepeatAnchor.SCHEDULE, weekdays = weekdayBit(day), weekOfMonth = week
+    )
     private fun monthly(day: Int, every: Int = 1) =
         RepeatRule(interval = every, unit = RepeatUnit.MONTH, anchor = RepeatAnchor.SCHEDULE, monthDay = day)
     private fun yearly(month: Int, day: Int, every: Int = 1) =
@@ -68,11 +72,85 @@ class RecurrenceTest {
     }
 
     @Test
-    fun weekdayStartIsNowOnAMatchingDayOtherwiseTheNextOne() {
+    fun weekdayStartIsTodayOnAMatchingDayOtherwiseTheNextOne() {
         val wednesday = at(2026, 10, 21, 9, 0)
-        assertNull(weekdays(weekdayBit(DayOfWeek.WEDNESDAY)).initialDue(wednesday, zone))
+        assertEquals(LocalDate.of(2026, 10, 21), day(weekdays(weekdayBit(DayOfWeek.WEDNESDAY)).initialDue(wednesday, zone)))
         assertEquals(LocalDateTime.of(2026, 10, 24, 0, 0), local(weekdays(WEEKEND_MASK).initialDue(wednesday, zone)!!))
-        assertNull("from-finish rules start due now", days7.initialDue(wednesday, zone))
+        assertNull("after-finishing rules start due now", days7.initialDue(wednesday, zone))
+    }
+
+    @Test
+    fun everyOtherWednesday() {
+        val bins = weekdays(weekdayBit(DayOfWeek.WEDNESDAY), every = 2)
+        val due = at(2026, 10, 21)
+        // On the day, early (in the lead window) or a few days late: two weeks after the last one.
+        assertEquals(LocalDate.of(2026, 11, 4), day(bins.nextDue(due, at(2026, 10, 21, 19), zone)))
+        assertEquals(LocalDate.of(2026, 11, 4), day(bins.nextDue(due, at(2026, 10, 19, 9), zone)))
+        assertEquals(LocalDate.of(2026, 11, 4), day(bins.nextDue(due, at(2026, 10, 24, 9), zone)))
+        // Missed one altogether: the next on-week Wednesday, not the off week.
+        assertEquals(LocalDate.of(2026, 11, 18), day(bins.nextDue(due, at(2026, 11, 5, 9), zone)))
+    }
+
+    @Test
+    fun monAndThuEveryTwoWeeks() {
+        val rule = weekdays(weekdayBit(DayOfWeek.MONDAY) or weekdayBit(DayOfWeek.THURSDAY), every = 2)
+        // Mon 19 Oct, Thu 22 Oct, then Mon 2 Nov.
+        assertEquals(LocalDate.of(2026, 10, 22), day(rule.nextDue(at(2026, 10, 19), at(2026, 10, 19, 10), zone)))
+        assertEquals(LocalDate.of(2026, 11, 2), day(rule.nextDue(at(2026, 10, 22), at(2026, 10, 22, 10), zone)))
+    }
+
+    @Test
+    fun pickingTheStartChoosesTheWeek() {
+        val bins = weekdays(weekdayBit(DayOfWeek.WEDNESDAY), every = 2)
+        // Picked a Monday: starts that Wednesday, and that week sets the rhythm.
+        val first = bins.firstDueFrom(at(2026, 10, 26), zone)
+        assertEquals(LocalDate.of(2026, 10, 28), day(first))
+        assertEquals(LocalDate.of(2026, 11, 11), day(bins.nextDue(first, first + 3_600_000, zone)))
+        // Every 3 months on the 15th, starting in December: Dec, then March.
+        val quarterly = monthly(15, every = 3)
+        val dec = quarterly.firstDueFrom(at(2026, 12, 1), zone)
+        assertEquals(LocalDate.of(2026, 12, 15), day(dec))
+        assertEquals(LocalDate.of(2027, 3, 15), day(quarterly.nextDue(dec, dec + 3_600_000, zone)))
+        // Every 3 days: the picked day itself.
+        val days3 = RepeatRule(interval = 3, anchor = RepeatAnchor.SCHEDULE)
+        assertEquals(LocalDate.of(2026, 11, 6), day(days3.firstDueFrom(at(2026, 11, 6, 15), zone)))
+    }
+
+    @Test
+    fun firstMondayAndLastFriday() {
+        val first = nthWeekday(1, DayOfWeek.MONDAY)
+        assertEquals(LocalDate.of(2026, 11, 2), day(first.initialDue(at(2026, 10, 29, 9), zone)))
+        assertEquals(LocalDate.of(2026, 12, 7), day(first.nextDue(at(2026, 11, 2), at(2026, 11, 2, 9), zone)))
+        // October 2026 has five Fridays: the last is the 30th, not the 23rd.
+        val last = nthWeekday(LAST_DAY_OF_MONTH, DayOfWeek.FRIDAY)
+        assertEquals(LocalDate.of(2026, 10, 30), day(last.initialDue(at(2026, 10, 24, 9), zone)))
+        assertEquals(LocalDate.of(2026, 11, 27), day(last.nextDue(at(2026, 10, 30), at(2026, 10, 30, 9), zone)))
+        // Done late: still the first Monday of the next month.
+        assertEquals(LocalDate.of(2027, 1, 4), day(first.nextDue(at(2026, 12, 7), at(2026, 12, 20, 9), zone)))
+    }
+
+    @Test
+    fun leadIsShorterThanTheGap() {
+        assertEquals(6, maxLeadDays(weekdays(weekdayBit(DayOfWeek.WEDNESDAY))))
+        assertEquals(13, maxLeadDays(weekdays(weekdayBit(DayOfWeek.WEDNESDAY), every = 2)))
+        assertEquals(2, maxLeadDays(weekdays(weekdayBit(DayOfWeek.MONDAY) or weekdayBit(DayOfWeek.THURSDAY))))
+        assertEquals(0, maxLeadDays(RepeatRule(interval = 1)))
+        assertEquals(27, maxLeadDays(monthly(15)))
+        // Saved before the cap: a weekly job showing 14 days early reads as 6.
+        val job = Job(title = "Bins", estimatedMinutes = 5)
+            .withRepeatRule(weekdays(weekdayBit(DayOfWeek.WEDNESDAY)))
+            .copy(leadDays = 14)
+        assertEquals(6, job.repeatRule(zone)!!.leadDays)
+    }
+
+    @Test
+    fun weeklyOnSetDaysSavedWithoutDaysUsesItsDueDay() {
+        // The first version of the editor could save "weekly, on the schedule" with no days.
+        val job = Job(
+            title = "Bins", estimatedMinutes = 5, recurrenceDays = 1, repeatUnit = RepeatUnit.WEEK,
+            repeatAnchor = RepeatAnchor.SCHEDULE, nextDueAt = at(2026, 10, 29)
+        )
+        assertEquals(weekdays(weekdayBit(DayOfWeek.THURSDAY)), job.repeatRule(zone))
     }
 
     // --- On a schedule ---
@@ -189,6 +267,9 @@ class RecurrenceTest {
         assertNull("a from-finish rule has no date", fromFinish.repeatMonthDay)
         val stored = base.withRepeatRule(yearly(3, 3).copy(leadDays = 30))
         assertEquals(yearly(3, 3).copy(leadDays = 30), stored.repeatRule())
+        val firstMonday = base.withRepeatRule(nthWeekday(1, DayOfWeek.MONDAY))
+        assertEquals(nthWeekday(1, DayOfWeek.MONDAY), firstMonday.repeatRule())
+        assertNull(firstMonday.repeatMonthDay)
         val off = stored.withRepeatRule(null)
         assertNull(off.recurrenceDays)
         assertNull(off.repeatMonth)
@@ -203,6 +284,8 @@ class RecurrenceTest {
         assertFalse(days7.sameShapeAs(days7.copy(anchor = RepeatAnchor.SCHEDULE)))
         assertFalse(days7.sameShapeAs(weekdays(WEEKEND_MASK)))
         assertFalse(weekdays(WEEKEND_MASK).sameShapeAs(weekdays(WEEKDAYS_MASK)))
+        assertTrue("every week to every 2 weeks keeps the date", weekdays(WEEKEND_MASK).sameShapeAs(weekdays(WEEKEND_MASK, every = 2)))
+        assertFalse(monthly(1).sameShapeAs(nthWeekday(1, DayOfWeek.MONDAY)))
     }
 
     @Test

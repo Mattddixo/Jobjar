@@ -109,6 +109,7 @@ object JobExport {
         .put("repeatAnchor", repeatAnchor.name)
         .put("repeatMonthDay", repeatMonthDay ?: JSONObject.NULL)
         .put("repeatMonth", repeatMonth ?: JSONObject.NULL)
+        .put("repeatWeekOfMonth", repeatWeekOfMonth ?: JSONObject.NULL)
         .put("leadDays", leadDays)
         .put("nextDueAt", nextDueAt ?: JSONObject.NULL)
         .put("completionCount", completionCount)
@@ -141,6 +142,7 @@ object JobExport {
         repeatAnchor = RepeatAnchor.entries.find { it.name == optString("repeatAnchor") } ?: RepeatAnchor.COMPLETION,
         repeatMonthDay = intOrNull("repeatMonthDay"),
         repeatMonth = intOrNull("repeatMonth"),
+        repeatWeekOfMonth = intOrNull("repeatWeekOfMonth"),
         leadDays = optInt("leadDays", 0),
         nextDueAt = longOrNull("nextDueAt"),
         completionCount = optInt("completionCount", 0),

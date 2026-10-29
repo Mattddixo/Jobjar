@@ -32,8 +32,8 @@ data class Job(
     val parentId: Long? = null,
     val recurrenceDays: Int? = null,
     /**
-     * Set when the job repeats on particular weekdays instead of every N days. Bitmask, Monday is
-     * bit 0 (see [weekdayBit]). [recurrenceDays] is just 7 in that case.
+     * The days a weekly job is on, or the one day of a "first Monday" monthly job. Bitmask, Monday
+     * is bit 0 (see [weekdayBit]). Older rows have [recurrenceDays] 7 with these.
      */
     val repeatWeekdays: Int? = null,
     /**
@@ -46,6 +46,11 @@ data class Job(
     val repeatMonthDay: Int? = null,
     /** Yearly on a schedule: 1..12. */
     val repeatMonth: Int? = null,
+    /**
+     * Monthly on a weekday ("the first Monday"): 1..4, or [LAST_DAY_OF_MONTH] for the last. The
+     * weekday is the one bit in [repeatWeekdays].
+     */
+    val repeatWeekOfMonth: Int? = null,
     /** Back in the jar this many days before [nextDueAt]. */
     val leadDays: Int = 0,
     val nextDueAt: Long? = null,
@@ -74,7 +79,7 @@ data class Job(
  */
 fun Job.isPending(now: Long = System.currentTimeMillis(), zone: ZoneId = ZoneId.systemDefault()): Boolean =
     if (recurrenceDays != null) {
-        nextDueAt == null || now >= showFrom(nextDueAt, leadDays, zone)
+        nextDueAt == null || now >= showFrom(nextDueAt, repeatRule(zone)?.leadDays ?: 0, zone)
     } else {
         !isDone
     }

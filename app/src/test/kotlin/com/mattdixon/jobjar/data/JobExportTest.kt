@@ -38,7 +38,10 @@ class JobExportTest {
         val parsed = (JobExport.parse(old) as JobExport.ParseResult.Success).jobs.associateBy { it.id }
         assertEquals(RepeatRule(interval = 7), parsed.getValue(1).repeatRule())
         assertEquals(40L, parsed.getValue(1).nextDueAt)
-        assertEquals(RepeatRule(interval = 1, unit = RepeatUnit.WEEK, weekdays = 1), parsed.getValue(2).repeatRule())
+        assertEquals(
+            RepeatRule(interval = 1, unit = RepeatUnit.WEEK, weekdays = 1, anchor = RepeatAnchor.SCHEDULE),
+            parsed.getValue(2).repeatRule()
+        )
     }
 
     @Test

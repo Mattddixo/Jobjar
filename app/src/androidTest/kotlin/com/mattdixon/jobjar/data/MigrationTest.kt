@@ -53,6 +53,13 @@ class MigrationTest {
         if (version >= 10) db.execSQL("ALTER TABLE jobs ADD COLUMN repeatWeekdays INTEGER DEFAULT NULL")
         if (version >= 11) db.execSQL("ALTER TABLE jobs ADD COLUMN costCents INTEGER DEFAULT NULL")
         if (version >= 12) db.execSQL("ALTER TABLE jobs ADD COLUMN checklist TEXT NOT NULL DEFAULT '[]'")
+        if (version >= 13) {
+            db.execSQL("ALTER TABLE jobs ADD COLUMN repeatUnit TEXT NOT NULL DEFAULT 'DAY'")
+            db.execSQL("ALTER TABLE jobs ADD COLUMN repeatAnchor TEXT NOT NULL DEFAULT 'COMPLETION'")
+            db.execSQL("ALTER TABLE jobs ADD COLUMN repeatMonthDay INTEGER DEFAULT NULL")
+            db.execSQL("ALTER TABLE jobs ADD COLUMN repeatMonth INTEGER DEFAULT NULL")
+            db.execSQL("ALTER TABLE jobs ADD COLUMN leadDays INTEGER NOT NULL DEFAULT 0")
+        }
 
         val insert = "INSERT INTO jobs (id, title, notes, estimatedMinutes, category, priority, isDone, createdAt, " +
             "timesDrawn, parentId, recurrenceDays, dependsOnSubtaskId) VALUES (?, ?, '', ?, 'Home', 'NORMAL', ?, 1, 0, ?, ?, ?)"
@@ -85,6 +92,9 @@ class MigrationTest {
     @Test
     fun upgradesFromVersion12() = runTest { checkRecentUpgrade(12) }
 
+    @Test
+    fun upgradesFromVersion13() = runTest { checkRecentUpgrade(13) }
+
     /** Versions after the standalone rework only add columns. */
     private suspend fun checkRecentUpgrade(fromVersion: Int) {
         createLegacyDatabase(fromVersion)
@@ -98,6 +108,7 @@ class MigrationTest {
             assertEquals("old repeats still count days", RepeatUnit.DAY, chore.repeatUnit)
             assertEquals(RepeatAnchor.COMPLETION, chore.repeatAnchor)
             assertEquals(0, chore.leadDays)
+            assertEquals(null, chore.repeatWeekOfMonth)
             assertEquals(RepeatRule(interval = 7), chore.repeatRule())
         } finally {
             db.close()
@@ -124,6 +135,7 @@ class MigrationTest {
             assertTrue("costCents", "costCents" in columns)
             assertTrue("checklist", "checklist" in columns)
             assertTrue("repeatUnit", "repeatUnit" in columns)
+            assertTrue("repeatWeekOfMonth", "repeatWeekOfMonth" in columns)
             assertEquals(RepeatRule(interval = 7), jobs.getValue(1).repeatRule())
         } finally {
             db.close()

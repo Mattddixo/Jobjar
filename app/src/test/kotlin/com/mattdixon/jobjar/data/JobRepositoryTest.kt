@@ -176,7 +176,7 @@ class JobRepositoryTest {
     fun weekdayJobCompletedComesBackOnItsNextDay() = runTest {
         val monAndThu = weekdayBit(java.time.DayOfWeek.MONDAY) or weekdayBit(java.time.DayOfWeek.THURSDAY)
         val chore = add("Bins", recurrenceDays = 7, weekdays = monAndThu)
-        assertNull("due today, a Monday", dao.row(chore).nextDueAt)
+        assertEquals("due today, a Monday", java.time.LocalDate.of(2026, 3, 2), dueDate(chore))
         repo.toggleDone(chore)
         val due = java.time.Instant.ofEpochMilli(dao.row(chore).nextDueAt!!).atZone(zone).toLocalDateTime()
         assertEquals(LocalDateTime.of(2026, 3, 5, 0, 0), due)
@@ -221,6 +221,21 @@ class JobRepositoryTest {
         assertEquals(java.time.LocalDate.of(2027, 3, 20), dueDate(job))
         assertEquals(1, dao.row(job).completionCount)
         assertNull("one-off jobs aren't cycles", repo.completeCycle(add("Shelf")))
+    }
+
+    @Test
+    fun pickingWhenItStartsSetsTheFirstDueDate() = runTest {
+        val bins = RepeatRule(
+            interval = 2, unit = RepeatUnit.WEEK, weekdays = weekdayBit(java.time.DayOfWeek.WEDNESDAY), anchor = RepeatAnchor.SCHEDULE
+        )
+        val nextWeek = LocalDateTime.of(2026, 3, 9, 0, 0).atZone(zone).toInstant().toEpochMilli()
+        val job = repo.addJob(Job(title = "Bins", estimatedMinutes = 5).withRepeatRule(bins), firstDue = nextWeek)
+        assertEquals("the Wednesday of the week picked", java.time.LocalDate.of(2026, 3, 11), dueDate(job))
+        // Editing without picking keeps it; picking again moves it.
+        repo.updateJob(dao.row(job).withRepeatRule(bins.copy(leadDays = 1)))
+        assertEquals(java.time.LocalDate.of(2026, 3, 11), dueDate(job))
+        repo.updateJob(dao.row(job).withRepeatRule(bins), firstDue = now)
+        assertEquals(java.time.LocalDate.of(2026, 3, 4), dueDate(job))
     }
 
     @Test
