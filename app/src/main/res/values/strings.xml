@@ -67,6 +67,19 @@
         <item quantity="one">Yearly on %2$s</item>
         <item quantity="other">Every %1$d years on %2$s</item>
     </plurals>
+    <plurals name="repeat_weeks_on_days">
+        <item quantity="one">Weekly on %2$s</item>
+        <item quantity="other">Every %1$d weeks on %2$s</item>
+    </plurals>
+    <plurals name="repeat_months_on_weekday">
+        <item quantity="one">Monthly on the %2$s %3$s</item>
+        <item quantity="other">Every %1$d months on the %2$s %3$s</item>
+    </plurals>
+    <string name="repeat_week_first">first</string>
+    <string name="repeat_week_second">second</string>
+    <string name="repeat_week_third">third</string>
+    <string name="repeat_week_fourth">fourth</string>
+    <string name="repeat_week_last">last</string>
     <string name="repeat_every_3_months">Every 3 months</string>
     <string name="repeat_yearly">Yearly</string>
     <string name="due_now">Due now</string>
@@ -94,6 +107,7 @@
     <string name="badge_in_progress">In progress</string>
     <string name="filter_in_progress">In progress</string>
     <string name="action_next">Next</string>
+    <string name="action_ok">OK</string>
     <string name="action_schedule">Schedule</string>
     <string name="action_unschedule">Unschedule</string>
     <string name="dialog_calendar_permission_title">Allow calendar access</string>
@@ -211,13 +225,20 @@
         <item quantity="one">year</item>
         <item quantity="other">years</item>
     </plurals>
-    <string name="repeat_on_days_label">On these days (optional)</string>
+    <string name="repeat_mode_set_days">On set days</string>
+    <string name="repeat_mode_after_finish">After I finish it</string>
     <string name="repeat_on_label">On</string>
-    <string name="repeat_on_the_day">The %1$s</string>
-    <string name="repeat_last_day">Last day</string>
-    <string name="repeat_counts_from">Next one counts from</string>
-    <string name="repeat_anchor_schedule">The schedule</string>
-    <string name="repeat_anchor_completion">When I finish it</string>
+    <string name="repeat_on_the">On the</string>
+    <string name="repeat_month_by_date">Same date</string>
+    <string name="repeat_month_by_weekday">Same weekday</string>
+    <string name="repeat_last_day">last day</string>
+    <string name="repeat_next">Next: %1$s</string>
+    <string name="repeat_next_now">Next: due now</string>
+    <string name="repeat_today">today</string>
+    <string name="repeat_tomorrow">tomorrow</string>
+    <string name="repeat_change">Change</string>
+    <string name="repeat_set_days_explainer">Stays on these days, however early or late you finish.</string>
+    <string name="repeat_after_finish_explainer">Counts from the day you finish it, so it moves if you\'re early or late.</string>
     <string name="repeat_lead_label">Show it early</string>
     <string name="repeat_lead_none">On the day</string>
     <plurals name="repeat_lead_days">
@@ -225,9 +246,6 @@
         <item quantity="other">%1$d days before</item>
     </plurals>
     <string name="repeat_lead_explainer">It goes back in the jar, and on Coming up, that far ahead.</string>
-    <string name="repeat_interval_explainer">Counts from the day you finish it.</string>
-    <string name="repeat_schedule_explainer">Stays on its dates, however early or late you finish.</string>
-    <string name="repeat_weekdays_explainer">Comes back each chosen day, even if you were late last time.</string>
     <string name="repeat_blocked_by_subtasks">Jobs with subtasks can\'t repeat.</string>
     <string name="subtasks_blocked_by_repeat">Repeating jobs can\'t have subtasks.</string>
     <string name="repeat_explainer">Puts the job back in the jar after you finish it.</string>

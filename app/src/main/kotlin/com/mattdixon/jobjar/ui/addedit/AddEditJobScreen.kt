@@ -321,7 +321,7 @@ fun AddEditJobScreen(
                         )
                     }
                     if (state.repeats) {
-                        RepeatEditor(state, viewModel)
+                        RepeatEditor(form = state.repeat, onChange = viewModel::updateRepeat)
                     } else {
                         Text(
                             stringResource(if (hasSubtasks) R.string.repeat_blocked_by_subtasks else R.string.repeat_explainer),
