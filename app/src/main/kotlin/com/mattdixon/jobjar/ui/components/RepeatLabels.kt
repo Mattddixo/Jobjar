@@ -7,7 +7,6 @@ import com.mattdixon.jobjar.R
 import com.mattdixon.jobjar.data.EVERY_DAY_MASK
 import com.mattdixon.jobjar.data.Job
 import com.mattdixon.jobjar.data.LAST_DAY_OF_MONTH
-import com.mattdixon.jobjar.data.RepeatAnchor
 import com.mattdixon.jobjar.data.RepeatRule
 import com.mattdixon.jobjar.data.RepeatUnit
 import com.mattdixon.jobjar.data.WEEKDAYS_MASK
@@ -38,12 +37,38 @@ fun ordinal(n: Int): String {
 fun monthDayLabel(month: Int, day: Int, locale: Locale): String =
     "${Month.of(month).getDisplayName(TextStyle.SHORT, locale)} $day"
 
-/** "Weekly", "Every 3 days", "Mon, Thu", "Monthly on the 15th", "Yearly on Mar 3" etc. */
+/** "first", "second"... "last", as in "the first Monday". */
+@Composable
+fun weekOfMonthLabel(week: Int): String = stringResource(
+    when (week) {
+        1 -> R.string.repeat_week_first
+        2 -> R.string.repeat_week_second
+        3 -> R.string.repeat_week_third
+        4 -> R.string.repeat_week_fourth
+        else -> R.string.repeat_week_last
+    }
+)
+
+/**
+ * "Weekly", "Every 3 days", "Mon, Thu", "Every 2 weeks on Wednesday", "Monthly on the 15th",
+ * "Monthly on the first Monday", "Yearly on Mar 3" etc.
+ */
 @Composable
 fun recurrenceLabel(rule: RepeatRule): String {
     val locale = LocalConfiguration.current.locales[0]
     val weekdays = rule.weekdays
-    if (rule.onWeekdays && weekdays != null) {
+    val onSchedule = rule.onSetDays
+    val n = rule.interval
+    if (onSchedule && rule.unit == RepeatUnit.WEEK && weekdays != null && n > 1) {
+        val days = weekdaysOf(weekdays)
+        val names = if (days.size == 1) {
+            days.single().getDisplayName(TextStyle.FULL, locale)
+        } else {
+            days.joinToString(", ") { it.getDisplayName(TextStyle.SHORT, locale) }
+        }
+        return plural(R.plurals.repeat_weeks_on_days, n, n, names)
+    }
+    if (onSchedule && rule.unit == RepeatUnit.WEEK && weekdays != null) {
         return when (weekdays and EVERY_DAY_MASK) {
             EVERY_DAY_MASK -> stringResource(R.string.repeat_every_day)
             WEEKDAYS_MASK -> stringResource(R.string.repeat_weekdays)
@@ -58,8 +83,6 @@ fun recurrenceLabel(rule: RepeatRule): String {
             }
         }
     }
-    val n = rule.interval
-    val onSchedule = rule.anchor == RepeatAnchor.SCHEDULE
     return when (rule.unit) {
         RepeatUnit.DAY -> when (n) {
             1 -> stringResource(R.string.repeat_daily)
@@ -70,7 +93,12 @@ fun recurrenceLabel(rule: RepeatRule): String {
         RepeatUnit.WEEK -> plural(R.plurals.repeat_every_n_weeks, n, n)
         RepeatUnit.MONTH -> {
             val day = rule.monthDay
+            val week = rule.weekOfMonth
+            val weekday = weekdays?.let { weekdaysOf(it).firstOrNull() }
             when {
+                rule.byWeekdayOfMonth && week != null && weekday != null -> plural(
+                    R.plurals.repeat_months_on_weekday, n, n, weekOfMonthLabel(week), weekday.getDisplayName(TextStyle.FULL, locale)
+                )
                 !onSchedule || day == null -> plural(R.plurals.repeat_every_n_months, n, n)
                 day == LAST_DAY_OF_MONTH -> plural(R.plurals.repeat_months_on_last_day, n, n)
                 else -> plural(R.plurals.repeat_months_on_day, n, n, ordinal(day))
@@ -108,7 +136,7 @@ fun dueStatusLabel(job: Job, now: Long = System.currentTimeMillis()): String {
     val rule = job.repeatRule() ?: return stringResource(R.string.due_now)
     val days = job.daysUntilDue(now, zone) ?: 0
     if (days < 0) return plural(R.plurals.overdue_n_days, -days, -days)
-    val countsFromFinish = !rule.onWeekdays && rule.anchor == RepeatAnchor.COMPLETION && rule.leadDays == 0
+    val countsFromFinish = !rule.onSetDays && rule.leadDays == 0
     if (countsFromFinish) {
         if (due <= now) return stringResource(R.string.due_now)
         return when (days) {

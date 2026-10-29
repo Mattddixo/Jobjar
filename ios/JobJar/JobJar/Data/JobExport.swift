@@ -52,6 +52,7 @@ enum JobExport {
         var repeatAnchor: String?
         var repeatMonthDay: Int?
         var repeatMonth: Int?
+        var repeatWeekOfMonth: Int?
         var leadDays: Int?
         var nextDueAt: Int64?
         var completionCount: Int?
@@ -90,6 +91,7 @@ enum JobExport {
                 repeatAnchor: job.repeatAnchor.rawValue,
                 repeatMonthDay: job.repeatMonthDay,
                 repeatMonth: job.repeatMonth,
+                repeatWeekOfMonth: job.repeatWeekOfMonth,
                 leadDays: job.leadDays,
                 nextDueAt: job.nextDueAt.map(millis),
                 completionCount: job.completionCount,
@@ -136,9 +138,11 @@ enum JobExport {
                 recurrenceDays: entry.recurrenceDays, repeatWeekdays: entry.repeatWeekdays,
                 repeatUnit: RepeatUnit(rawValue: entry.repeatUnit ?? "") ?? .day,
                 repeatAnchor: RepeatAnchor(rawValue: entry.repeatAnchor ?? "") ?? .completion,
-                repeatMonthDay: entry.repeatMonthDay, repeatMonth: entry.repeatMonth, leadDays: entry.leadDays ?? 0
+                repeatMonthDay: entry.repeatMonthDay, repeatMonth: entry.repeatMonth,
+                repeatWeekOfMonth: entry.repeatWeekOfMonth, leadDays: entry.leadDays ?? 0
             )
-            let fields = RepeatFields(rule: repeats ? stored.rule : nil)
+            let fallback = (entry.nextDueAt ?? entry.createdAt).map(date)
+            let fields = RepeatFields(rule: repeats ? stored.rule(fallbackDate: fallback) : nil)
             let title = entry.title.trimmingCharacters(in: .whitespacesAndNewlines)
             let isDone = repeats ? false : (entry.isDone ?? false)
             return JobRecord(
@@ -166,6 +170,7 @@ enum JobExport {
                 repeatAnchor: fields.repeatAnchor,
                 repeatMonthDay: fields.repeatMonthDay,
                 repeatMonth: fields.repeatMonth,
+                repeatWeekOfMonth: fields.repeatWeekOfMonth,
                 leadDays: fields.leadDays
             )
         }

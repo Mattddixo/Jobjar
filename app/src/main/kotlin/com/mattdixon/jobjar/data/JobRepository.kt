@@ -70,19 +70,22 @@ class JobRepository(
             }
     }
 
-    /** Repeating jobs can't have subtasks. The UI never offers it; this is just a backstop. */
-    suspend fun addJob(job: Job): Long = transactions.run {
+    /**
+     * Repeating jobs can't have subtasks. The UI never offers it; this is just a backstop.
+     * [firstDue]: when a set-days repeat starts, if you picked it (snapped to the rule's dates).
+     */
+    suspend fun addJob(job: Job, firstDue: Long? = null): Long = transactions.run {
         val parent = job.parentId?.let { dao.getJob(it) }
         require(job.parentId == null || parent != null) { "Parent job no longer exists" }
         require(parent?.parentId == null) { "Subtasks can't have subtasks" }
         require(parent?.recurrenceDays == null) { "A repeating job can't have subtasks" }
-        val rule = job.repeatRule()?.takeIf { job.parentId == null }
+        val rule = job.repeatRule(zone())?.takeIf { job.parentId == null }
         val id = dao.insert(
             job.withRepeatRule(rule).copy(
                 id = 0,
                 title = job.title.trim(),
                 category = canonicalCategory(job.category),
-                nextDueAt = rule?.initialDue(clock(), zone()),
+                nextDueAt = rule?.let { startingDue(it, firstDue) },
                 dependsOnSubtaskId = if (job.parentId != null) job.dependsOnSubtaskId else null
             )
         )
@@ -96,19 +99,20 @@ class JobRepository(
      *
      * - Jobs with subtasks can't repeat.
      * - Turning repeat on clears done and any booking.
-     * - Changing the kind of repeat (unit, weekdays, the date, what it counts from) restarts the
-     *   cycle. Changing just the number or the lead window doesn't.
+     * - Changing the kind of repeat (set days or after finishing, the days or the date) restarts
+     *   the cycle. Changing just the number or the lead window doesn't. Picking when it starts
+     *   ([firstDue]) sets the next due date.
      * - If it's booked, the calendar event gets the new title, length and notes.
      */
-    suspend fun updateJob(edited: Job) = writeThenSync { sync ->
+    suspend fun updateJob(edited: Job, firstDue: Long? = null) = writeThenSync { sync ->
         val fresh = dao.getJob(edited.id) ?: return@writeThenSync
         val hasSubtasks = dao.getSubtasksSnapshot(fresh.id).isNotEmpty()
-        val rule = edited.repeatRule()?.takeIf { fresh.parentId == null && !hasSubtasks }
-        val oldRule = fresh.repeatRule()
-        val now = clock()
+        val rule = edited.repeatRule(zone())?.takeIf { fresh.parentId == null && !hasSubtasks }
+        val oldRule = fresh.repeatRule(zone())
         val nextDueAt = when {
             rule == null -> null
-            oldRule == null || !rule.sameShapeAs(oldRule) -> rule.initialDue(now, zone())
+            rule.onSetDays && firstDue != null -> startingDue(rule, firstDue)
+            oldRule == null || !rule.sameShapeAs(oldRule) -> startingDue(rule, null)
             else -> fresh.nextDueAt
         }
         var merged = fresh.withRepeatRule(rule).copy(
@@ -312,9 +316,13 @@ class JobRepository(
             .forEach { dao.markNotDone(it.id) }
     }
 
+    /** A new cycle's first due date: from [firstDue] if one was picked (set days only), else from today. */
+    private fun startingDue(rule: RepeatRule, firstDue: Long?): Long? =
+        if (rule.onSetDays && firstDue != null) rule.firstDueFrom(firstDue, zone()) else rule.initialDue(clock(), zone())
+
     /** Next cycle: bump the count, set the next due date, clear in-progress and the checklist ticks. */
     private suspend fun cycleRepeatingJob(job: Job, now: Long) {
-        val nextDue = job.repeatRule()!!.nextDue(job.nextDueAt, now, zone())
+        val nextDue = job.repeatRule(zone())!!.nextDue(job.nextDueAt, now, zone())
         dao.cycleRepeating(job.id, completedAt = now, nextDueAt = nextDue)
         if (job.checklist.any { it.checked }) {
             dao.setChecklist(job.id, job.checklist.map { it.copy(checked = false) })

@@ -16,13 +16,15 @@ struct JobEdit {
     var repeatAnchor: RepeatAnchor = .completion
     var repeatMonthDay: Int? = nil
     var repeatMonth: Int? = nil
+    var repeatWeekOfMonth: Int? = nil
     var leadDays: Int = 0
 
     var repeatFields: RepeatFields {
         get {
             RepeatFields(
                 recurrenceDays: recurrenceDays, repeatWeekdays: repeatWeekdays, repeatUnit: repeatUnit,
-                repeatAnchor: repeatAnchor, repeatMonthDay: repeatMonthDay, repeatMonth: repeatMonth, leadDays: leadDays
+                repeatAnchor: repeatAnchor, repeatMonthDay: repeatMonthDay, repeatMonth: repeatMonth,
+                repeatWeekOfMonth: repeatWeekOfMonth, leadDays: leadDays
             )
         }
         set {
@@ -32,6 +34,7 @@ struct JobEdit {
             repeatAnchor = newValue.repeatAnchor
             repeatMonthDay = newValue.repeatMonthDay
             repeatMonth = newValue.repeatMonth
+            repeatWeekOfMonth = newValue.repeatWeekOfMonth
             leadDays = newValue.leadDays
         }
     }
@@ -70,6 +73,7 @@ struct JobRecord: Equatable {
     var repeatAnchor: RepeatAnchor = .completion
     var repeatMonthDay: Int?
     var repeatMonth: Int?
+    var repeatWeekOfMonth: Int?
     var leadDays: Int = 0
 
     init(
@@ -79,7 +83,8 @@ struct JobRecord: Equatable {
         repeatWeekdays: Int? = nil, nextDueAt: Date? = nil, completionCount: Int = 0,
         dependsOnSubtaskId: UUID? = nil, scheduledDate: Date? = nil, calendarEventId: String? = nil,
         costCents: Int? = nil, checklist: [ChecklistItem] = [], repeatUnit: RepeatUnit = .day,
-        repeatAnchor: RepeatAnchor = .completion, repeatMonthDay: Int? = nil, repeatMonth: Int? = nil, leadDays: Int = 0
+        repeatAnchor: RepeatAnchor = .completion, repeatMonthDay: Int? = nil, repeatMonth: Int? = nil,
+        repeatWeekOfMonth: Int? = nil, leadDays: Int = 0
     ) {
         self.id = id
         self.title = title
@@ -106,6 +111,7 @@ struct JobRecord: Equatable {
         self.repeatAnchor = repeatAnchor
         self.repeatMonthDay = repeatMonthDay
         self.repeatMonth = repeatMonth
+        self.repeatWeekOfMonth = repeatWeekOfMonth
         self.leadDays = leadDays
     }
 
@@ -119,7 +125,7 @@ struct JobRecord: Equatable {
             dependsOnSubtaskId: job.dependsOnSubtaskId, scheduledDate: job.scheduledDate,
             calendarEventId: job.calendarEventId, costCents: job.costCents, checklist: job.checklist,
             repeatUnit: job.repeatUnit, repeatAnchor: job.repeatAnchor, repeatMonthDay: job.repeatMonthDay,
-            repeatMonth: job.repeatMonth, leadDays: job.leadDays
+            repeatMonth: job.repeatMonth, repeatWeekOfMonth: job.repeatWeekOfMonth, leadDays: job.leadDays
         )
     }
 
@@ -148,13 +154,15 @@ struct JobRecord: Equatable {
         job.repeatAnchor = repeatAnchor
         job.repeatMonthDay = repeatMonthDay
         job.repeatMonth = repeatMonth
+        job.repeatWeekOfMonth = repeatWeekOfMonth
         job.leadDays = leadDays
     }
 
     var repeatFields: RepeatFields {
         RepeatFields(
             recurrenceDays: recurrenceDays, repeatWeekdays: repeatWeekdays, repeatUnit: repeatUnit,
-            repeatAnchor: repeatAnchor, repeatMonthDay: repeatMonthDay, repeatMonth: repeatMonth, leadDays: leadDays
+            repeatAnchor: repeatAnchor, repeatMonthDay: repeatMonthDay, repeatMonth: repeatMonth,
+            repeatWeekOfMonth: repeatWeekOfMonth, leadDays: leadDays
         )
     }
 
@@ -216,8 +224,9 @@ struct JobRepository {
     }
 
     /// Nil if the parent can't take subtasks (missing, a subtask itself, or repeating).
+    /// `firstDue`: when a set-days repeat starts, if you picked it (snapped to the rule's dates).
     @discardableResult
-    func addJob(_ edit: JobEdit, parentId: UUID?, allJobs: [Job]) -> Job? {
+    func addJob(_ edit: JobEdit, parentId: UUID?, allJobs: [Job], firstDue: Date? = nil) -> Job? {
         if let parentId {
             guard let parent = allJobs.first(where: { $0.id == parentId }),
                   parent.parentId == nil,
@@ -232,7 +241,7 @@ struct JobRepository {
             priority: edit.priority,
             createdAt: now(),
             parentId: parentId,
-            nextDueAt: rule?.initialDue(now: now()),
+            nextDueAt: rule.flatMap { startingDue($0, firstDue: firstDue) },
             dependsOnSubtaskId: parentId != nil ? edit.dependsOnSubtaskId : nil,
             costCents: edit.costCents.map { max($0, 0) }
         )
@@ -249,10 +258,11 @@ struct JobRepository {
     ///
     /// - Jobs with subtasks can't repeat.
     /// - Turning repeat on clears done and any booking.
-    /// - Changing the kind of repeat (unit, weekdays, the date, what it counts from) restarts the
-    ///   cycle. Changing just the number or the lead window doesn't.
+    /// - Changing the kind of repeat (set days or after finishing, the days or the date) restarts
+    ///   the cycle. Changing just the number or the lead window doesn't. Picking when it starts
+    ///   (`firstDue`) sets the next due date.
     /// - If it's booked, the calendar event gets the new title, length and notes.
-    func updateJob(_ job: Job, with edit: JobEdit, allJobs: [Job]) {
+    func updateJob(_ job: Job, with edit: JobEdit, allJobs: [Job], firstDue: Date? = nil) {
         let before = JobRecord(job)
         let hasSubtasks = allJobs.contains { $0.parentId == job.id }
         let rule = job.parentId == nil && !hasSubtasks ? edit.rule : nil
@@ -260,10 +270,12 @@ struct JobRepository {
 
         let nextDue: Date?
         if let rule {
-            if let oldRule, rule.sameShape(as: oldRule) {
+            if rule.onSetDays, firstDue != nil {
+                nextDue = startingDue(rule, firstDue: firstDue)
+            } else if let oldRule, rule.sameShape(as: oldRule) {
                 nextDue = job.nextDueAt
             } else {
-                nextDue = rule.initialDue(now: now())
+                nextDue = startingDue(rule, firstDue: nil)
             }
         } else {
             nextDue = nil
@@ -291,6 +303,12 @@ struct JobRepository {
             _ = calendar.updateEvent(eventId, owner: job, title: job.title, notes: job.notes, start: start, end: end(of: job, startingAt: start))
         }
         save()
+    }
+
+    /// A new cycle's first due date: from `firstDue` if one was picked (set days only), else from today.
+    private func startingDue(_ rule: RepeatRule, firstDue: Date?) -> Date? {
+        if rule.onSetDays, let firstDue { return rule.firstOnOrAfter(firstDue) }
+        return rule.initialDue(now: now())
     }
 
     /// Deletes the job (and its subtasks if it's a parent), plus their calendar events. Siblings

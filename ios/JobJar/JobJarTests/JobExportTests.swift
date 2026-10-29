@@ -44,7 +44,7 @@ final class JobExportTests: XCTestCase {
         XCTAssertNil(byTitle["Paint"]?.calendarEventId)
         // Old-style weekday rows (every 7 days on set days) come back as "every week on these days".
         let binsFields = try XCTUnwrap(byTitle["Bins"]).repeatFields
-        XCTAssertEqual(binsFields.rule, RepeatRule(interval: 1, unit: .week, weekdays: weekdaysMask))
+        XCTAssertEqual(binsFields.rule, RepeatRule(interval: 1, unit: .week, weekdays: weekdaysMask, anchor: .schedule))
         XCTAssertEqual(byTitle["Bins"]?.nextDueAt, Date(timeIntervalSince1970: 50))
         XCTAssertEqual(byTitle["Bins"]?.completionCount, 3)
     }

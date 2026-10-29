@@ -20,7 +20,13 @@ final class RecurrenceTests: XCTestCase {
     private func ymd(_ y: Int, _ m: Int, _ d: Int) -> DateComponents { DateComponents(year: y, month: m, day: d) }
 
     private let days7 = RepeatRule(interval: 7)
-    private func weekdays(_ mask: Int) -> RepeatRule { RepeatRule(interval: 1, unit: .week, weekdays: mask) }
+    private func weekdays(_ mask: Int, every: Int = 1) -> RepeatRule {
+        RepeatRule(interval: every, unit: .week, weekdays: mask, anchor: .schedule)
+    }
+    private func nthWeekday(_ week: Int, _ calendarWeekday: Int, every: Int = 1) -> RepeatRule {
+        RepeatRule(interval: every, unit: .month, weekdays: weekdayBit(calendarWeekday: calendarWeekday), anchor: .schedule, weekOfMonth: week)
+    }
+    private let monday = 2, wednesday = 4, thursday = 5, friday = 6
     private func monthly(_ day: Int, every: Int = 1) -> RepeatRule {
         RepeatRule(interval: every, unit: .month, anchor: .schedule, monthDay: day)
     }
@@ -46,16 +52,68 @@ final class RecurrenceTests: XCTestCase {
     // MARK: Weekdays
 
     func testLateWeekdayCompletionStillLandsOnTheScheduledDay() {
-        let monday = weekdays(weekdayBit(calendarWeekday: 2))
-        let next = monday.nextDue(previousDue: at(2026, 10, 19), completedAt: at(2026, 10, 20, 12), calendar: calendar)
+        let mondays = weekdays(weekdayBit(calendarWeekday: monday))
+        let next = mondays.nextDue(previousDue: at(2026, 10, 19), completedAt: at(2026, 10, 20, 12), calendar: calendar)
         XCTAssertEqual(next, at(2026, 10, 26))
     }
 
-    func testWeekdayStartIsNowOnAMatchingDayOtherwiseTheNextOne() {
-        let wednesday = at(2026, 10, 21, 9)
-        XCTAssertNil(weekdays(weekdayBit(calendarWeekday: 4)).initialDue(now: wednesday, calendar: calendar))
-        XCTAssertEqual(weekdays(weekendMask).initialDue(now: wednesday, calendar: calendar), at(2026, 10, 24))
-        XCTAssertNil(days7.initialDue(now: wednesday, calendar: calendar), "from-finish rules start due now")
+    func testWeekdayStartIsTodayOnAMatchingDayOtherwiseTheNextOne() {
+        let wed = at(2026, 10, 21, 9)
+        XCTAssertEqual(weekdays(weekdayBit(calendarWeekday: wednesday)).initialDue(now: wed, calendar: calendar), at(2026, 10, 21))
+        XCTAssertEqual(weekdays(weekendMask).initialDue(now: wed, calendar: calendar), at(2026, 10, 24))
+        XCTAssertNil(days7.initialDue(now: wed, calendar: calendar), "after-finishing rules start due now")
+    }
+
+    func testEveryOtherWednesday() {
+        let bins = weekdays(weekdayBit(calendarWeekday: wednesday), every: 2)
+        let due = at(2026, 10, 21)
+        XCTAssertEqual(day(bins.nextDue(previousDue: due, completedAt: at(2026, 10, 21, 19), calendar: calendar)), ymd(2026, 11, 4))
+        XCTAssertEqual(day(bins.nextDue(previousDue: due, completedAt: at(2026, 10, 19, 9), calendar: calendar)), ymd(2026, 11, 4))
+        XCTAssertEqual(day(bins.nextDue(previousDue: due, completedAt: at(2026, 10, 24, 9), calendar: calendar)), ymd(2026, 11, 4))
+        XCTAssertEqual(day(bins.nextDue(previousDue: due, completedAt: at(2026, 11, 5, 9), calendar: calendar)), ymd(2026, 11, 18))
+    }
+
+    func testMonAndThuEveryTwoWeeks() {
+        let rule = weekdays(weekdayBit(calendarWeekday: monday) | weekdayBit(calendarWeekday: thursday), every: 2)
+        XCTAssertEqual(day(rule.nextDue(previousDue: at(2026, 10, 19), completedAt: at(2026, 10, 19, 10), calendar: calendar)), ymd(2026, 10, 22))
+        XCTAssertEqual(day(rule.nextDue(previousDue: at(2026, 10, 22), completedAt: at(2026, 10, 22, 10), calendar: calendar)), ymd(2026, 11, 2))
+    }
+
+    func testPickingTheStartChoosesTheWeek() {
+        let bins = weekdays(weekdayBit(calendarWeekday: wednesday), every: 2)
+        let first = bins.firstOnOrAfter(at(2026, 10, 26), calendar: calendar)
+        XCTAssertEqual(day(first), ymd(2026, 10, 28))
+        XCTAssertEqual(day(bins.nextDue(previousDue: first, completedAt: first.addingTimeInterval(3600), calendar: calendar)), ymd(2026, 11, 11))
+        let quarterly = monthly(15, every: 3)
+        let dec = quarterly.firstOnOrAfter(at(2026, 12, 1), calendar: calendar)
+        XCTAssertEqual(day(dec), ymd(2026, 12, 15))
+        XCTAssertEqual(day(quarterly.nextDue(previousDue: dec, completedAt: dec.addingTimeInterval(3600), calendar: calendar)), ymd(2027, 3, 15))
+    }
+
+    func testFirstMondayAndLastFriday() {
+        let first = nthWeekday(1, monday)
+        XCTAssertEqual(day(first.initialDue(now: at(2026, 10, 29, 9), calendar: calendar)), ymd(2026, 11, 2))
+        XCTAssertEqual(day(first.nextDue(previousDue: at(2026, 11, 2), completedAt: at(2026, 11, 2, 9), calendar: calendar)), ymd(2026, 12, 7))
+        let last = nthWeekday(lastDayOfMonth, friday)
+        XCTAssertEqual(day(last.initialDue(now: at(2026, 10, 24, 9), calendar: calendar)), ymd(2026, 10, 30))
+        XCTAssertEqual(day(last.nextDue(previousDue: at(2026, 10, 30), completedAt: at(2026, 10, 30, 9), calendar: calendar)), ymd(2026, 11, 27))
+        XCTAssertEqual(day(first.nextDue(previousDue: at(2026, 12, 7), completedAt: at(2026, 12, 20, 9), calendar: calendar)), ymd(2027, 1, 4))
+        XCTAssertEqual(formatRecurrence(first), "Monthly on the first Monday")
+    }
+
+    func testLeadIsShorterThanTheGap() {
+        XCTAssertEqual(maxLeadDays(weekdays(weekdayBit(calendarWeekday: wednesday))), 6)
+        XCTAssertEqual(maxLeadDays(weekdays(weekdayBit(calendarWeekday: wednesday), every: 2)), 13)
+        XCTAssertEqual(maxLeadDays(weekdays(weekdayBit(calendarWeekday: monday) | weekdayBit(calendarWeekday: thursday))), 2)
+        XCTAssertEqual(maxLeadDays(RepeatRule(interval: 1)), 0)
+        var fields = RepeatFields(rule: weekdays(weekdayBit(calendarWeekday: wednesday)))
+        fields.leadDays = 14
+        XCTAssertEqual(fields.rule?.leadDays, 6, "saved before the cap: cut down to fit")
+    }
+
+    func testWeeklyOnSetDaysSavedWithoutDaysUsesItsDueDay() {
+        let fields = RepeatFields(recurrenceDays: 1, repeatWeekdays: nil, repeatUnit: .week, repeatAnchor: .schedule)
+        XCTAssertEqual(fields.rule(fallbackDate: at(2026, 10, 29), calendar: calendar), weekdays(weekdayBit(calendarWeekday: thursday)))
     }
 
     // MARK: On a schedule
@@ -127,6 +185,9 @@ final class RecurrenceTests: XCTestCase {
         XCTAssertFalse(monthly(15).sameShape(as: monthly(16)))
         XCTAssertFalse(days7.sameShape(as: RepeatRule(interval: 7, anchor: .schedule)))
         XCTAssertFalse(weekdays(weekendMask).sameShape(as: weekdays(weekdaysMask)))
+        XCTAssertTrue(weekdays(weekendMask).sameShape(as: weekdays(weekendMask, every: 2)))
+        XCTAssertFalse(monthly(1).sameShape(as: nthWeekday(1, monday)))
+        XCTAssertFalse(days7.sameShape(as: weekdays(weekendMask)))
     }
 
     func testStoringARuleDropsPartsThatDontApply() {
@@ -137,6 +198,9 @@ final class RecurrenceTests: XCTestCase {
         XCTAssertEqual(RepeatFields(rule: stored).rule, stored)
         XCTAssertNil(RepeatFields(rule: nil).recurrenceDays)
         XCTAssertEqual(RepeatFields(recurrenceDays: 7, repeatWeekdays: nil).rule, days7, "old rows read as days from finishing")
+        XCTAssertEqual(RepeatFields(recurrenceDays: 7, repeatWeekdays: weekendMask).rule, weekdays(weekendMask), "old weekday rows are weekly")
+        XCTAssertEqual(RepeatFields(rule: nthWeekday(1, monday)).rule, nthWeekday(1, monday))
+        XCTAssertNil(RepeatFields(rule: nthWeekday(1, monday)).repeatMonthDay)
     }
 
     func testSuggestedLeads() {

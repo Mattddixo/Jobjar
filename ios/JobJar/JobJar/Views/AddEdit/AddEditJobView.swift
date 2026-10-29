@@ -246,7 +246,7 @@ struct AddEditJobView: View {
             category = job.category
             priority = job.priority
             costText = costInputText(job.costCents)
-            repeatForm = RepeatForm(rule: job.repeatRule)
+            repeatForm = RepeatForm(job: job)
             dependsOnSubtaskId = job.dependsOnSubtaskId
             resolvedParentId = job.parentId
             savedJobId = job.id
@@ -288,10 +288,10 @@ struct AddEditJobView: View {
         )
         edit.rule = repeatForm.rule
         if let id = savedJobId, let job = allJobs.first(where: { $0.id == id }) {
-            repository.updateJob(job, with: edit, allJobs: allJobs)
+            repository.updateJob(job, with: edit, allJobs: allJobs, firstDue: repeatForm.firstDue)
             return id
         }
-        guard let job = repository.addJob(edit, parentId: resolvedParentId, allJobs: allJobs) else { return nil }
+        guard let job = repository.addJob(edit, parentId: resolvedParentId, allJobs: allJobs, firstDue: repeatForm.firstDue) else { return nil }
         savedJobId = job.id
         return job.id
     }

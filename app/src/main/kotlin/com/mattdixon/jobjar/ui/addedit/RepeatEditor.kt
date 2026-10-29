@@ -12,6 +12,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -22,8 +24,11 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,24 +48,33 @@ import com.mattdixon.jobjar.data.weekdayBit
 import com.mattdixon.jobjar.ui.components.ordinal
 import com.mattdixon.jobjar.ui.components.plural
 import com.mattdixon.jobjar.ui.components.recurrenceLabel
+import com.mattdixon.jobjar.ui.components.weekOfMonthLabel
 import com.mattdixon.jobjar.ui.theme.Spacing
 import java.time.DayOfWeek
+import java.time.Instant
+import java.time.LocalDate
 import java.time.Month
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 
-/** Choices for "Show it early", in days. */
-private val LEAD_CHOICES = listOf(0, 1, 3, 7, 14, 30, 60)
+/** Weeks of the month offered for "on the first Monday". */
+private val WEEKS_OF_MONTH = listOf(1, 2, 3, 4, LAST_DAY_OF_MONTH)
 
 /**
- * The repeat settings, shown once Repeat is on: quick picks, then the rule spelled out as
- * "Every [2] [weeks]" with whatever that rule needs underneath. Everything has a sensible
- * default, so most people only ever tap a preset.
+ * The repeat settings, shown once Repeat is on:
+ *
+ * 1. Quick picks, which fill everything in.
+ * 2. On set days / After I finish it.
+ * 3. "Every [2] [weeks]", then whatever set days need: the days, the date, or the weekday of
+ *    the month, and when it's next due (tap Change to pick when it starts).
+ * 4. Show it early, limited to what fits the repeat.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RepeatEditor(state: AddEditFormState, viewModel: AddEditJobViewModel) {
-    val rule = state.rule ?: return
-    val interval = state.repeatInterval ?: return
+fun RepeatEditor(form: RepeatForm, onChange: ((RepeatForm) -> RepeatForm) -> Unit) {
+    val rule = form.rule ?: return
+    val interval = form.interval ?: return
 
     Text(
         if (interval > 0) recurrenceLabel(rule) else stringResource(R.string.repeat_every),
@@ -70,10 +84,24 @@ fun RepeatEditor(state: AddEditFormState, viewModel: AddEditJobViewModel) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(Spacing.md)) {
         items(RepeatPreset.entries) { preset ->
             FilterChip(
-                selected = preset.matches(state),
-                onClick = { viewModel.applyPreset(preset) },
+                selected = preset.matches(form),
+                onClick = { onChange { it.withPreset(preset) } },
                 label = { Text(presetLabel(preset)) }
             )
+        }
+    }
+
+    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+        val options = listOf(
+            RepeatAnchor.SCHEDULE to R.string.repeat_mode_set_days,
+            RepeatAnchor.COMPLETION to R.string.repeat_mode_after_finish
+        )
+        options.forEachIndexed { index, (anchor, label) ->
+            SegmentedButton(
+                selected = form.anchor == anchor,
+                onClick = { onChange { it.withMode(anchor) } },
+                shape = SegmentedButtonDefaults.itemShape(index, options.size)
+            ) { Text(stringResource(label)) }
         }
     }
 
@@ -84,106 +112,190 @@ fun RepeatEditor(state: AddEditFormState, viewModel: AddEditJobViewModel) {
         Text(stringResource(R.string.repeat_every), style = MaterialTheme.typography.bodyLarge)
         OutlinedTextField(
             value = if (interval == 0) "" else interval.toString(),
-            onValueChange = { text -> viewModel.setRepeatInterval(text.filter { it.isDigit() }.take(3).toIntOrNull() ?: 0) },
+            onValueChange = { text ->
+                val value = text.filter { it.isDigit() }.take(3).toIntOrNull() ?: 0
+                onChange { it.withInterval(value) }
+            },
             label = { Text(stringResource(R.string.cd_repeat_count)) },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             singleLine = true,
             modifier = Modifier.width(96.dp)
         )
         DropdownField(
-            label = unitLabel(state.repeatUnit, interval),
+            label = unitLabel(form.unit, interval),
             options = RepeatUnit.entries,
             optionLabel = { unitLabel(it, interval) },
-            onSelect = viewModel::setRepeatUnit
+            onSelect = { unit -> onChange { it.withUnit(unit) } }
         )
     }
 
-    if (state.canPickWeekdays) {
-        Text(stringResource(R.string.repeat_on_days_label), style = MaterialTheme.typography.labelLarge)
-        WeekdayPicker(mask = state.repeatWeekdays ?: 0, onToggle = viewModel::toggleWeekday)
-    }
-
-    if (rule.onWeekdays) {
-        Explainer(stringResource(R.string.repeat_weekdays_explainer))
-    } else {
-        val needsDate = state.repeatAnchor == RepeatAnchor.SCHEDULE &&
-            (state.repeatUnit == RepeatUnit.MONTH || state.repeatUnit == RepeatUnit.YEAR)
-        if (needsDate) DatePickers(state, viewModel)
-
-        Text(stringResource(R.string.repeat_counts_from), style = MaterialTheme.typography.labelLarge)
-        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-            val options = listOf(
-                RepeatAnchor.SCHEDULE to R.string.repeat_anchor_schedule,
-                RepeatAnchor.COMPLETION to R.string.repeat_anchor_completion
-            )
-            options.forEachIndexed { index, (anchor, label) ->
-                SegmentedButton(
-                    selected = state.repeatAnchor == anchor,
-                    onClick = { viewModel.setRepeatAnchor(anchor) },
-                    shape = SegmentedButtonDefaults.itemShape(index, options.size)
-                ) { Text(stringResource(label)) }
+    if (form.onSetDays) {
+        when (form.unit) {
+            RepeatUnit.DAY -> Unit
+            RepeatUnit.WEEK -> {
+                Text(stringResource(R.string.repeat_on_label), style = MaterialTheme.typography.labelLarge)
+                WeekdayPicker(mask = form.weekdays, onToggle = { day -> onChange { it.togglingWeekday(day) } })
             }
+            RepeatUnit.MONTH -> MonthlyPickers(form, onChange)
+            RepeatUnit.YEAR -> YearlyPickers(form, onChange)
         }
-        Explainer(
-            stringResource(
-                if (state.repeatAnchor == RepeatAnchor.SCHEDULE) R.string.repeat_schedule_explainer else R.string.repeat_interval_explainer
-            )
-        )
+        NextDueRow(form, onChange)
+        Explainer(stringResource(R.string.repeat_set_days_explainer))
+    } else {
+        Explainer(stringResource(R.string.repeat_after_finish_explainer))
     }
 
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(stringResource(R.string.repeat_lead_label), style = MaterialTheme.typography.labelLarge)
-        DropdownField(
-            label = leadLabel(state.leadDays),
-            options = (LEAD_CHOICES + state.leadDays).distinct().sorted(),
-            optionLabel = { leadLabel(it) },
-            onSelect = viewModel::setLeadDays
-        )
+    // Daily on set days has nowhere to show it early, so the row would only ever say "On the day".
+    if (form.leadChoices.size > 1) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(stringResource(R.string.repeat_lead_label), style = MaterialTheme.typography.labelLarge)
+            DropdownField(
+                label = leadLabel(form.leadDays),
+                options = form.leadChoices,
+                optionLabel = { leadLabel(it) },
+                onSelect = { days -> onChange { it.withLead(days) } }
+            )
+        }
+        if (form.leadDays > 0) Explainer(stringResource(R.string.repeat_lead_explainer))
     }
-    if (state.leadDays > 0) Explainer(stringResource(R.string.repeat_lead_explainer))
 }
 
-/** "On the [15th]" for months, "On [Mar] [3]" for years. */
+/** "Same date / Same weekday", then "On the [15th]" or "On the [first] [Monday]". */
 @Composable
-private fun DatePickers(state: AddEditFormState, viewModel: AddEditJobViewModel) {
+private fun MonthlyPickers(form: RepeatForm, onChange: ((RepeatForm) -> RepeatForm) -> Unit) {
     val locale = LocalConfiguration.current.locales[0]
+    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+        val options = listOf(false to R.string.repeat_month_by_date, true to R.string.repeat_month_by_weekday)
+        options.forEachIndexed { index, (byWeekday, label) ->
+            SegmentedButton(
+                selected = form.monthByWeekday == byWeekday,
+                onClick = { onChange { it.withMonthByWeekday(byWeekday) } },
+                shape = SegmentedButtonDefaults.itemShape(index, options.size)
+            ) { Text(stringResource(label)) }
+        }
+    }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.md)
+    ) {
+        Text(stringResource(R.string.repeat_on_the), style = MaterialTheme.typography.bodyLarge)
+        if (form.monthByWeekday) {
+            DropdownField(
+                label = weekOfMonthLabel(form.weekOfMonth),
+                options = WEEKS_OF_MONTH,
+                optionLabel = { weekOfMonthLabel(it) },
+                onSelect = { week -> onChange { it.withWeekOfMonth(week) } }
+            )
+            DropdownField(
+                label = DayOfWeek.of(form.monthWeekday).getDisplayName(TextStyle.FULL, locale),
+                options = DayOfWeek.entries,
+                optionLabel = { it.getDisplayName(TextStyle.FULL, locale) },
+                onSelect = { day -> onChange { it.withMonthWeekday(day) } }
+            )
+        } else {
+            DropdownField(
+                label = monthDayLabel(form.monthDay ?: 1),
+                options = (1..31).toList() + LAST_DAY_OF_MONTH,
+                optionLabel = { monthDayLabel(it) },
+                onSelect = { day -> onChange { it.withMonthDay(day) } }
+            )
+        }
+    }
+}
+
+/** "On [March] [3]". */
+@Composable
+private fun YearlyPickers(form: RepeatForm, onChange: ((RepeatForm) -> RepeatForm) -> Unit) {
+    val locale = LocalConfiguration.current.locales[0]
+    val month = form.month ?: 1
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Spacing.md)
     ) {
         Text(stringResource(R.string.repeat_on_label), style = MaterialTheme.typography.bodyLarge)
-        if (state.repeatUnit == RepeatUnit.YEAR) {
-            val month = state.repeatMonth ?: 1
-            DropdownField(
-                label = Month.of(month).getDisplayName(TextStyle.FULL, locale),
-                options = (1..12).toList(),
-                optionLabel = { Month.of(it).getDisplayName(TextStyle.FULL, locale) },
-                onSelect = viewModel::setRepeatMonth
-            )
-            DropdownField(
-                label = (state.repeatMonthDay ?: 1).toString(),
-                options = (1..Month.of(month).maxLength()).toList(),
-                optionLabel = { it.toString() },
-                onSelect = viewModel::setRepeatMonthDay
-            )
-        } else {
-            DropdownField(
-                label = monthDayLabel(state.repeatMonthDay ?: 1),
-                options = (1..31).toList() + LAST_DAY_OF_MONTH,
-                optionLabel = { monthDayLabel(it) },
-                onSelect = viewModel::setRepeatMonthDay
-            )
+        DropdownField(
+            label = Month.of(month).getDisplayName(TextStyle.FULL, locale),
+            options = (1..12).toList(),
+            optionLabel = { Month.of(it).getDisplayName(TextStyle.FULL, locale) },
+            onSelect = { m -> onChange { it.withMonth(m) } }
+        )
+        DropdownField(
+            label = (form.monthDay ?: 1).toString(),
+            options = (1..Month.of(month).maxLength()).toList(),
+            optionLabel = { it.toString() },
+            onSelect = { day -> onChange { it.withMonthDay(day) } }
+        )
+    }
+}
+
+/** "Next: Wed, Nov 4  [Change]". Change picks when it starts; the rule snaps it to its own dates. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun NextDueRow(form: RepeatForm, onChange: ((RepeatForm) -> RepeatForm) -> Unit) {
+    val zone = ZoneId.systemDefault()
+    val next = form.nextDue(zone = zone)
+    var picking by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            if (next == null) stringResource(R.string.repeat_next_now) else stringResource(R.string.repeat_next, nextDueText(next, zone)),
+            style = MaterialTheme.typography.bodyLarge
+        )
+        TextButton(onClick = { picking = true }) { Text(stringResource(R.string.repeat_change)) }
+    }
+    if (picking) {
+        // The picker works in UTC midnights; convert both ways so it can't land a day out.
+        val today = LocalDate.now(zone)
+        val todayUtc = today.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+        val shown = next?.let { Instant.ofEpochMilli(it).atZone(zone).toLocalDate() }?.takeIf { !it.isBefore(today) } ?: today
+        val state = rememberDatePickerState(
+            initialSelectedDateMillis = shown.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
+            selectableDates = object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long) = utcTimeMillis >= todayUtc
+                override fun isSelectableYear(year: Int) = year >= today.year
+            }
+        )
+        DatePickerDialog(
+            onDismissRequest = { picking = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    state.selectedDateMillis?.let { utc ->
+                        val date = Instant.ofEpochMilli(utc).atZone(ZoneOffset.UTC).toLocalDate()
+                        onChange { it.withFirstDue(date.atStartOfDay(zone).toInstant().toEpochMilli()) }
+                    }
+                    picking = false
+                }) { Text(stringResource(R.string.action_ok)) }
+            },
+            dismissButton = { TextButton(onClick = { picking = false }) { Text(stringResource(R.string.action_cancel)) } }
+        ) {
+            DatePicker(state = state)
         }
+    }
+}
+
+/** "Today", "Tomorrow", "Wed, Nov 4", or with the year if it isn't this year. */
+@Composable
+private fun nextDueText(millis: Long, zone: ZoneId): String {
+    val locale = LocalConfiguration.current.locales[0]
+    val date = Instant.ofEpochMilli(millis).atZone(zone).toLocalDate()
+    val today = LocalDate.now(zone)
+    return when (date) {
+        today -> stringResource(R.string.repeat_today)
+        today.plusDays(1) -> stringResource(R.string.repeat_tomorrow)
+        else -> date.format(DateTimeFormatter.ofPattern(if (date.year == today.year) "EEE, MMM d" else "EEE, MMM d, yyyy", locale))
     }
 }
 
 @Composable
 private fun monthDayLabel(day: Int): String =
-    if (day == LAST_DAY_OF_MONTH) stringResource(R.string.repeat_last_day) else stringResource(R.string.repeat_on_the_day, ordinal(day))
+    if (day == LAST_DAY_OF_MONTH) stringResource(R.string.repeat_last_day) else ordinal(day)
 
 @Composable
 private fun presetLabel(preset: RepeatPreset): String = when (preset) {
@@ -244,7 +356,7 @@ private fun <T> DropdownField(
     }
 }
 
-/** Monday first. Any combination. */
+/** Monday first. At least one stays ticked. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun WeekdayPicker(mask: Int, onToggle: (DayOfWeek) -> Unit) {

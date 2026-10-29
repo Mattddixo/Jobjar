@@ -50,7 +50,8 @@ final class Job: Identifiable {
     /// How many `repeatUnit`s between cycles (days for older jobs, despite the name). Nil = doesn't
     /// repeat. See `repeatRule` for how the repeat fields read together.
     var recurrenceDays: Int?
-    /// Set = repeats on these weekdays. Monday is bit 0, same as Android and the export file.
+    /// The days a weekly job is on, or the one day of a "first Monday" monthly job. Monday is bit 0,
+    /// same as Android and the export file. Older jobs have `recurrenceDays` 7 with these.
     var repeatWeekdays: Int?
     /// The repeat fields added later are optional so older stores migrate as is; use
     /// `repeatUnit`, `repeatAnchor` and `leadDays` (Recurrence.swift). Nil = day / from finishing / 0.
@@ -60,6 +61,9 @@ final class Job: Identifiable {
     var repeatMonthDay: Int?
     /// Yearly on a schedule: 1...12.
     var repeatMonth: Int?
+    /// Monthly on a weekday ("the first Monday"): 1...4, or `lastDayOfMonth`. The weekday is the
+    /// one bit in `repeatWeekdays`.
+    var repeatWeekOfMonth: Int?
     var leadDaysValue: Int?
     var nextDueAt: Date?
     var completionCount: Int = 0
@@ -172,7 +176,7 @@ extension Job {
     func isPending(now: Date = .now) -> Bool {
         if recurrenceDays != nil {
             guard let nextDueAt else { return true }
-            return now >= showFrom(nextDueAt, leadDays: leadDays)
+            return now >= showFrom(nextDueAt, leadDays: repeatRule?.leadDays ?? 0)
         }
         return !isDone
     }
