@@ -3,6 +3,7 @@ package com.mattdixon.jobjar.data
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import java.time.ZoneId
 
 /** "4+ hrs" on the job form and the Jar tab. */
 const val LONG_JOB_MINUTES = 240
@@ -35,6 +36,18 @@ data class Job(
      * bit 0 (see [weekdayBit]). [recurrenceDays] is just 7 in that case.
      */
     val repeatWeekdays: Int? = null,
+    /**
+     * Unit for [recurrenceDays] (which counts units, despite the name). Rows from before units
+     * existed are DAY. See [repeatRule] for how these columns read together.
+     */
+    val repeatUnit: RepeatUnit = RepeatUnit.DAY,
+    val repeatAnchor: RepeatAnchor = RepeatAnchor.COMPLETION,
+    /** Monthly/yearly on a schedule: day of the month, or [LAST_DAY_OF_MONTH]. */
+    val repeatMonthDay: Int? = null,
+    /** Yearly on a schedule: 1..12. */
+    val repeatMonth: Int? = null,
+    /** Back in the jar this many days before [nextDueAt]. */
+    val leadDays: Int = 0,
     val nextDueAt: Long? = null,
     val completionCount: Int = 0,
     /** Subtasks only: a sibling that has to be done first. */
@@ -55,10 +68,13 @@ data class Job(
     val checklist: List<ChecklistItem> = emptyList()
 )
 
-/** Due now? For repeating jobs that's about [nextDueAt], not [isDone]. */
-fun Job.isPending(now: Long = System.currentTimeMillis()): Boolean =
+/**
+ * Due now? For repeating jobs that's about [nextDueAt], not [isDone], and a job with a lead window
+ * counts from [leadDays] before it's due.
+ */
+fun Job.isPending(now: Long = System.currentTimeMillis(), zone: ZoneId = ZoneId.systemDefault()): Boolean =
     if (recurrenceDays != null) {
-        nextDueAt == null || nextDueAt <= now
+        nextDueAt == null || now >= showFrom(nextDueAt, leadDays, zone)
     } else {
         !isDone
     }
@@ -83,8 +99,8 @@ fun Job.isBooked(now: Long = System.currentTimeMillis()): Boolean = scheduledDat
  * booking counts as not booked. (The Jobs list still counts started/booked jobs as to-do, hence
  * two functions.)
  */
-fun Job.isAvailableToDraw(now: Long = System.currentTimeMillis()): Boolean =
-    isPending(now) && !isInProgress && !isBooked(now)
+fun Job.isAvailableToDraw(now: Long = System.currentTimeMillis(), zone: ZoneId = ZoneId.systemDefault()): Boolean =
+    isPending(now, zone) && !isInProgress && !isBooked(now)
 
 /**
  * Is this subtask's prerequisite done? Only matters for the draw, you can still tick it off

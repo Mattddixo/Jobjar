@@ -13,13 +13,32 @@ class JobExportTest {
         ),
         Job(id = 2, title = "Sweep", estimatedMinutes = 30, parentId = 1, isDone = true, completedAt = 20, createdAt = 11),
         Job(id = 3, title = "Haul", estimatedMinutes = 45, parentId = 1, dependsOnSubtaskId = 2, scheduledDate = 99, calendarEventId = 7, createdAt = 12),
-        Job(id = 4, title = "Bins", estimatedMinutes = 5, recurrenceDays = 7, repeatWeekdays = WEEKDAYS_MASK, nextDueAt = 50, completionCount = 3, createdAt = 13)
+        Job(
+            id = 4, title = "Bins", estimatedMinutes = 5, recurrenceDays = 1, repeatWeekdays = WEEKDAYS_MASK,
+            repeatUnit = RepeatUnit.WEEK, repeatAnchor = RepeatAnchor.SCHEDULE, nextDueAt = 50, completionCount = 3, createdAt = 13
+        ),
+        Job(
+            id = 5, title = "Car registration", estimatedMinutes = 20, recurrenceDays = 1, repeatUnit = RepeatUnit.YEAR,
+            repeatAnchor = RepeatAnchor.SCHEDULE, repeatMonthDay = 3, repeatMonth = 3, leadDays = 30, nextDueAt = 60, createdAt = 14
+        )
     )
 
     @Test
     fun roundTripKeepsEveryField() {
         val parsed = JobExport.parse(JobExport.write(jobs, exportedAt = 1)) as JobExport.ParseResult.Success
         assertEquals(jobs, parsed.jobs)
+    }
+
+    @Test
+    fun backupsFromBeforeRepeatUnitsReadTheSameAsBefore() {
+        val old = """{"format":"job-jar","version":1,"jobs":[
+            {"id":1,"title":"Plants","estimatedMinutes":5,"recurrenceDays":7,"nextDueAt":40},
+            {"id":2,"title":"Bins","estimatedMinutes":5,"recurrenceDays":7,"repeatWeekdays":1}
+        ]}"""
+        val parsed = (JobExport.parse(old) as JobExport.ParseResult.Success).jobs.associateBy { it.id }
+        assertEquals(RepeatRule(interval = 7), parsed.getValue(1).repeatRule())
+        assertEquals(40L, parsed.getValue(1).nextDueAt)
+        assertEquals(RepeatRule(interval = 1, unit = RepeatUnit.WEEK, weekdays = 1), parsed.getValue(2).repeatRule())
     }
 
     @Test

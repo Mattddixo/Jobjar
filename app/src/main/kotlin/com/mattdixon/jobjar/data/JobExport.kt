@@ -75,10 +75,8 @@ object JobExport {
             val validDependency = job.parentId != null && dependency != null &&
                 dependency.id != job.id && dependency.parentId == job.parentId
             val repeats = job.parentId == null && job.recurrenceDays != null && job.recurrenceDays > 0
-            job.copy(
+            job.withRepeatRule(if (repeats) job.repeatRule() else null).copy(
                 dependsOnSubtaskId = if (validDependency) job.dependsOnSubtaskId else null,
-                recurrenceDays = if (repeats) job.recurrenceDays else null,
-                repeatWeekdays = if (repeats) job.repeatWeekdays?.takeIf { it and EVERY_DAY_MASK != 0 } else null,
                 nextDueAt = if (repeats) job.nextDueAt else null,
                 isDone = if (repeats) false else job.isDone,
                 isInProgress = job.isInProgress && !(job.isDone && !repeats),
@@ -107,6 +105,11 @@ object JobExport {
         .put("parentId", parentId ?: JSONObject.NULL)
         .put("recurrenceDays", recurrenceDays ?: JSONObject.NULL)
         .put("repeatWeekdays", repeatWeekdays ?: JSONObject.NULL)
+        .put("repeatUnit", repeatUnit.name)
+        .put("repeatAnchor", repeatAnchor.name)
+        .put("repeatMonthDay", repeatMonthDay ?: JSONObject.NULL)
+        .put("repeatMonth", repeatMonth ?: JSONObject.NULL)
+        .put("leadDays", leadDays)
         .put("nextDueAt", nextDueAt ?: JSONObject.NULL)
         .put("completionCount", completionCount)
         .put("dependsOnSubtaskId", dependsOnSubtaskId ?: JSONObject.NULL)
@@ -133,6 +136,12 @@ object JobExport {
         parentId = longOrNull("parentId"),
         recurrenceDays = intOrNull("recurrenceDays"),
         repeatWeekdays = intOrNull("repeatWeekdays"),
+        // Older backups don't have these: every N days from when you finish, as before.
+        repeatUnit = RepeatUnit.entries.find { it.name == optString("repeatUnit") } ?: RepeatUnit.DAY,
+        repeatAnchor = RepeatAnchor.entries.find { it.name == optString("repeatAnchor") } ?: RepeatAnchor.COMPLETION,
+        repeatMonthDay = intOrNull("repeatMonthDay"),
+        repeatMonth = intOrNull("repeatMonth"),
+        leadDays = optInt("leadDays", 0),
         nextDueAt = longOrNull("nextDueAt"),
         completionCount = optInt("completionCount", 0),
         dependsOnSubtaskId = longOrNull("dependsOnSubtaskId"),
