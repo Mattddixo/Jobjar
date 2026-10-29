@@ -288,10 +288,10 @@ struct AddEditJobView: View {
         )
         edit.rule = repeatForm.rule
         if let id = savedJobId, let job = allJobs.first(where: { $0.id == id }) {
-            repository.updateJob(job, with: edit, allJobs: allJobs, firstDue: repeatForm.firstDue)
+            repository.updateJob(job, with: edit, allJobs: allJobs, firstDue: repeatForm.firstDueToSave())
             return id
         }
-        guard let job = repository.addJob(edit, parentId: resolvedParentId, allJobs: allJobs, firstDue: repeatForm.firstDue) else { return nil }
+        guard let job = repository.addJob(edit, parentId: resolvedParentId, allJobs: allJobs, firstDue: repeatForm.firstDueToSave()) else { return nil }
         savedJobId = job.id
         return job.id
     }
