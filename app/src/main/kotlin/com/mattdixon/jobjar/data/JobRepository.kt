@@ -72,7 +72,7 @@ class JobRepository(
 
     /**
      * Repeating jobs can't have subtasks. The UI never offers it; this is just a backstop.
-     * [firstDue]: when a set-days repeat starts, if you picked it (snapped to the rule's dates).
+     * [firstDue]: when a repeat starts, if you picked it (on set days, snapped to the rule's dates).
      */
     suspend fun addJob(job: Job, firstDue: Long? = null): Long = transactions.run {
         val parent = job.parentId?.let { dao.getJob(it) }
@@ -111,7 +111,7 @@ class JobRepository(
         val oldRule = fresh.repeatRule(zone())
         val nextDueAt = when {
             rule == null -> null
-            rule.onSetDays && firstDue != null -> startingDue(rule, firstDue)
+            firstDue != null -> startingDue(rule, firstDue)
             oldRule == null || !rule.sameShapeAs(oldRule) -> startingDue(rule, null)
             else -> fresh.nextDueAt
         }
@@ -316,9 +316,9 @@ class JobRepository(
             .forEach { dao.markNotDone(it.id) }
     }
 
-    /** A new cycle's first due date: from [firstDue] if one was picked (set days only), else from today. */
+    /** A new cycle's first due date: from [firstDue] if one was picked, else from today. */
     private fun startingDue(rule: RepeatRule, firstDue: Long?): Long? =
-        if (rule.onSetDays && firstDue != null) rule.firstDueFrom(firstDue, zone()) else rule.initialDue(clock(), zone())
+        if (firstDue != null) rule.firstDueFrom(firstDue, zone()) else rule.initialDue(clock(), zone())
 
     /** Next cycle: bump the count, set the next due date, clear in-progress and the checklist ticks. */
     private suspend fun cycleRepeatingJob(job: Job, now: Long) {

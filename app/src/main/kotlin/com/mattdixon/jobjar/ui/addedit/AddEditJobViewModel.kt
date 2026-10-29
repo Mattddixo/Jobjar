@@ -20,6 +20,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.time.DayOfWeek
+import java.time.LocalDate
 
 data class AddEditFormState(
     val id: Long? = null,
@@ -111,14 +113,15 @@ class AddEditJobViewModel(
         savedState[KEY_REPEAT_UNIT] = repeat.unit.name
         savedState[KEY_REPEAT_ANCHOR] = repeat.anchor.name
         savedState[KEY_WEEKDAYS] = repeat.weekdays
-        savedState[KEY_REPEAT_MONTH_DAY] = repeat.monthDay
-        savedState[KEY_REPEAT_BY_WEEKDAY] = repeat.monthByWeekday
-        savedState[KEY_REPEAT_WEEK_OF_MONTH] = repeat.weekOfMonth
-        savedState[KEY_REPEAT_MONTH_WEEKDAY] = repeat.monthWeekday
+        savedState[KEY_REPEAT_MONTH_DAY] = repeat.monthOption?.monthDay
+        savedState[KEY_REPEAT_WEEK_OF_MONTH] = repeat.monthOption?.weekOfMonth
+        savedState[KEY_REPEAT_MONTH_WEEKDAY] = repeat.monthOption?.weekday?.value
         savedState[KEY_REPEAT_MONTH] = repeat.month
+        savedState[KEY_REPEAT_YEAR_DAY] = repeat.yearDay
         savedState[KEY_LEAD_DAYS] = repeat.leadDays
         savedState[KEY_LEAD_CHOSEN] = repeat.leadChosen
-        savedState[KEY_FIRST_DUE] = repeat.firstDue
+        savedState[KEY_START_DAY] = repeat.startDay
+        savedState[KEY_START_PICKED] = repeat.startPicked
         savedState[KEY_ORIGINAL_RULE] = RepeatForm.encodeRule(repeat.originalRule)
         savedState[KEY_ORIGINAL_DUE] = repeat.originalNextDue
         savedState[KEY_DEPENDS_ON] = next.dependsOnSubtaskId
@@ -141,14 +144,13 @@ class AddEditJobViewModel(
                 unit = RepeatUnit.entries.find { it.name == savedState.get<String>(KEY_REPEAT_UNIT) } ?: RepeatUnit.WEEK,
                 anchor = RepeatAnchor.entries.find { it.name == savedState.get<String>(KEY_REPEAT_ANCHOR) } ?: RepeatAnchor.SCHEDULE,
                 weekdays = savedState[KEY_WEEKDAYS] ?: 0,
-                monthDay = savedState[KEY_REPEAT_MONTH_DAY],
-                monthByWeekday = savedState[KEY_REPEAT_BY_WEEKDAY] ?: false,
-                weekOfMonth = savedState[KEY_REPEAT_WEEK_OF_MONTH] ?: 1,
-                monthWeekday = savedState[KEY_REPEAT_MONTH_WEEKDAY] ?: 1,
+                monthOption = restoreMonthOption(),
                 month = savedState[KEY_REPEAT_MONTH],
+                yearDay = savedState[KEY_REPEAT_YEAR_DAY],
                 leadDays = savedState[KEY_LEAD_DAYS] ?: 0,
                 leadChosen = savedState[KEY_LEAD_CHOSEN] ?: false,
-                firstDue = savedState[KEY_FIRST_DUE],
+                startDay = savedState[KEY_START_DAY] ?: LocalDate.now().toEpochDay(),
+                startPicked = savedState[KEY_START_PICKED] ?: false,
                 originalRule = RepeatForm.decodeRule(savedState[KEY_ORIGINAL_RULE]),
                 originalNextDue = savedState[KEY_ORIGINAL_DUE]
             ),
@@ -163,6 +165,17 @@ class AddEditJobViewModel(
     fun setCategory(value: String) = update { it.copy(category = value) }
     fun setPriority(value: Priority) = update { it.copy(priority = value) }
     fun setCostText(value: String) = update { it.copy(costText = value) }
+
+    private fun restoreMonthOption(): MonthOption? {
+        val day: Int? = savedState[KEY_REPEAT_MONTH_DAY]
+        val week: Int? = savedState[KEY_REPEAT_WEEK_OF_MONTH]
+        val weekday: Int? = savedState[KEY_REPEAT_MONTH_WEEKDAY]
+        return when {
+            week != null && weekday != null -> MonthOption(weekOfMonth = week, weekday = DayOfWeek.of(weekday))
+            day != null -> MonthOption(monthDay = day)
+            else -> null
+        }
+    }
 
     /** Repeat on (weekly from today) or off. */
     fun setRecurring(enabled: Boolean) = updateRepeat { if (enabled) it.turnedOn() else it.turnedOff() }
@@ -203,7 +216,7 @@ class AddEditJobViewModel(
             parentId = state.parentId ?: parentId,
             dependsOnSubtaskId = state.dependsOnSubtaskId
         ).withRepeatRule(state.repeat.rule)
-        val firstDue = state.repeat.firstDue
+        val firstDue = state.repeat.firstDueToSave()
         if (state.id == null) {
             val newId = repository.addJob(job, firstDue)
             update { it.copy(id = newId) }
@@ -238,13 +251,14 @@ class AddEditJobViewModel(
         const val KEY_REPEAT_ANCHOR = "form_repeat_anchor"
         const val KEY_WEEKDAYS = "form_weekdays"
         const val KEY_REPEAT_MONTH_DAY = "form_repeat_month_day"
-        const val KEY_REPEAT_BY_WEEKDAY = "form_repeat_by_weekday"
         const val KEY_REPEAT_WEEK_OF_MONTH = "form_repeat_week_of_month"
         const val KEY_REPEAT_MONTH_WEEKDAY = "form_repeat_month_weekday"
         const val KEY_REPEAT_MONTH = "form_repeat_month"
         const val KEY_LEAD_DAYS = "form_lead_days"
         const val KEY_LEAD_CHOSEN = "form_lead_chosen"
-        const val KEY_FIRST_DUE = "form_first_due"
+        const val KEY_REPEAT_YEAR_DAY = "form_repeat_year_day"
+        const val KEY_START_DAY = "form_start_day"
+        const val KEY_START_PICKED = "form_start_picked"
         const val KEY_ORIGINAL_RULE = "form_original_rule"
         const val KEY_ORIGINAL_DUE = "form_original_due"
         const val KEY_DEPENDS_ON = "form_depends_on"

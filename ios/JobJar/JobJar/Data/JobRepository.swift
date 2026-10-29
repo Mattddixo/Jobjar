@@ -224,7 +224,7 @@ struct JobRepository {
     }
 
     /// Nil if the parent can't take subtasks (missing, a subtask itself, or repeating).
-    /// `firstDue`: when a set-days repeat starts, if you picked it (snapped to the rule's dates).
+    /// `firstDue`: when a repeat starts, if you picked it (on set days, snapped to the rule's dates).
     @discardableResult
     func addJob(_ edit: JobEdit, parentId: UUID?, allJobs: [Job], firstDue: Date? = nil) -> Job? {
         if let parentId {
@@ -270,7 +270,7 @@ struct JobRepository {
 
         let nextDue: Date?
         if let rule {
-            if rule.onSetDays, firstDue != nil {
+            if firstDue != nil {
                 nextDue = startingDue(rule, firstDue: firstDue)
             } else if let oldRule, rule.sameShape(as: oldRule) {
                 nextDue = job.nextDueAt
@@ -305,9 +305,10 @@ struct JobRepository {
         save()
     }
 
-    /// A new cycle's first due date: from `firstDue` if one was picked (set days only), else from today.
+    /// A new cycle's first due date: from `firstDue` if one was picked (on set days snapped to the
+    /// rule's dates, after finishing that day itself), else from today.
     private func startingDue(_ rule: RepeatRule, firstDue: Date?) -> Date? {
-        if rule.onSetDays, let firstDue { return rule.firstOnOrAfter(firstDue) }
+        if let firstDue { return rule.firstOnOrAfter(firstDue) }
         return rule.initialDue(now: now())
     }
 

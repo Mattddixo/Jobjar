@@ -28,9 +28,12 @@ then two kinds:
 
 - **On set days**: every N days, every N weeks on chosen weekdays (every other Wednesday, Mon
   and Thu), every N months on a date (or the last day) or a weekday ("the first Monday", "the
-  last Friday"), or every N years on a date. The next due date is shown and you can pick when it
-  starts. Finishing early or late doesn't move it.
+  last Friday"), or every N years on a date. Finishing early or late doesn't move it.
 - **After I finish it**: every N days/weeks/months/years from the day you tick it off.
+
+Both show the next due date as one date button, which is also how you pick when it starts. Dates
+come from it: monthly offers what that date could mean ("On the 29th" or "On the last Thursday")
+and yearly uses the date itself, so there are no long lists of day numbers.
 
 Either can come back into the jar a few days early (never longer than the gap between due dates).
 Overdue ones are drawn as if they were high priority. Finishing one sends it to Done until it's

@@ -2,16 +2,22 @@ package com.mattdixon.jobjar.ui.addedit
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
@@ -22,6 +28,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SelectableDates
@@ -38,6 +45,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.mattdixon.jobjar.R
@@ -53,23 +61,20 @@ import com.mattdixon.jobjar.ui.theme.Spacing
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
-import java.time.Month
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
-
-/** Weeks of the month offered for "on the first Monday". */
-private val WEEKS_OF_MONTH = listOf(1, 2, 3, 4, LAST_DAY_OF_MONTH)
 
 /**
  * The repeat settings, shown once Repeat is on:
  *
  * 1. Quick picks, which fill everything in.
  * 2. On set days / After I finish it.
- * 3. "Every [2] [weeks]", then whatever set days need: the days, the date, or the weekday of
- *    the month, and when it's next due (tap Change to pick when it starts).
- * 4. Show it early, limited to what fits the repeat.
+ * 3. "Every [2] [weeks]", plus the days for weekly or a short list of choices for monthly.
+ * 4. Next due: one date button, the only place a date is picked. Monthly and yearly dates
+ *    come from it.
+ * 5. Show it early, limited to what fits the repeat.
  */
 @Composable
 fun RepeatEditor(form: RepeatForm, onChange: ((RepeatForm) -> RepeatForm) -> Unit) {
@@ -136,14 +141,14 @@ fun RepeatEditor(form: RepeatForm, onChange: ((RepeatForm) -> RepeatForm) -> Uni
                 Text(stringResource(R.string.repeat_on_label), style = MaterialTheme.typography.labelLarge)
                 WeekdayPicker(mask = form.weekdays, onToggle = { day -> onChange { it.togglingWeekday(day) } })
             }
-            RepeatUnit.MONTH -> MonthlyPickers(form, onChange)
-            RepeatUnit.YEAR -> YearlyPickers(form, onChange)
+            RepeatUnit.MONTH -> MonthChoices(form, onChange)
+            RepeatUnit.YEAR -> Unit
         }
-        NextDueRow(form, onChange)
-        Explainer(stringResource(R.string.repeat_set_days_explainer))
-    } else {
-        Explainer(stringResource(R.string.repeat_after_finish_explainer))
     }
+    NextDueRow(form, onChange)
+    Explainer(
+        stringResource(if (form.onSetDays) R.string.repeat_set_days_explainer else R.string.repeat_after_finish_explainer)
+    )
 
     // Daily on set days has nowhere to show it early, so the row would only ever say "On the day".
     if (form.leadChoices.size > 1) {
@@ -164,75 +169,47 @@ fun RepeatEditor(form: RepeatForm, onChange: ((RepeatForm) -> RepeatForm) -> Uni
     }
 }
 
-/** "Same date / Same weekday", then "On the [15th]" or "On the [first] [Monday]". */
+/** Monthly: what the start date could mean, e.g. "On the 29th" / "On the last Thursday". */
 @Composable
-private fun MonthlyPickers(form: RepeatForm, onChange: ((RepeatForm) -> RepeatForm) -> Unit) {
-    val locale = LocalConfiguration.current.locales[0]
-    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-        val options = listOf(false to R.string.repeat_month_by_date, true to R.string.repeat_month_by_weekday)
-        options.forEachIndexed { index, (byWeekday, label) ->
-            SegmentedButton(
-                selected = form.monthByWeekday == byWeekday,
-                onClick = { onChange { it.withMonthByWeekday(byWeekday) } },
-                shape = SegmentedButtonDefaults.itemShape(index, options.size)
-            ) { Text(stringResource(label)) }
-        }
-    }
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Spacing.md)
-    ) {
-        Text(stringResource(R.string.repeat_on_the), style = MaterialTheme.typography.bodyLarge)
-        if (form.monthByWeekday) {
-            DropdownField(
-                label = weekOfMonthLabel(form.weekOfMonth),
-                options = WEEKS_OF_MONTH,
-                optionLabel = { weekOfMonthLabel(it) },
-                onSelect = { week -> onChange { it.withWeekOfMonth(week) } }
-            )
-            DropdownField(
-                label = DayOfWeek.of(form.monthWeekday).getDisplayName(TextStyle.FULL, locale),
-                options = DayOfWeek.entries,
-                optionLabel = { it.getDisplayName(TextStyle.FULL, locale) },
-                onSelect = { day -> onChange { it.withMonthWeekday(day) } }
-            )
-        } else {
-            DropdownField(
-                label = monthDayLabel(form.monthDay ?: 1),
-                options = (1..31).toList() + LAST_DAY_OF_MONTH,
-                optionLabel = { monthDayLabel(it) },
-                onSelect = { day -> onChange { it.withMonthDay(day) } }
-            )
+private fun MonthChoices(form: RepeatForm, onChange: ((RepeatForm) -> RepeatForm) -> Unit) {
+    Column(modifier = Modifier.selectableGroup()) {
+        form.monthChoices.forEach { option ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .selectable(
+                        selected = form.monthOption == option,
+                        role = Role.RadioButton,
+                        onClick = { onChange { it.withMonthOption(option) } }
+                    )
+                    .padding(vertical = Spacing.xs),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.md)
+            ) {
+                RadioButton(selected = form.monthOption == option, onClick = null)
+                Text(monthOptionLabel(option), style = MaterialTheme.typography.bodyLarge)
+            }
         }
     }
 }
 
-/** "On [March] [3]". */
 @Composable
-private fun YearlyPickers(form: RepeatForm, onChange: ((RepeatForm) -> RepeatForm) -> Unit) {
+private fun monthOptionLabel(option: MonthOption): String {
     val locale = LocalConfiguration.current.locales[0]
-    val month = form.month ?: 1
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Spacing.md)
-    ) {
-        Text(stringResource(R.string.repeat_on_label), style = MaterialTheme.typography.bodyLarge)
-        DropdownField(
-            label = Month.of(month).getDisplayName(TextStyle.FULL, locale),
-            options = (1..12).toList(),
-            optionLabel = { Month.of(it).getDisplayName(TextStyle.FULL, locale) },
-            onSelect = { m -> onChange { it.withMonth(m) } }
-        )
-        DropdownField(
-            label = (form.monthDay ?: 1).toString(),
-            options = (1..Month.of(month).maxLength()).toList(),
-            optionLabel = { it.toString() },
-            onSelect = { day -> onChange { it.withMonthDay(day) } }
-        )
+    val week = option.weekOfMonth
+    val weekday = option.weekday
+    return when {
+        week != null && weekday != null ->
+            stringResource(R.string.repeat_on_the_weekday, weekOfMonthLabel(week), weekday.getDisplayName(TextStyle.FULL, locale))
+        option.monthDay == LAST_DAY_OF_MONTH -> stringResource(R.string.repeat_on_the_last_day)
+        else -> stringResource(R.string.repeat_on_the_date, ordinal(option.monthDay ?: 1))
     }
 }
 
-/** "Next: Wed, Nov 4  [Change]". Change picks when it starts; the rule snaps it to its own dates. */
+/**
+ * "Next due  [Wed, Nov 4]": the first (or next) due date, and the one place a date is picked. On
+ * set days the date snaps to the rule's days.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NextDueRow(form: RepeatForm, onChange: ((RepeatForm) -> RepeatForm) -> Unit) {
@@ -244,11 +221,14 @@ private fun NextDueRow(form: RepeatForm, onChange: ((RepeatForm) -> RepeatForm) 
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(
-            if (next == null) stringResource(R.string.repeat_next_now) else stringResource(R.string.repeat_next, nextDueText(next, zone)),
-            style = MaterialTheme.typography.bodyLarge
-        )
-        TextButton(onClick = { picking = true }) { Text(stringResource(R.string.repeat_change)) }
+        Text(stringResource(R.string.repeat_next_due), style = MaterialTheme.typography.labelLarge)
+        OutlinedButton(onClick = { picking = true }) {
+            Icon(Icons.Filled.CalendarToday, contentDescription = null, modifier = Modifier.size(18.dp))
+            Text(
+                if (next == null) stringResource(R.string.repeat_today) else nextDueText(next, zone),
+                modifier = Modifier.padding(start = Spacing.sm)
+            )
+        }
     }
     if (picking) {
         // The picker works in UTC midnights; convert both ways so it can't land a day out.
@@ -268,7 +248,7 @@ private fun NextDueRow(form: RepeatForm, onChange: ((RepeatForm) -> RepeatForm) 
                 TextButton(onClick = {
                     state.selectedDateMillis?.let { utc ->
                         val date = Instant.ofEpochMilli(utc).atZone(ZoneOffset.UTC).toLocalDate()
-                        onChange { it.withFirstDue(date.atStartOfDay(zone).toInstant().toEpochMilli()) }
+                        onChange { it.withStartDate(date) }
                     }
                     picking = false
                 }) { Text(stringResource(R.string.action_ok)) }
@@ -292,10 +272,6 @@ private fun nextDueText(millis: Long, zone: ZoneId): String {
         else -> date.format(DateTimeFormatter.ofPattern(if (date.year == today.year) "EEE, MMM d" else "EEE, MMM d, yyyy", locale))
     }
 }
-
-@Composable
-private fun monthDayLabel(day: Int): String =
-    if (day == LAST_DAY_OF_MONTH) stringResource(R.string.repeat_last_day) else ordinal(day)
 
 @Composable
 private fun presetLabel(preset: RepeatPreset): String = when (preset) {

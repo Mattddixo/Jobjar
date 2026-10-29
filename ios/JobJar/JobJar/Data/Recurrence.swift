@@ -96,7 +96,7 @@ struct RepeatRule: Equatable {
     /// other week, and December for "every 3 months on the 15th" makes it Dec, Mar, Jun, Sep.
     func firstOnOrAfter(_ date: Date, calendar: Calendar = .current) -> Date {
         let day = calendar.startOfDay(for: date)
-        if unit == .day { return day }
+        if unit == .day || !onSetDays { return day }
         var single = self
         single.interval = 1
         return single.nextScheduledDate(from: day, after: addDays(-1, to: day, calendar), calendar: calendar)
