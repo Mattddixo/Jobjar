@@ -239,6 +239,16 @@ class JobRepositoryTest {
     }
 
     @Test
+    fun afterFinishingCanStartOnAPickedDay() = runTest {
+        val mow = RepeatRule(interval = 2, unit = RepeatUnit.WEEK)
+        val friday = LocalDateTime.of(2026, 3, 6, 15, 0).atZone(zone).toInstant().toEpochMilli()
+        val job = repo.addJob(Job(title = "Mow", estimatedMinutes = 60).withRepeatRule(mow), firstDue = friday)
+        assertEquals("from the start of that day", java.time.LocalDate.of(2026, 3, 6), dueDate(job))
+        assertFalse(dao.row(job).isPending(now, zone))
+        assertNull("without one it's due now", dao.row(repo.addJob(Job(title = "Edge", estimatedMinutes = 30).withRepeatRule(mow))).nextDueAt)
+    }
+
+    @Test
     fun overdueJobsAreDrawnLikeHighPriority() = runTest {
         val seeded = JobRepository(dao, calendar, DirectTransactions, clock = { now }, zone = { zone }, random = kotlin.random.Random(7))
         now = LocalDateTime.of(2026, 2, 27, 9, 0).atZone(zone).toInstant().toEpochMilli()

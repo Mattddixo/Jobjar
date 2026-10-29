@@ -132,7 +132,7 @@ data class RepeatRule(
      * other week, and December for "every 3 months on the 15th" makes it Dec, Mar, Jun, Sep.
      */
     fun firstOnOrAfter(date: LocalDate): LocalDate =
-        if (unit == RepeatUnit.DAY) date else copy(interval = 1).nextScheduledDate(from = date, after = date.minusDays(1))
+        if (unit == RepeatUnit.DAY || !onSetDays) date else copy(interval = 1).nextScheduledDate(from = date, after = date.minusDays(1))
 
     /**
      * Next due date after finishing at [completedAt]. [previousDue] is the due date of the cycle
@@ -169,7 +169,10 @@ data class RepeatRule(
     fun initialDue(now: Long, zone: ZoneId): Long? =
         if (onSetDays) firstOnOrAfter(now.localDate(zone)).startMillis(zone) else null
 
-    /** The first due date when you've picked when it starts: the rule's first date from [chosen]. */
+    /**
+     * The first due date when you've picked when it starts: on set days the rule's first date from
+     * [chosen], after finishing that day itself.
+     */
     fun firstDueFrom(chosen: Long, zone: ZoneId): Long = firstOnOrAfter(chosen.localDate(zone)).startMillis(zone)
 }
 
