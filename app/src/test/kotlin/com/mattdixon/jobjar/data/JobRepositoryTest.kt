@@ -214,6 +214,16 @@ class JobRepositoryTest {
     }
 
     @Test
+    fun completingFromComingUpFinishesTheCycleEvenBeforeItsDue() = runTest {
+        val job = addRule("Car registration", rego.copy(leadDays = 0))
+        assertFalse("not due until the 20th", dao.row(job).isPending(now, zone))
+        assertNotNull(repo.completeCycle(job))
+        assertEquals(java.time.LocalDate.of(2027, 3, 20), dueDate(job))
+        assertEquals(1, dao.row(job).completionCount)
+        assertNull("one-off jobs aren't cycles", repo.completeCycle(add("Shelf")))
+    }
+
+    @Test
     fun overdueJobsAreDrawnLikeHighPriority() = runTest {
         val seeded = JobRepository(dao, calendar, DirectTransactions, clock = { now }, zone = { zone }, random = kotlin.random.Random(7))
         now = LocalDateTime.of(2026, 2, 27, 9, 0).atZone(zone).toInstant().toEpochMilli()

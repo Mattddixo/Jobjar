@@ -231,6 +231,17 @@ class JobRepository(
         before
     }
 
+    /**
+     * Finishes a repeating job's current cycle even if it isn't due yet (ticking it on Coming up).
+     * Null if it's gone or doesn't repeat.
+     */
+    suspend fun completeCycle(jobId: Long): UndoSnapshot? = transactions.run {
+        val job = dao.getJob(jobId)?.takeIf { it.recurrenceDays != null } ?: return@run null
+        val before = UndoSnapshot(familyOf(job))
+        cycleRepeatingJob(job, clock())
+        before
+    }
+
     private suspend fun clearSchedule(job: Job, sync: CalendarSync) {
         if (job.scheduledDate == null && job.calendarEventId == null) return
         removeUpcomingEvent(job, sync)

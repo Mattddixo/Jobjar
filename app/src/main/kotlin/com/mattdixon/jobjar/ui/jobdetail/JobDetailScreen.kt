@@ -50,6 +50,7 @@ import com.mattdixon.jobjar.R
 import com.mattdixon.jobjar.data.Job
 import com.mattdixon.jobjar.data.JobRepository
 import com.mattdixon.jobjar.data.isBooked
+import com.mattdixon.jobjar.data.isOverdue
 import com.mattdixon.jobjar.data.isMissed
 import com.mattdixon.jobjar.data.isPending
 import com.mattdixon.jobjar.data.remainingMinutes
@@ -191,7 +192,7 @@ fun JobDetailScreen(
                     if (currentJob.isInProgress) InfoBadge(text = stringResource(R.string.badge_in_progress))
                     TimeBucketBadge(minutes = displayMinutes)
                     if (currentJob.category.isNotBlank()) CategoryBadge(category = currentJob.category)
-                    currentJob.recurrenceDays?.let { InfoBadge(text = recurrenceLabel(it, currentJob.repeatWeekdays)) }
+                    if (currentJob.recurrenceDays != null) InfoBadge(text = recurrenceLabel(currentJob))
                 }
 
                 if (subtasks.isNotEmpty()) {
@@ -204,14 +205,14 @@ fun JobDetailScreen(
 
                 if (currentJob.recurrenceDays != null) {
                     Text(
-                        dueStatusLabel(currentJob.nextDueAt) +
+                        dueStatusLabel(currentJob) +
                             if (currentJob.completionCount > 0) {
                                 plural(R.plurals.completed_n_times, currentJob.completionCount, currentJob.completionCount)
                             } else {
                                 ""
                             },
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = if (currentJob.isOverdue()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 

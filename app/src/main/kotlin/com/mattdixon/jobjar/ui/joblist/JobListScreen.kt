@@ -87,6 +87,7 @@ import com.mattdixon.jobjar.data.JobRepository
 import com.mattdixon.jobjar.data.UndoSnapshot
 import com.mattdixon.jobjar.data.isBooked
 import com.mattdixon.jobjar.data.isMissed
+import com.mattdixon.jobjar.data.isOverdue
 import com.mattdixon.jobjar.data.isPending
 import com.mattdixon.jobjar.ui.components.CategoryBadge
 import com.mattdixon.jobjar.ui.components.InfoBadge
@@ -589,7 +590,7 @@ private fun JobRow(
                     item.costCents?.let { InfoBadge(text = formatCost(it)) }
                     if (job.category.isNotBlank()) CategoryBadge(category = job.category)
                     if (item.subtaskTotal > 0) InfoBadge(text = stringResource(R.string.subtasks_done_count, item.subtaskDone, item.subtaskTotal))
-                    job.recurrenceDays?.let { InfoBadge(text = recurrenceLabel(it, job.repeatWeekdays)) }
+                    if (job.recurrenceDays != null) InfoBadge(text = recurrenceLabel(job))
                     if (item.scheduledDate != null) {
                         val label = if (job.isMissed()) R.string.badge_missed else R.string.badge_scheduled
                         InfoBadge(text = stringResource(label, formatScheduledDateTime(item.scheduledDate)))
@@ -617,9 +618,9 @@ private fun JobRow(
                 }
                 if (job.recurrenceDays != null) {
                     Text(
-                        dueStatusLabel(job.nextDueAt),
+                        dueStatusLabel(job),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = if (job.isOverdue()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
