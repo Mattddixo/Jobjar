@@ -344,6 +344,25 @@ final class JobRepositoryTests: XCTestCase {
         XCTAssertNil(repository.completeCycle(add("Shelf")))
     }
 
+    func testPickingWhenItStartsSetsTheFirstDueDate() {
+        let wednesday = 4
+        let bins = RepeatRule(interval: 2, unit: .week, weekdays: weekdayBit(calendarWeekday: wednesday), anchor: .schedule)
+        var change = edit("Bins")
+        change.rule = bins
+        let inAWeek = Calendar.current.date(byAdding: .day, value: 7, to: clock)!
+        let job = repository.addJob(change, parentId: nil, allJobs: all, firstDue: inAWeek)!
+        let expected = bins.firstOnOrAfter(inAWeek)
+        XCTAssertEqual(job.nextDueAt, expected)
+        XCTAssertEqual(Calendar.current.component(.weekday, from: expected), wednesday)
+        // Editing without picking keeps it; picking again moves it.
+        var longer = change
+        longer.rule = RepeatRule(interval: 2, unit: .week, weekdays: weekdayBit(calendarWeekday: wednesday), anchor: .schedule, leadDays: 1)
+        repository.updateJob(job, with: longer, allJobs: all)
+        XCTAssertEqual(job.nextDueAt, expected)
+        repository.updateJob(job, with: change, allJobs: all, firstDue: clock)
+        XCTAssertEqual(job.nextDueAt, bins.firstOnOrAfter(clock))
+    }
+
     func testOverdueJobsAreDrawnLikeHighPriority() {
         let filter = add("Filter", repeatDays: 7)
         filter.nextDueAt = Calendar.current.date(byAdding: .day, value: -3, to: clock)

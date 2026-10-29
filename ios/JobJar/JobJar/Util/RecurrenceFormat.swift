@@ -40,22 +40,41 @@ func maxDaysInMonth(_ month: Int) -> Int {
     }
 }
 
-/// "Weekly", "Every 3 days", "Mon, Thu", "Monthly on the 15th", "Yearly on Mar 3" etc.
+/// "first", "second"... "last", as in "the first Monday".
+func formatWeekOfMonth(_ week: Int) -> String {
+    switch week {
+    case 1: return "first"
+    case 2: return "second"
+    case 3: return "third"
+    case 4: return "fourth"
+    default: return "last"
+    }
+}
+
+/// "Weekly", "Every 3 days", "Mon, Thu", "Every 2 weeks on Wednesday", "Monthly on the 15th",
+/// "Monthly on the first Monday", "Yearly on Mar 3" etc.
 func formatRecurrence(_ rule: RepeatRule) -> String {
-    if rule.onWeekdays, let mask = rule.weekdays {
+    let calendar = Calendar.current
+    let n = rule.interval
+    let onSchedule = rule.onSetDays
+    if onSchedule, rule.unit == .week, let mask = rule.weekdays, mask & everyDayMask != 0, n > 1 {
+        let picked = mondayFirstWeekdays.filter { mask & weekdayBit(calendarWeekday: $0) != 0 }
+        let names = picked.count == 1
+            ? calendar.weekdaySymbols[picked[0] - 1]
+            : picked.map { calendar.shortWeekdaySymbols[$0 - 1] }.joined(separator: ", ")
+        return "Every \(n) weeks on \(names)"
+    }
+    if onSchedule, rule.unit == .week, let mask = rule.weekdays, mask & everyDayMask != 0 {
         switch mask & everyDayMask {
         case everyDayMask: return "Every day"
         case weekdaysMask: return "Weekdays"
         case weekendMask: return "Weekends"
         default:
-            let calendar = Calendar.current
             let picked = mondayFirstWeekdays.filter { mask & weekdayBit(calendarWeekday: $0) != 0 }
             if picked.count == 1 { return "Every \(calendar.weekdaySymbols[picked[0] - 1])" }
             return picked.map { calendar.shortWeekdaySymbols[$0 - 1] }.joined(separator: ", ")
         }
     }
-    let n = rule.interval
-    let onSchedule = rule.anchor == .schedule
     switch rule.unit {
     case .day:
         switch n {
@@ -68,6 +87,10 @@ func formatRecurrence(_ rule: RepeatRule) -> String {
         return n == 1 ? "Weekly" : "Every \(n) weeks"
     case .month:
         let every = n == 1 ? "Monthly" : "Every \(n) months"
+        if rule.byWeekdayOfMonth, let week = rule.weekOfMonth, let mask = rule.weekdays,
+           let weekday = mondayFirstWeekdays.first(where: { mask & weekdayBit(calendarWeekday: $0) != 0 }) {
+            return "\(every) on the \(formatWeekOfMonth(week)) \(calendar.weekdaySymbols[weekday - 1])"
+        }
         guard onSchedule, let day = rule.monthDay else { return every }
         return day == lastDayOfMonth ? "\(every) on the last day" : "\(every) on the \(ordinal(day))"
     case .year:
@@ -91,7 +114,7 @@ func formatDueStatus(_ job: Job, now: Date = .now, calendar: Calendar = .current
     guard let due = job.nextDueAt, let rule = job.repeatRule else { return "Due now" }
     let days = job.daysUntilDue(now: now, calendar: calendar) ?? 0
     if days < 0 { return -days == 1 ? "Overdue 1 day" : "Overdue \(-days) days" }
-    let countsFromFinish = !rule.onWeekdays && rule.anchor == .completion && rule.leadDays == 0
+    let countsFromFinish = !rule.onSetDays && rule.leadDays == 0
     if countsFromFinish {
         if due <= now { return "Due now" }
         switch days {

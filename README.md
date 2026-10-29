@@ -23,13 +23,18 @@ be set to wait for a sibling, which just keeps it out of the draw until then. Ti
 last subtask finishes the parent; finishing the parent ticks off whatever's left, and reopening
 the parent puts back only the ones it ticked off.
 
-**Repeating jobs.** Quick picks (daily, weekly, every 2 weeks, monthly, every 3 months, yearly)
-or "every N days/weeks/months/years". Weekly jobs can be on set weekdays, monthly ones on a day
-of the month (or the last day), yearly ones on a date. Each one either counts from when you
-finish it or sticks to its dates however early or late you were, and can come back into the jar
-a few days before it's due. Overdue ones are drawn as if they were high priority. Finishing one
-sends it to Done until it's due again. Repeating jobs can't have subtasks, because the two
-schedules never line up.
+**Repeating jobs.** Quick picks (daily, weekly, every 2 weeks, monthly, every 3 months, yearly),
+then two kinds:
+
+- **On set days**: every N days, every N weeks on chosen weekdays (every other Wednesday, Mon
+  and Thu), every N months on a date (or the last day) or a weekday ("the first Monday", "the
+  last Friday"), or every N years on a date. The next due date is shown and you can pick when it
+  starts. Finishing early or late doesn't move it.
+- **After I finish it**: every N days/weeks/months/years from the day you tick it off.
+
+Either can come back into the jar a few days early (never longer than the gap between due dates).
+Overdue ones are drawn as if they were high priority. Finishing one sends it to Done until it's
+due again. Repeating jobs can't have subtasks, because the two schedules never line up.
 
 **Coming up.** Optional (Settings), off by default: a slim line under the jar showing what's
 overdue, due today and due in the next week, two weeks or month. Tap it for the first few, tick
@@ -116,11 +121,12 @@ data class Job(
     val timesDrawn: Int = 0,
     val parentId: Long? = null,           // set = subtask
     val recurrenceDays: Int? = null,      // set = repeats every N repeatUnits
-    val repeatWeekdays: Int? = null,      // set = weekly on these weekdays (Mon = bit 0)
+    val repeatWeekdays: Int? = null,      // weekly: these days; monthly by weekday: the one day (Mon = bit 0)
     val repeatUnit: RepeatUnit = DAY,     // DAY, WEEK, MONTH, YEAR
-    val repeatAnchor: RepeatAnchor = COMPLETION, // or SCHEDULE: stick to the rule's dates
+    val repeatAnchor: RepeatAnchor = COMPLETION, // after finishing, or SCHEDULE: on set days
     val repeatMonthDay: Int? = null,      // monthly/yearly on a schedule, -1 = last day
     val repeatMonth: Int? = null,         // yearly on a schedule
+    val repeatWeekOfMonth: Int? = null,   // monthly on "the first Monday": 1..4, -1 = last
     val leadDays: Int = 0,                // back in the jar this many days early
     val nextDueAt: Long? = null,          // repeating only, null = due now
     val completionCount: Int = 0,         // repeating only

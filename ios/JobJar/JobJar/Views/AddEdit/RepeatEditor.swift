@@ -1,9 +1,12 @@
 import SwiftUI
 
-/// Choices for "Show it early", in days.
+/// Choices for "Show it early", in days. Only the ones shorter than the repeat are offered.
 private let leadChoices = [0, 1, 3, 7, 14, 30, 60]
 
-/// The quick picks above the "Every N ..." line.
+/// Weeks of the month offered for "on the first Monday".
+private let weeksOfMonth = [1, 2, 3, 4, lastDayOfMonth]
+
+/// The quick picks at the top. All of them start on set days, from today.
 enum RepeatPreset: CaseIterable, Identifiable {
     case daily, weekly, fortnightly, monthly, quarterly, yearly
 
@@ -39,63 +42,96 @@ enum RepeatPreset: CaseIterable, Identifiable {
 
     /// "Every 14 days" counts as every 2 weeks, so older jobs still light up their chip.
     func matches(_ form: RepeatForm) -> Bool {
-        guard let interval = form.interval, form.rule?.onWeekdays != true else { return false }
+        guard let interval = form.interval else { return false }
         if form.unit == unit { return interval == self.interval }
         return unit == .week && form.unit == .day && interval == self.interval * 7
     }
 }
 
-/// The repeat part of the job form. Same defaults as Android: presets fill everything in, a new
-/// unit gets its usual "counts from", and "show it early" follows the rule until you pick one.
+/// The repeat part of the job form. Same as Android: everything the rule might need is kept (so
+/// switching modes or units doesn't lose what you'd picked) and `rule` takes the parts that apply.
+/// Every change fills in defaults, keeps "show it early" shorter than the repeat, and suggests one
+/// until you pick it yourself.
 struct RepeatForm: Equatable {
     /// Nil = doesn't repeat. 0 while the number is being retyped.
     var interval: Int? = nil
     var unit: RepeatUnit = .week
-    /// Every week only. Nil or 0 = no set days.
-    var weekdays: Int? = nil
-    var anchor: RepeatAnchor = .completion
+    var anchor: RepeatAnchor = .schedule
+    /// Weekly on set days. Monday = bit 0. Never empty once set.
+    var weekdays = 0
+    /// Monthly by date and yearly.
     var monthDay: Int? = nil
+    /// Monthly on "the first Monday" instead of a date.
+    var monthByWeekday = false
+    /// 1...4, or `lastDayOfMonth`.
+    var weekOfMonth = 1
+    /// Calendar weekday number, Sunday = 1.
+    var monthWeekday = 2
     var month: Int? = nil
     var leadDays = 0
-    /// Picked "show it early" by hand, so changing the rule stops suggesting one.
     var leadChosen = false
+    /// The day picked with "Change". Nil = from today, or keep the current due date.
+    var firstDue: Date? = nil
+    /// The rule and due date as loaded, to show what an edit keeps.
+    var originalRule: RepeatRule? = nil
+    var originalNextDue: Date? = nil
 
     init() {}
 
-    init(rule: RepeatRule?) {
-        guard let rule else { return }
+    /// The job's repeat as the form shows it.
+    init(job: Job) {
+        guard let rule = job.repeatRule else { return }
+        let calendar = Calendar.current
+        let day = job.nextDueAt ?? .now
         interval = rule.interval
         unit = rule.unit
-        weekdays = rule.weekdays
         anchor = rule.anchor
+        weekdays = rule.unit == .week ? rule.weekdays ?? 0 : 0
         monthDay = rule.monthDay
+        monthByWeekday = rule.byWeekdayOfMonth
+        weekOfMonth = rule.weekOfMonth ?? 1
+        let ruleDay = mondayFirstWeekdays.first { (rule.weekdays ?? 0) & weekdayBit(calendarWeekday: $0) != 0 }
+        monthWeekday = rule.byWeekdayOfMonth ? ruleDay ?? 2 : calendar.component(.weekday, from: day)
         month = rule.month
         leadDays = rule.leadDays
         leadChosen = true
-        fillDateDefaults()
+        originalRule = rule
+        originalNextDue = job.nextDueAt
+        normalize(today: day)
     }
 
     var repeats: Bool { interval != nil }
-
-    /// Set days only make sense for "every 1 week".
-    var canPickWeekdays: Bool { unit == .week && interval == 1 }
-
+    var onSetDays: Bool { anchor == .schedule }
     var isValid: Bool { (interval ?? 1) > 0 }
 
     var rule: RepeatRule? {
-        guard let interval else { return nil }
-        return RepeatRule(
-            interval: interval,
-            unit: unit,
-            weekdays: canPickWeekdays && (weekdays ?? 0) != 0 ? weekdays : nil,
-            anchor: anchor,
-            monthDay: monthDay,
-            month: month,
-            leadDays: leadDays
-        )
+        guard let n = interval else { return nil }
+        guard onSetDays else { return RepeatRule(interval: n, unit: unit, anchor: anchor, leadDays: leadDays) }
+        switch unit {
+        case .day:
+            return RepeatRule(interval: n, unit: unit, anchor: anchor, leadDays: leadDays)
+        case .week:
+            return RepeatRule(interval: n, unit: unit, weekdays: weekdays != 0 ? weekdays : nil, anchor: anchor, leadDays: leadDays)
+        case .month:
+            if monthByWeekday {
+                return RepeatRule(
+                    interval: n, unit: unit, weekdays: weekdayBit(calendarWeekday: monthWeekday), anchor: anchor,
+                    weekOfMonth: weekOfMonth, leadDays: leadDays
+                )
+            }
+            return RepeatRule(interval: n, unit: unit, anchor: anchor, monthDay: monthDay, leadDays: leadDays)
+        case .year:
+            return RepeatRule(interval: n, unit: unit, anchor: anchor, monthDay: monthDay, month: month, leadDays: leadDays)
+        }
     }
 
-    /// Defaults to weekly.
+    /// "Show it early" choices that fit the repeat (always includes "on the day").
+    var leadOptions: [Int] {
+        guard (interval ?? 0) > 0, let rule else { return [0] }
+        let maxLead = maxLeadDays(rule)
+        return leadChoices.filter { $0 <= maxLead }
+    }
+
     mutating func setRepeats(_ on: Bool) {
         if !on {
             interval = nil
@@ -104,37 +140,38 @@ struct RepeatForm: Equatable {
         }
     }
 
-    mutating func apply(_ preset: RepeatPreset) {
+    /// Keeps days or dates you'd already picked; otherwise they start from today.
+    mutating func apply(_ preset: RepeatPreset, today: Date = .now) {
         interval = preset.interval
         unit = preset.unit
-        weekdays = nil
-        anchor = defaultAnchor(preset.unit)
-        fillDateDefaults()
-        suggestLead()
+        anchor = .schedule
+        normalize(today: today)
     }
 
-    mutating func setInterval(_ value: Int) {
-        interval = value
-        suggestLead()
-    }
+    mutating func setInterval(_ value: Int) { interval = value; normalize() }
+    mutating func setUnit(_ value: RepeatUnit) { unit = value; normalize() }
+    mutating func setMode(_ value: RepeatAnchor) { anchor = value; normalize() }
+    mutating func setMonthDay(_ value: Int) { monthDay = value; normalize() }
+    mutating func setWeekOfMonth(_ value: Int) { weekOfMonth = value; normalize() }
+    mutating func setMonthWeekday(_ value: Int) { monthWeekday = value; normalize() }
 
-    mutating func setUnit(_ value: RepeatUnit) {
-        guard value != unit else { return }
-        unit = value
-        anchor = defaultAnchor(value)
-        fillDateDefaults()
-        suggestLead()
-    }
-
-    mutating func setAnchor(_ value: RepeatAnchor) {
-        anchor = value
-        fillDateDefaults()
+    /// Switching to "same weekday" starts from today's: the 29th, a Thursday, is the last Thursday.
+    mutating func setMonthByWeekday(_ value: Bool, today: Date = .now) {
+        if value && !monthByWeekday {
+            let calendar = Calendar.current
+            let week = (calendar.component(.day, from: today) - 1) / 7 + 1
+            weekOfMonth = week > 4 ? lastDayOfMonth : week
+            monthWeekday = calendar.component(.weekday, from: today)
+        }
+        monthByWeekday = value
+        normalize(today: today)
     }
 
     /// Keeps the day valid for the new month: the 31st becomes the 30th in April. Feb 29 is allowed.
     mutating func setMonth(_ value: Int) {
         month = value
         if let day = monthDay, day > maxDaysInMonth(value) { monthDay = maxDaysInMonth(value) }
+        normalize()
     }
 
     mutating func setLeadDays(_ days: Int) {
@@ -142,41 +179,45 @@ struct RepeatForm: Equatable {
         leadChosen = true
     }
 
+    /// Won't untick the last day: a weekly job on set days needs at least one.
     mutating func toggleWeekday(_ bit: Int) {
-        weekdays = (weekdays ?? 0) ^ bit
-        suggestLead()
+        let next = weekdays ^ bit
+        guard next != 0 else { return }
+        weekdays = next
+        normalize()
     }
 
-    /// Monthly and yearly on a schedule need a date: start from today's.
-    private mutating func fillDateDefaults() {
-        guard anchor == .schedule else { return }
-        let today = Calendar.current.dateComponents([.month, .day], from: .now)
-        switch unit {
-        case .month:
-            if monthDay == nil { monthDay = today.day }
-        case .year:
-            let chosenMonth = month ?? today.month ?? 1
-            let maxDay = maxDaysInMonth(chosenMonth)
-            month = chosenMonth
+    /// When it'll next be due, for the "Next:" line (set days only): the picked start, else the
+    /// current due date if the edit keeps it, else the first of the rule's dates from today. Nil
+    /// means due now.
+    func nextDue(now: Date = .now) -> Date? {
+        guard onSetDays, (interval ?? 0) > 0, let current = rule else { return nil }
+        if let firstDue { return current.firstOnOrAfter(firstDue) }
+        if let originalRule, current.sameShape(as: originalRule) { return originalNextDue }
+        return current.initialDue(now: now)
+    }
+
+    /// Defaults for whatever the current unit needs, then the lead window.
+    private mutating func normalize(today: Date = .now) {
+        let calendar = Calendar.current
+        let parts = calendar.dateComponents([.month, .day, .weekday], from: today)
+        if weekdays == 0 { weekdays = weekdayBit(calendarWeekday: parts.weekday ?? 2) }
+        if monthDay == nil { monthDay = parts.day }
+        if month == nil { month = parts.month }
+        if unit == .year {
             // Yearly picks a real date, so "last day" from a monthly rule becomes that month's last.
-            switch monthDay {
-            case nil: monthDay = min(today.day ?? 1, maxDay)
-            case .some(lastDayOfMonth): monthDay = maxDay
-            case let day?: monthDay = min(max(day, 1), maxDay)
-            }
-        default:
-            break
+            let maxDay = maxDaysInMonth(month ?? 1)
+            let day = monthDay ?? 1
+            monthDay = day == lastDayOfMonth ? maxDay : min(max(day, 1), maxDay)
         }
-    }
-
-    private mutating func suggestLead() {
-        guard !leadChosen, (interval ?? 0) > 0, let rule else { return }
-        leadDays = suggestedLeadDays(rule)
+        guard (interval ?? 0) > 0, let current = rule else { return }
+        let lead = leadChosen ? leadDays : suggestedLeadDays(current)
+        leadDays = min(max(lead, 0), maxLeadDays(current))
     }
 }
 
-/// The repeat settings, shown once Repeat is on: quick picks, then the rule spelled out as
-/// "Every [2] [weeks]" with whatever that rule needs underneath.
+/// The repeat settings, shown once Repeat is on: quick picks, On set days / After I finish it,
+/// "Every [2] [weeks]" with whatever set days need, when it's next due, and show it early.
 struct RepeatEditor: View {
     @Binding var form: RepeatForm
 
@@ -191,6 +232,13 @@ struct RepeatEditor: View {
                     }
                 }
             }
+
+            Picker("Repeat", selection: Binding(get: { form.anchor }, set: { form.setMode($0) })) {
+                Text("On set days").tag(RepeatAnchor.schedule)
+                Text("After I finish it").tag(RepeatAnchor.completion)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
 
             HStack(spacing: 10) {
                 Text("Every")
@@ -215,88 +263,131 @@ struct RepeatEditor: View {
                 Spacer(minLength: 0)
             }
 
-            if form.canPickWeekdays {
-                Text("On these days (optional)").font(.subheadline)
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(mondayFirstWeekdays, id: \.self) { weekday in
-                            let bit = weekdayBit(calendarWeekday: weekday)
-                            FilterChip(
-                                label: Calendar.current.shortWeekdaySymbols[weekday - 1],
-                                selected: (form.weekdays ?? 0) & bit != 0
-                            ) {
-                                form.toggleWeekday(bit)
-                            }
-                        }
-                    }
+            if form.onSetDays {
+                switch form.unit {
+                case .day:
+                    EmptyView()
+                case .week:
+                    weekdayPicker
+                case .month:
+                    monthlyPickers
+                case .year:
+                    yearlyPickers
                 }
-            }
-
-            if rule.onWeekdays {
-                explainer("Comes back each chosen day, even if you were late last time.")
+                nextDueRow
+                explainer("Stays on these days, however early or late you finish.")
             } else {
-                if form.anchor == .schedule && (form.unit == .month || form.unit == .year) {
-                    datePickers
-                }
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Next one counts from").font(.subheadline)
-                    Picker("Next one counts from", selection: Binding(get: { form.anchor }, set: { form.setAnchor($0) })) {
-                        Text("The schedule").tag(RepeatAnchor.schedule)
-                        Text("When I finish it").tag(RepeatAnchor.completion)
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                }
-                explainer(
-                    form.anchor == .schedule
-                        ? "Stays on its dates, however early or late you finish."
-                        : "Counts from the day you finish it."
-                )
+                explainer("Counts from the day you finish it, so it moves if you're early or late.")
             }
 
-            Picker("Show it early", selection: Binding(get: { form.leadDays }, set: { form.setLeadDays($0) })) {
-                ForEach(Array(Set(leadChoices + [form.leadDays])).sorted(), id: \.self) { days in
-                    Text(leadLabel(days)).tag(days)
+            // Daily on set days has nowhere to show it early, so the row would only ever say "On the day".
+            if form.leadOptions.count > 1 {
+                Picker("Show it early", selection: Binding(get: { form.leadDays }, set: { form.setLeadDays($0) })) {
+                    ForEach(form.leadOptions, id: \.self) { days in
+                        Text(leadLabel(days)).tag(days)
+                    }
                 }
-            }
-            .pickerStyle(.menu)
-            if form.leadDays > 0 {
-                explainer("It goes back in the jar, and on Coming up, that far ahead.")
+                .pickerStyle(.menu)
+                if form.leadDays > 0 {
+                    explainer("It goes back in the jar, and on Coming up, that far ahead.")
+                }
             }
         }
     }
 
-    /// "On the [15th]" for months, "On [March] [3]" for years.
+    private var weekdayPicker: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                Text("On").font(.subheadline)
+                ForEach(mondayFirstWeekdays, id: \.self) { weekday in
+                    let bit = weekdayBit(calendarWeekday: weekday)
+                    FilterChip(label: Calendar.current.shortWeekdaySymbols[weekday - 1], selected: form.weekdays & bit != 0) {
+                        form.toggleWeekday(bit)
+                    }
+                }
+            }
+        }
+    }
+
+    /// "Same date / Same weekday", then "On the [15th]" or "On the [first] [Monday]".
     @ViewBuilder
-    private var datePickers: some View {
+    private var monthlyPickers: some View {
+        Picker("Monthly", selection: Binding(get: { form.monthByWeekday }, set: { form.setMonthByWeekday($0) })) {
+            Text("Same date").tag(false)
+            Text("Same weekday").tag(true)
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
         HStack(spacing: 10) {
-            Text("On")
-            if form.unit == .year {
-                let month = form.month ?? 1
-                Picker("Month", selection: Binding(get: { month }, set: { form.setMonth($0) })) {
-                    ForEach(1...12, id: \.self) { m in
-                        Text(Calendar.current.monthSymbols[m - 1]).tag(m)
+            Text("On the")
+            if form.monthByWeekday {
+                Picker("Week", selection: Binding(get: { form.weekOfMonth }, set: { form.setWeekOfMonth($0) })) {
+                    ForEach(weeksOfMonth, id: \.self) { week in
+                        Text(formatWeekOfMonth(week)).tag(week)
                     }
                 }
                 .pickerStyle(.menu)
                 .labelsHidden()
-                Picker("Day", selection: Binding(get: { form.monthDay ?? 1 }, set: { form.monthDay = $0 })) {
-                    ForEach(1...maxDaysInMonth(month), id: \.self) { d in
-                        Text("\(d)").tag(d)
+                Picker("Day", selection: Binding(get: { form.monthWeekday }, set: { form.setMonthWeekday($0) })) {
+                    ForEach(mondayFirstWeekdays, id: \.self) { weekday in
+                        Text(Calendar.current.weekdaySymbols[weekday - 1]).tag(weekday)
                     }
                 }
                 .pickerStyle(.menu)
                 .labelsHidden()
             } else {
-                Picker("Day", selection: Binding(get: { form.monthDay ?? 1 }, set: { form.monthDay = $0 })) {
-                    ForEach(Array(1...31) + [lastDayOfMonth], id: \.self) { d in
-                        Text(d == lastDayOfMonth ? "Last day" : "The \(ordinal(d))").tag(d)
+                Picker("Day", selection: Binding(get: { form.monthDay ?? 1 }, set: { form.setMonthDay($0) })) {
+                    ForEach(Array(1...31) + [lastDayOfMonth], id: \.self) { day in
+                        Text(day == lastDayOfMonth ? "last day" : ordinal(day)).tag(day)
                     }
                 }
                 .pickerStyle(.menu)
                 .labelsHidden()
             }
             Spacer(minLength: 0)
+        }
+    }
+
+    /// "On [March] [3]".
+    private var yearlyPickers: some View {
+        HStack(spacing: 10) {
+            Text("On")
+            let month = form.month ?? 1
+            Picker("Month", selection: Binding(get: { month }, set: { form.setMonth($0) })) {
+                ForEach(1...12, id: \.self) { m in
+                    Text(Calendar.current.monthSymbols[m - 1]).tag(m)
+                }
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            Picker("Day", selection: Binding(get: { form.monthDay ?? 1 }, set: { form.setMonthDay($0) })) {
+                ForEach(1...maxDaysInMonth(month), id: \.self) { d in
+                    Text("\(d)").tag(d)
+                }
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            Spacer(minLength: 0)
+        }
+    }
+
+    /// "Next: [Wed, Nov 4]". Tap the date to pick when it starts; the rule snaps it to its own dates.
+    @ViewBuilder
+    private var nextDueRow: some View {
+        let today = Calendar.current.startOfDay(for: .now)
+        if let next = form.nextDue() {
+            DatePicker(
+                "Next",
+                selection: Binding(get: { max(next, today) }, set: { form.firstDue = Calendar.current.startOfDay(for: $0) }),
+                in: today...,
+                displayedComponents: .date
+            )
+        } else {
+            HStack {
+                Text("Next: due now")
+                Spacer()
+                Button("Change") { form.firstDue = today }
+            }
         }
     }
 
