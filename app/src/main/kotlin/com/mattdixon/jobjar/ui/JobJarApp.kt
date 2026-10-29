@@ -34,6 +34,7 @@ import com.mattdixon.jobjar.R
 import com.mattdixon.jobjar.data.JobRepository
 import com.mattdixon.jobjar.data.ThemeMode
 import com.mattdixon.jobjar.ui.addedit.AddEditJobScreen
+import com.mattdixon.jobjar.ui.comingup.ComingUpScreen
 import com.mattdixon.jobjar.ui.draw.DrawScreen
 import com.mattdixon.jobjar.ui.jobdetail.JobDetailScreen
 import com.mattdixon.jobjar.ui.joblist.JobListScreen
@@ -42,6 +43,7 @@ import com.mattdixon.jobjar.ui.stats.StatsScreen
 import com.mattdixon.jobjar.ui.theme.LocalAppColors
 
 private const val SETTINGS_ROUTE = "settings"
+private const val COMING_UP_ROUTE = "coming-up"
 
 private sealed class TopLevelDestination(val route: String, @StringRes val labelRes: Int, val icon: ImageVector) {
     data object Draw : TopLevelDestination("draw", R.string.tab_jar, Icons.Filled.Shuffle)
@@ -108,7 +110,15 @@ fun JobJarApp(
                     DrawScreen(
                         repository = repository,
                         onOpenJob = { jobId -> navController.navigate("job/$jobId") },
-                        onOpenSettings = openSettings
+                        onOpenSettings = openSettings,
+                        onOpenComingUp = { navController.navigate(COMING_UP_ROUTE) { launchSingleTop = true } }
+                    )
+                }
+                composable(COMING_UP_ROUTE) {
+                    ComingUpScreen(
+                        repository = repository,
+                        onOpenJob = { jobId -> navController.navigate("job/$jobId") },
+                        onBack = { navController.popBackStack() }
                     )
                 }
                 composable(TopLevelDestination.Jobs.route) {

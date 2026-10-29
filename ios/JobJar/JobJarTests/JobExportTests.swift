@@ -42,10 +42,36 @@ final class JobExportTests: XCTestCase {
         XCTAssertEqual(byTitle["Paint"]?.scheduledDate, Date(timeIntervalSince1970: 99))
         // Event ids only mean something on the phone that wrote them.
         XCTAssertNil(byTitle["Paint"]?.calendarEventId)
-        XCTAssertEqual(byTitle["Bins"]?.recurrenceDays, 7)
-        XCTAssertEqual(byTitle["Bins"]?.repeatWeekdays, weekdaysMask)
+        // Old-style weekday rows (every 7 days on set days) come back as "every week on these days".
+        let binsFields = try XCTUnwrap(byTitle["Bins"]).repeatFields
+        XCTAssertEqual(binsFields.rule, RepeatRule(interval: 1, unit: .week, weekdays: weekdaysMask))
         XCTAssertEqual(byTitle["Bins"]?.nextDueAt, Date(timeIntervalSince1970: 50))
         XCTAssertEqual(byTitle["Bins"]?.completionCount, 3)
+    }
+
+    func testRepeatRulesRoundTrip() throws {
+        let rego = Job(title: "Car registration", estimatedMinutes: 20, recurrenceDays: 1, nextDueAt: Date(timeIntervalSince1970: 60))
+        rego.repeatUnit = .year
+        rego.repeatAnchor = .schedule
+        rego.repeatMonthDay = 3
+        rego.repeatMonth = 3
+        rego.leadDays = 30
+        let records = try JobExport.decode(try JobExport.encode([rego])).get()
+        XCTAssertEqual(
+            records.first?.repeatFields.rule,
+            RepeatRule(interval: 1, unit: .year, anchor: .schedule, monthDay: 3, month: 3, leadDays: 30)
+        )
+    }
+
+    func testBackupsFromBeforeRepeatUnitsReadTheSame() throws {
+        let json = """
+        {"format":"job-jar","version":1,"exportedAt":1,"jobs":[
+          {"id":1,"title":"Plants","estimatedMinutes":5,"recurrenceDays":7,"nextDueAt":40}
+        ]}
+        """
+        let records = try decode(json).get()
+        XCTAssertEqual(records.first?.repeatFields.rule, RepeatRule(interval: 7))
+        XCTAssertEqual(records.first?.nextDueAt, Date(timeIntervalSince1970: 0.04))
     }
 
     func testReadsAnAndroidBackup() throws {

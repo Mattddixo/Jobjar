@@ -47,9 +47,20 @@ final class Job: Identifiable {
     var completedAt: Date?
     var timesDrawn: Int = 0
     var parentId: UUID?
+    /// How many `repeatUnit`s between cycles (days for older jobs, despite the name). Nil = doesn't
+    /// repeat. See `repeatRule` for how the repeat fields read together.
     var recurrenceDays: Int?
     /// Set = repeats on these weekdays. Monday is bit 0, same as Android and the export file.
     var repeatWeekdays: Int?
+    /// The repeat fields added later are optional so older stores migrate as is; use
+    /// `repeatUnit`, `repeatAnchor` and `leadDays` (Recurrence.swift). Nil = day / from finishing / 0.
+    var repeatUnitRaw: String?
+    var repeatAnchorRaw: String?
+    /// Monthly/yearly on a schedule: day of the month, or `lastDayOfMonth`.
+    var repeatMonthDay: Int?
+    /// Yearly on a schedule: 1...12.
+    var repeatMonth: Int?
+    var leadDaysValue: Int?
     var nextDueAt: Date?
     var completionCount: Int = 0
     /// Subtasks only: a sibling that has to be done first.
@@ -156,11 +167,12 @@ extension Job {
 }
 
 extension Job {
-    /// Due now? For repeating jobs that's about `nextDueAt`, not `isDone`.
+    /// Due now? For repeating jobs that's about `nextDueAt`, not `isDone`, and a job with a lead
+    /// window counts from `leadDays` before it's due.
     func isPending(now: Date = .now) -> Bool {
         if recurrenceDays != nil {
             guard let nextDueAt else { return true }
-            return nextDueAt <= now
+            return now >= showFrom(nextDueAt, leadDays: leadDays)
         }
         return !isDone
     }

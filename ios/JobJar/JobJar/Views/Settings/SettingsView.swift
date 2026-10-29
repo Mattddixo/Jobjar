@@ -30,6 +30,8 @@ struct SettingsView: View {
     @Query private var allJobs: [Job]
     @AppStorage("themeMode") private var themeMode = ThemeMode.system.rawValue
     @AppStorage(favourFillKey) private var favourFill = true
+    @AppStorage(showComingUpKey) private var showComingUp = false
+    @AppStorage(comingUpRangeKey) private var comingUpRange = defaultComingUpRange
 
     @State private var exportDocument: JobExportDocument? = nil
     @State private var showExporter = false
@@ -60,6 +62,19 @@ struct SettingsView: View {
                 Text("Jar")
             } footer: {
                 Text("Draws lean toward jobs that suit the time you pick and how many you ask for. Turn off to ignore job length. Priority always counts: high-priority jobs come up more often.")
+            }
+
+            Section {
+                Toggle("Show Coming up on the Jar tab", isOn: $showComingUp)
+                if showComingUp {
+                    Picker("Look ahead", selection: $comingUpRange) {
+                        ForEach(comingUpRanges, id: \.self) { days in
+                            Text("\(days) days").tag(days)
+                        }
+                    }
+                }
+            } footer: {
+                Text("A slim line under the jar for repeating jobs that are overdue, due today or due soon.")
             }
 
             CalendarSettingsSection()

@@ -40,6 +40,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.IconButton
@@ -68,8 +70,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mattdixon.jobjar.R
+import com.mattdixon.jobjar.data.DrawPreferences
 import com.mattdixon.jobjar.data.JobRepository
 import com.mattdixon.jobjar.data.LONG_JOB_MINUTES
+import com.mattdixon.jobjar.ui.UndoSnackbarEffect
+import com.mattdixon.jobjar.ui.comingup.ComingUpCard
+import com.mattdixon.jobjar.ui.comingup.rememberCompleteCycle
 import com.mattdixon.jobjar.ui.components.CategoryBadge
 import com.mattdixon.jobjar.ui.components.InfoBadge
 import com.mattdixon.jobjar.ui.components.SchedulePickerDialog
@@ -100,15 +106,24 @@ private const val JAR_FILL_CAP = 15
 fun DrawScreen(
     repository: JobRepository,
     onOpenJob: (Long) -> Unit,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    onOpenComingUp: () -> Unit
 ) {
     val appContext = LocalContext.current.applicationContext
     val viewModel: DrawViewModel = viewModel(factory = DrawViewModel.Factory(repository, appContext))
     val state by viewModel.uiState.collectAsState()
     var jobIdPendingSchedule by remember { mutableStateOf<Long?>(null) }
     val calendarNotice = rememberCalendarResultNotice()
+    // Read each visit, so changes made in Settings or on the See all page show straight away.
+    val showComingUp = remember { DrawPreferences.showComingUp(appContext) }
+    val comingUpRange = remember { DrawPreferences.comingUpRange(appContext) }
+    val allJobs by repository.allJobsFlat.collectAsState(initial = emptyList())
+    val completeCycle = rememberCompleteCycle(repository)
+    val snackbarHostState = remember { SnackbarHostState() }
+    UndoSnackbarEffect(snackbarHostState)
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 colors = appTopBarColors(),
@@ -137,6 +152,16 @@ fun DrawScreen(
             verticalArrangement = Arrangement.spacedBy(Spacing.lg)
         ) {
             JarHero(pendingCount = state.pendingCount, inProgressCount = state.inProgressCount, isLoaded = state.isLoaded)
+
+            if (showComingUp) {
+                ComingUpCard(
+                    jobs = allJobs,
+                    rangeDays = comingUpRange,
+                    onOpenJob = onOpenJob,
+                    onComplete = completeCycle,
+                    onSeeAll = onOpenComingUp
+                )
+            }
 
             PickerPanel(
                 state = state,
@@ -574,7 +599,7 @@ private fun BatchJobCard(
             Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
                 TimeBucketBadge(minutes = context?.remainingMinutes ?: job.estimatedMinutes, compact = true)
                 if (job.category.isNotBlank()) CategoryBadge(category = job.category, compact = true)
-                job.recurrenceDays?.let { InfoBadge(text = recurrenceLabel(it, job.repeatWeekdays), compact = true) }
+                if (job.recurrenceDays != null) InfoBadge(text = recurrenceLabel(job), compact = true)
             }
             if (context?.parentTitle != null) {
                 Text(

@@ -182,6 +182,62 @@ class JobRepositoryTest {
         assertEquals(LocalDateTime.of(2026, 3, 5, 0, 0), due)
     }
 
+    private fun dueDate(id: Long) = dao.row(id).nextDueAt?.let { java.time.Instant.ofEpochMilli(it).atZone(zone).toLocalDate() }
+
+    private suspend fun addRule(title: String, rule: RepeatRule) =
+        repo.addJob(Job(title = title, estimatedMinutes = 20).withRepeatRule(rule))
+
+    private val rego = RepeatRule(
+        interval = 1, unit = RepeatUnit.YEAR, anchor = RepeatAnchor.SCHEDULE, monthDay = 20, month = 3, leadDays = 30
+    )
+
+    @Test
+    fun yearlyJobWaitsForItsDateThenShowsInItsLeadWindow() = runTest {
+        val job = addRule("Car registration", rego)
+        assertEquals(java.time.LocalDate.of(2026, 3, 20), dueDate(job))
+        assertTrue("2 Mar is inside the 30 days before", dao.row(job).isPending(now, zone))
+        // Done early: next year's date, not a year from today.
+        repo.toggleDone(job)
+        assertEquals(java.time.LocalDate.of(2027, 3, 20), dueDate(job))
+        assertFalse(dao.row(job).isPending(now, zone))
+    }
+
+    @Test
+    fun changingJustTheNumberOrLeadKeepsTheDueDate() = runTest {
+        val job = addRule("Car registration", rego)
+        repo.toggleDone(job)
+        repo.updateJob(dao.row(job).withRepeatRule(rego.copy(interval = 2, leadDays = 7)))
+        assertEquals(java.time.LocalDate.of(2027, 3, 20), dueDate(job))
+        // A different date is a new rule: starts from its next date.
+        repo.updateJob(dao.row(job).withRepeatRule(rego.copy(monthDay = 25)))
+        assertEquals(java.time.LocalDate.of(2026, 3, 25), dueDate(job))
+    }
+
+    @Test
+    fun completingFromComingUpFinishesTheCycleEvenBeforeItsDue() = runTest {
+        val job = addRule("Car registration", rego.copy(leadDays = 0))
+        assertFalse("not due until the 20th", dao.row(job).isPending(now, zone))
+        assertNotNull(repo.completeCycle(job))
+        assertEquals(java.time.LocalDate.of(2027, 3, 20), dueDate(job))
+        assertEquals(1, dao.row(job).completionCount)
+        assertNull("one-off jobs aren't cycles", repo.completeCycle(add("Shelf")))
+    }
+
+    @Test
+    fun overdueJobsAreDrawnLikeHighPriority() = runTest {
+        val seeded = JobRepository(dao, calendar, DirectTransactions, clock = { now }, zone = { zone }, random = kotlin.random.Random(7))
+        now = LocalDateTime.of(2026, 2, 27, 9, 0).atZone(zone).toInstant().toEpochMilli()
+        val overdue = addRule("Filter", RepeatRule(interval = 1, unit = RepeatUnit.MONTH, anchor = RepeatAnchor.SCHEDULE, monthDay = 1))
+        val other = repo.addJob(Job(title = "Shelf", estimatedMinutes = 20, priority = Priority.LOW))
+        now = LocalDateTime.of(2026, 3, 5, 9, 0).atZone(zone).toInstant().toEpochMilli() // due on the 1st
+        assertTrue(dao.row(overdue).isOverdue(now, zone))
+        val picks = (1..400).mapNotNull { seeded.drawJob(30, emptySet(), emptyList())?.job?.id }
+        val share = picks.count { it == overdue } / picks.size.toDouble()
+        val expected = priorityWeight(Priority.HIGH) / (priorityWeight(Priority.HIGH) + priorityWeight(Priority.LOW))
+        assertEquals(expected, share, 0.07)
+        assertTrue(other in picks)
+    }
+
     @Test
     fun turningRepeatOnClearsScheduleAndCalendarEvent() = runTest {
         val job = add("Dentist")

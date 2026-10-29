@@ -1,5 +1,8 @@
 package com.mattdixon.jobjar.ui.settings
 
+import androidx.compose.material3.FilterChip
+import androidx.compose.runtime.mutableIntStateOf
+import com.mattdixon.jobjar.data.COMING_UP_RANGES
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -147,6 +150,47 @@ fun SettingsScreen(
                         )
                     }
                     Switch(checked = favourFill, onCheckedChange = null)
+                }
+
+                var showComingUp by remember { mutableStateOf(DrawPreferences.showComingUp(context)) }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .toggleable(value = showComingUp, role = Role.Switch) {
+                            showComingUp = it
+                            DrawPreferences.setShowComingUp(context, it)
+                        },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.lg)
+                ) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spacing.xxs)) {
+                        Text(stringResource(R.string.settings_show_coming_up), style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            stringResource(R.string.settings_show_coming_up_explainer),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(checked = showComingUp, onCheckedChange = null)
+                }
+                if (showComingUp) {
+                    var range by remember { mutableIntStateOf(DrawPreferences.comingUpRange(context)) }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.md)
+                    ) {
+                        Text(stringResource(R.string.settings_coming_up_range), style = MaterialTheme.typography.bodyMedium)
+                        COMING_UP_RANGES.forEach { days ->
+                            FilterChip(
+                                selected = range == days,
+                                onClick = {
+                                    range = days
+                                    DrawPreferences.setComingUpRange(context, days)
+                                },
+                                label = { Text(plural(R.plurals.n_days, days, days)) }
+                            )
+                        }
+                    }
                 }
             }
 

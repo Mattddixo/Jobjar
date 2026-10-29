@@ -76,16 +76,13 @@ class JobRepository(
         require(job.parentId == null || parent != null) { "Parent job no longer exists" }
         require(parent?.parentId == null) { "Subtasks can't have subtasks" }
         require(parent?.recurrenceDays == null) { "A repeating job can't have subtasks" }
-        val repeats = job.parentId == null && job.recurrenceDays != null
-        val weekdays = job.repeatWeekdays?.takeIf { repeats && it and EVERY_DAY_MASK != 0 }
+        val rule = job.repeatRule()?.takeIf { job.parentId == null }
         val id = dao.insert(
-            job.copy(
+            job.withRepeatRule(rule).copy(
                 id = 0,
                 title = job.title.trim(),
                 category = canonicalCategory(job.category),
-                recurrenceDays = if (repeats) job.recurrenceDays else null,
-                repeatWeekdays = weekdays,
-                nextDueAt = if (repeats) initialNextDue(weekdays, clock(), zone()) else null,
+                nextDueAt = rule?.initialDue(clock(), zone()),
                 dependsOnSubtaskId = if (job.parentId != null) job.dependsOnSubtaskId else null
             )
         )
@@ -99,35 +96,32 @@ class JobRepository(
      *
      * - Jobs with subtasks can't repeat.
      * - Turning repeat on clears done and any booking.
-     * - Switching repeat type restarts the cycle. Changing the number of days doesn't.
+     * - Changing the kind of repeat (unit, weekdays, the date, what it counts from) restarts the
+     *   cycle. Changing just the number or the lead window doesn't.
      * - If it's booked, the calendar event gets the new title, length and notes.
      */
     suspend fun updateJob(edited: Job) = writeThenSync { sync ->
         val fresh = dao.getJob(edited.id) ?: return@writeThenSync
         val hasSubtasks = dao.getSubtasksSnapshot(fresh.id).isNotEmpty()
-        val repeats = edited.recurrenceDays != null && fresh.parentId == null && !hasSubtasks
-        val recurrenceDays = if (repeats) edited.recurrenceDays else null
-        val weekdays = edited.repeatWeekdays?.takeIf { repeats && it and EVERY_DAY_MASK != 0 }
+        val rule = edited.repeatRule()?.takeIf { fresh.parentId == null && !hasSubtasks }
+        val oldRule = fresh.repeatRule()
         val now = clock()
         val nextDueAt = when {
-            recurrenceDays == null -> null
-            weekdays != fresh.repeatWeekdays -> initialNextDue(weekdays, now, zone())
-            fresh.recurrenceDays == null -> null
+            rule == null -> null
+            oldRule == null || !rule.sameShapeAs(oldRule) -> rule.initialDue(now, zone())
             else -> fresh.nextDueAt
         }
-        var merged = fresh.copy(
+        var merged = fresh.withRepeatRule(rule).copy(
             title = edited.title.trim(),
             notes = edited.notes.trim(),
             estimatedMinutes = edited.estimatedMinutes,
             category = canonicalCategory(edited.category, fresh.id),
             priority = edited.priority,
             costCents = edited.costCents,
-            recurrenceDays = recurrenceDays,
-            repeatWeekdays = weekdays,
             nextDueAt = nextDueAt,
             dependsOnSubtaskId = if (fresh.parentId != null) edited.dependsOnSubtaskId?.takeIf { it != fresh.id } else null
         )
-        if (recurrenceDays != null) {
+        if (rule != null) {
             merged = merged.copy(isDone = false)
             if (merged.scheduledDate != null) {
                 removeUpcomingEvent(fresh, sync)
@@ -215,7 +209,7 @@ class JobRepository(
         val now = clock()
         when {
             job.recurrenceDays != null ->
-                if (job.isPending(now)) cycleRepeatingJob(job, now) else dao.setNextDueAt(job.id, null)
+                if (job.isPending(now, zone())) cycleRepeatingJob(job, now) else dao.setNextDueAt(job.id, null)
             job.isDone -> {
                 dao.markNotDone(job.id)
                 if (job.parentId != null) {
@@ -234,6 +228,17 @@ class JobRepository(
                 }
             }
         }
+        before
+    }
+
+    /**
+     * Finishes a repeating job's current cycle even if it isn't due yet (ticking it on Coming up).
+     * Null if it's gone or doesn't repeat.
+     */
+    suspend fun completeCycle(jobId: Long): UndoSnapshot? = transactions.run {
+        val job = dao.getJob(jobId)?.takeIf { it.recurrenceDays != null } ?: return@run null
+        val before = UndoSnapshot(familyOf(job))
+        cycleRepeatingJob(job, clock())
         before
     }
 
@@ -309,7 +314,7 @@ class JobRepository(
 
     /** Next cycle: bump the count, set the next due date, clear in-progress and the checklist ticks. */
     private suspend fun cycleRepeatingJob(job: Job, now: Long) {
-        val nextDue = nextDueAfterCompletion(job.recurrenceDays!!, job.repeatWeekdays, now, zone())
+        val nextDue = job.repeatRule()!!.nextDue(job.nextDueAt, now, zone())
         dao.cycleRepeating(job.id, completedAt = now, nextDueAt = nextDue)
         if (job.checklist.any { it.checked }) {
             dao.setChecklist(job.id, job.checklist.map { it.copy(checked = false) })
@@ -428,7 +433,7 @@ class JobRepository(
         val subtasksById = subtasksByParent.values.flatten().associateBy { it.id }
 
         val candidates = all.filter { job ->
-            job.isAvailableToDraw(now) &&
+            job.isAvailableToDraw(now, zone()) &&
                 job.id !in excludeIds &&
                 (categories.isEmpty() || job.category in categories) &&
                 (job.parentId == null || job.isUnblocked(subtasksById)) &&
@@ -441,7 +446,8 @@ class JobRepository(
         val weighByFit = favourFill && !longOnly
         val picked = pickWeighted(candidates, random) { job ->
             val fit = if (weighByFit) drawWeight(minutesNeeded(job, subtasksByParent), maxMinutes, picksLeft) else 1.0
-            fit * priorityWeight(job.priority)
+            // Overdue repeating jobs count as high priority, whatever they're set to.
+            fit * priorityWeight(if (job.isOverdue(now, zone())) Priority.HIGH else job.priority)
         } ?: return null
         dao.incrementDrawCount(picked.id)
         // A parent whose subtasks ran over has nothing left; it mustn't give time back to a batch.

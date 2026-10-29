@@ -48,6 +48,11 @@ enum JobExport {
         var parentId: Int64?
         var recurrenceDays: Int?
         var repeatWeekdays: Int?
+        var repeatUnit: String?
+        var repeatAnchor: String?
+        var repeatMonthDay: Int?
+        var repeatMonth: Int?
+        var leadDays: Int?
         var nextDueAt: Int64?
         var completionCount: Int?
         var dependsOnSubtaskId: Int64?
@@ -81,6 +86,11 @@ enum JobExport {
                 parentId: job.parentId.flatMap { numbers[$0] },
                 recurrenceDays: job.recurrenceDays,
                 repeatWeekdays: job.repeatWeekdays,
+                repeatUnit: job.repeatUnit.rawValue,
+                repeatAnchor: job.repeatAnchor.rawValue,
+                repeatMonthDay: job.repeatMonthDay,
+                repeatMonth: job.repeatMonth,
+                leadDays: job.leadDays,
                 nextDueAt: job.nextDueAt.map(millis),
                 completionCount: job.completionCount,
                 dependsOnSubtaskId: job.dependsOnSubtaskId.flatMap { numbers[$0] },
@@ -121,7 +131,14 @@ enum JobExport {
             let validDependency = parentNumber != nil && dependency != nil && dependency!.id != entry.id &&
                 validParent(dependency!) == parentNumber
             let repeats = parentNumber == nil && (entry.recurrenceDays ?? 0) > 0
-            let weekdays = entry.repeatWeekdays.flatMap { $0 & everyDayMask != 0 ? $0 : nil }
+            // Older backups don't have the unit fields: every N days from when you finish, as before.
+            let stored = RepeatFields(
+                recurrenceDays: entry.recurrenceDays, repeatWeekdays: entry.repeatWeekdays,
+                repeatUnit: RepeatUnit(rawValue: entry.repeatUnit ?? "") ?? .day,
+                repeatAnchor: RepeatAnchor(rawValue: entry.repeatAnchor ?? "") ?? .completion,
+                repeatMonthDay: entry.repeatMonthDay, repeatMonth: entry.repeatMonth, leadDays: entry.leadDays ?? 0
+            )
+            let fields = RepeatFields(rule: repeats ? stored.rule : nil)
             let title = entry.title.trimmingCharacters(in: .whitespacesAndNewlines)
             let isDone = repeats ? false : (entry.isDone ?? false)
             return JobRecord(
@@ -137,14 +154,19 @@ enum JobExport {
                 completedAt: entry.completedAt.map(date),
                 timesDrawn: entry.timesDrawn ?? 0,
                 parentId: parentNumber.flatMap { uuids[$0] },
-                recurrenceDays: repeats ? entry.recurrenceDays : nil,
-                repeatWeekdays: repeats ? weekdays : nil,
+                recurrenceDays: fields.recurrenceDays,
+                repeatWeekdays: fields.repeatWeekdays,
                 nextDueAt: repeats ? entry.nextDueAt.map(date) : nil,
                 completionCount: entry.completionCount ?? 0,
                 dependsOnSubtaskId: validDependency ? entry.dependsOnSubtaskId.flatMap { uuids[$0] } : nil,
                 scheduledDate: repeats || isDone ? nil : entry.scheduledDate.map(date),
                 costCents: entry.costCents.flatMap { $0 >= 0 && $0 <= Int64(Int32.max) * 100 ? Int($0) : nil },
-                checklist: cleanChecklist(entry.checklist ?? [])
+                checklist: cleanChecklist(entry.checklist ?? []),
+                repeatUnit: fields.repeatUnit,
+                repeatAnchor: fields.repeatAnchor,
+                repeatMonthDay: fields.repeatMonthDay,
+                repeatMonth: fields.repeatMonth,
+                leadDays: fields.leadDays
             )
         }
         return .success(records)

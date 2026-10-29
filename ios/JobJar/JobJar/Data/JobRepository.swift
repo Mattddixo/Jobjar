@@ -12,6 +12,35 @@ struct JobEdit {
     var repeatWeekdays: Int?
     var dependsOnSubtaskId: UUID?
     var costCents: Int? = nil
+    var repeatUnit: RepeatUnit = .day
+    var repeatAnchor: RepeatAnchor = .completion
+    var repeatMonthDay: Int? = nil
+    var repeatMonth: Int? = nil
+    var leadDays: Int = 0
+
+    var repeatFields: RepeatFields {
+        get {
+            RepeatFields(
+                recurrenceDays: recurrenceDays, repeatWeekdays: repeatWeekdays, repeatUnit: repeatUnit,
+                repeatAnchor: repeatAnchor, repeatMonthDay: repeatMonthDay, repeatMonth: repeatMonth, leadDays: leadDays
+            )
+        }
+        set {
+            recurrenceDays = newValue.recurrenceDays
+            repeatWeekdays = newValue.repeatWeekdays
+            repeatUnit = newValue.repeatUnit
+            repeatAnchor = newValue.repeatAnchor
+            repeatMonthDay = newValue.repeatMonthDay
+            repeatMonth = newValue.repeatMonth
+            leadDays = newValue.leadDays
+        }
+    }
+
+    /// Nil = doesn't repeat.
+    var rule: RepeatRule? {
+        get { repeatFields.rule }
+        set { repeatFields = RepeatFields(rule: newValue) }
+    }
 }
 
 /// Plain copy of a job, for undo and import.
@@ -37,6 +66,11 @@ struct JobRecord: Equatable {
     var calendarEventId: String?
     var costCents: Int?
     var checklist: [ChecklistItem] = []
+    var repeatUnit: RepeatUnit = .day
+    var repeatAnchor: RepeatAnchor = .completion
+    var repeatMonthDay: Int?
+    var repeatMonth: Int?
+    var leadDays: Int = 0
 
     init(
         id: UUID, title: String, notes: String = "", estimatedMinutes: Int, category: String = "",
@@ -44,7 +78,8 @@ struct JobRecord: Equatable {
         completedAt: Date? = nil, timesDrawn: Int = 0, parentId: UUID? = nil, recurrenceDays: Int? = nil,
         repeatWeekdays: Int? = nil, nextDueAt: Date? = nil, completionCount: Int = 0,
         dependsOnSubtaskId: UUID? = nil, scheduledDate: Date? = nil, calendarEventId: String? = nil,
-        costCents: Int? = nil, checklist: [ChecklistItem] = []
+        costCents: Int? = nil, checklist: [ChecklistItem] = [], repeatUnit: RepeatUnit = .day,
+        repeatAnchor: RepeatAnchor = .completion, repeatMonthDay: Int? = nil, repeatMonth: Int? = nil, leadDays: Int = 0
     ) {
         self.id = id
         self.title = title
@@ -67,6 +102,11 @@ struct JobRecord: Equatable {
         self.calendarEventId = calendarEventId
         self.costCents = costCents
         self.checklist = checklist
+        self.repeatUnit = repeatUnit
+        self.repeatAnchor = repeatAnchor
+        self.repeatMonthDay = repeatMonthDay
+        self.repeatMonth = repeatMonth
+        self.leadDays = leadDays
     }
 
     init(_ job: Job) {
@@ -77,7 +117,9 @@ struct JobRecord: Equatable {
             parentId: job.parentId, recurrenceDays: job.recurrenceDays, repeatWeekdays: job.repeatWeekdays,
             nextDueAt: job.nextDueAt, completionCount: job.completionCount,
             dependsOnSubtaskId: job.dependsOnSubtaskId, scheduledDate: job.scheduledDate,
-            calendarEventId: job.calendarEventId, costCents: job.costCents, checklist: job.checklist
+            calendarEventId: job.calendarEventId, costCents: job.costCents, checklist: job.checklist,
+            repeatUnit: job.repeatUnit, repeatAnchor: job.repeatAnchor, repeatMonthDay: job.repeatMonthDay,
+            repeatMonth: job.repeatMonth, leadDays: job.leadDays
         )
     }
 
@@ -102,6 +144,18 @@ struct JobRecord: Equatable {
         job.calendarEventId = calendarEventId
         job.costCents = costCents
         job.checklist = checklist
+        job.repeatUnit = repeatUnit
+        job.repeatAnchor = repeatAnchor
+        job.repeatMonthDay = repeatMonthDay
+        job.repeatMonth = repeatMonth
+        job.leadDays = leadDays
+    }
+
+    var repeatFields: RepeatFields {
+        RepeatFields(
+            recurrenceDays: recurrenceDays, repeatWeekdays: repeatWeekdays, repeatUnit: repeatUnit,
+            repeatAnchor: repeatAnchor, repeatMonthDay: repeatMonthDay, repeatMonth: repeatMonth, leadDays: leadDays
+        )
     }
 
     func makeJob() -> Job {
@@ -148,11 +202,6 @@ struct JobRepository {
         return existing.first { $0.caseInsensitiveCompare(trimmed) == .orderedSame } ?? trimmed
     }
 
-    private func validWeekdays(_ mask: Int?) -> Int? {
-        guard let mask, mask & everyDayMask != 0 else { return nil }
-        return mask
-    }
-
     private func end(of job: Job, startingAt start: Date) -> Date {
         start.addingTimeInterval(Double(job.estimatedMinutes) * 60)
     }
@@ -174,8 +223,7 @@ struct JobRepository {
                   parent.parentId == nil,
                   parent.recurrenceDays == nil else { return nil }
         }
-        let repeats = parentId == nil && edit.recurrenceDays != nil
-        let weekdays = repeats ? validWeekdays(edit.repeatWeekdays) : nil
+        let rule = parentId == nil ? edit.rule : nil
         let job = Job(
             title: edit.title.trimmingCharacters(in: .whitespacesAndNewlines),
             notes: edit.notes.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -184,12 +232,11 @@ struct JobRepository {
             priority: edit.priority,
             createdAt: now(),
             parentId: parentId,
-            recurrenceDays: repeats ? edit.recurrenceDays : nil,
-            repeatWeekdays: weekdays,
-            nextDueAt: repeats ? initialNextDue(repeatWeekdays: weekdays, now: now()) : nil,
+            nextDueAt: rule?.initialDue(now: now()),
             dependsOnSubtaskId: parentId != nil ? edit.dependsOnSubtaskId : nil,
             costCents: edit.costCents.map { max($0, 0) }
         )
+        job.repeatFields = RepeatFields(rule: rule)
         modelContext.insert(job)
         if let parentId {
             growParentToFitSubtasks(parentId: parentId, allJobs: allJobs + [job])
@@ -202,27 +249,27 @@ struct JobRepository {
     ///
     /// - Jobs with subtasks can't repeat.
     /// - Turning repeat on clears done and any booking.
-    /// - Switching repeat type restarts the cycle. Changing the number of days doesn't.
+    /// - Changing the kind of repeat (unit, weekdays, the date, what it counts from) restarts the
+    ///   cycle. Changing just the number or the lead window doesn't.
     /// - If it's booked, the calendar event gets the new title, length and notes.
     func updateJob(_ job: Job, with edit: JobEdit, allJobs: [Job]) {
         let before = JobRecord(job)
         let hasSubtasks = allJobs.contains { $0.parentId == job.id }
-        let repeats = edit.recurrenceDays != nil && job.parentId == nil && !hasSubtasks
-        let newDays = repeats ? edit.recurrenceDays : nil
-        let newWeekdays = repeats ? validWeekdays(edit.repeatWeekdays) : nil
+        let rule = job.parentId == nil && !hasSubtasks ? edit.rule : nil
+        let oldRule = job.repeatRule
 
         let nextDue: Date?
-        if newDays == nil {
-            nextDue = nil
-        } else if newWeekdays != job.repeatWeekdays {
-            nextDue = initialNextDue(repeatWeekdays: newWeekdays, now: now())
-        } else if job.recurrenceDays == nil {
-            nextDue = nil
+        if let rule {
+            if let oldRule, rule.sameShape(as: oldRule) {
+                nextDue = job.nextDueAt
+            } else {
+                nextDue = rule.initialDue(now: now())
+            }
         } else {
-            nextDue = job.nextDueAt
+            nextDue = nil
         }
 
-        if newDays != nil {
+        if rule != nil {
             job.isDone = false
             clearSchedule(job)
         }
@@ -232,8 +279,7 @@ struct JobRepository {
         job.category = canonicalCategory(edit.category, excluding: job.id, allJobs: allJobs)
         job.priority = edit.priority
         job.costCents = edit.costCents.map { max($0, 0) }
-        job.recurrenceDays = newDays
-        job.repeatWeekdays = newWeekdays
+        job.repeatFields = RepeatFields(rule: rule)
         job.nextDueAt = nextDue
         job.dependsOnSubtaskId = job.parentId != nil && edit.dependsOnSubtaskId != job.id ? edit.dependsOnSubtaskId : nil
         if let parentId = job.parentId {
@@ -308,16 +354,9 @@ struct JobRepository {
         let snapshot = UndoSnapshot(records: family.map(JobRecord.init))
         let now = now()
 
-        if let days = job.recurrenceDays {
+        if job.recurrenceDays != nil {
             if job.isPending(now: now) {
-                job.completedAt = now
-                job.nextDueAt = nextDueAfterCompletion(recurrenceDays: days, repeatWeekdays: job.repeatWeekdays, completedAt: now)
-                job.completionCount += 1
-                job.isInProgress = false
-                // Fresh ticks for next time.
-                if job.checklist.contains(where: \.checked) {
-                    job.checklist = job.checklist.map { ChecklistItem(text: $0.text, checked: false) }
-                }
+                cycle(job, now: now)
             } else {
                 job.nextDueAt = nil
             }
@@ -345,6 +384,29 @@ struct JobRepository {
         }
         save()
         return snapshot
+    }
+
+    /// Finishes a repeating job's current cycle even if it isn't due yet (ticking it on Coming
+    /// up). Nil if it doesn't repeat.
+    @discardableResult
+    func completeCycle(_ job: Job) -> UndoSnapshot? {
+        guard job.recurrenceDays != nil else { return nil }
+        let snapshot = UndoSnapshot(records: [JobRecord(job)])
+        cycle(job, now: now())
+        save()
+        return snapshot
+    }
+
+    /// Next cycle: bump the count, set the next due date, clear in-progress and the checklist ticks.
+    private func cycle(_ job: Job, now: Date) {
+        guard let rule = job.repeatRule else { return }
+        job.nextDueAt = rule.nextDue(previousDue: job.nextDueAt, completedAt: now)
+        job.completedAt = now
+        job.completionCount += 1
+        job.isInProgress = false
+        if job.checklist.contains(where: \.checked) {
+            job.checklist = job.checklist.map { ChecklistItem(text: $0.text, checked: false) }
+        }
     }
 
     private func markDone(_ job: Job, at time: Date) {
@@ -545,7 +607,8 @@ struct JobRepository {
             let fit = weighByFit
                 ? drawWeight(neededMinutes: minutesNeeded(job: job, subtasksByParent: subtasksByParent), remainingMinutes: maxMinutes, picksLeft: picksLeft)
                 : 1
-            return fit * priorityWeight(job.priority)
+            // Overdue repeating jobs count as high priority, whatever they're set to.
+            return fit * priorityWeight(job.isOverdue(now: now) ? .high : job.priority)
         }
         guard let picked else { return nil }
         picked.timesDrawn += 1
