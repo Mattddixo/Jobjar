@@ -210,7 +210,8 @@ fun DrawScreen(
                             stringResource(R.string.draw_no_match_short)
                         }
                     )
-                    else -> EmptyStateText(stringResource(R.string.draw_empty_prompt))
+                    // Nothing drawn yet: the picker above says it all.
+                    else -> Unit
                 }
             }
         }
