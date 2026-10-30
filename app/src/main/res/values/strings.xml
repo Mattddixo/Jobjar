@@ -140,7 +140,6 @@
     <string name="draw_category_n_selected">%1$d categories</string>
     <string name="draw_no_match_long">Nothing takes %1$s or more right now.</string>
     <string name="draw_no_match_short">Nothing fits. Try more time or a different category.</string>
-    <string name="draw_empty_prompt">How much time have you got? Pick it above and draw.</string>
     <string name="draw_redraw">Draw again</string>
     <string name="draw_close_jar">Never mind</string>
     <string name="draw_subtasks_progress">%1$d of %2$d subtasks completed · %3$s left</string>

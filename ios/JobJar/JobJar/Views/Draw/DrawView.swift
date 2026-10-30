@@ -72,8 +72,6 @@ struct DrawView: View {
                             ? "Nothing takes \(formatMinutes(longJobMinutes)) or more right now."
                             : "Nothing fits. Try more time or a different category."
                     )
-                } else {
-                    EmptyStateText("How much time have you got? Pick it above and draw.")
                 }
             }
             .padding(16)
