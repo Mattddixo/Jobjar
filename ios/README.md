@@ -34,9 +34,13 @@ JobJar/
 ├── Data/JobRepository.swift              All the job rules, undo
 ├── Data/CalendarGateway.swift            Writes scheduled jobs to the calendar (EventKit)
 ├── Data/JobExport.swift                  Backup file (same as Android)
+├── Data/Reminders.swift, AutoBackup.swift Notifications, weekly backups
+├── Data/WidgetSync.swift                 Writes what the widgets show
+├── Shared/WidgetSnapshot.swift           That data, shared with the widget extension
 ├── Util/                                 Duration, repeat and date formatting
 ├── Views/                                Jar, Jobs, Job, Add/edit, Stats, Settings, shared bits
 └── Assets.xcassets                       Icon, accent colour, drawn-card colour
+JobJarWidgets/                            Home screen widgets (WidgetKit): Draw a job, Coming up
 JobJarTests/                              Repository and backup tests (in-memory store, fake calendar)
 ```
 
@@ -46,7 +50,14 @@ Views read with `@Query`; anything that changes data goes through `JobRepository
 
 Same features: the jar (time, how many, several categories), starting jobs, scheduling them into
 the calendar, subtasks with dependencies, repeating jobs (every N days or set weekdays), search
-and filters, undo, stats, light/dark/auto, export/import.
+and filters, undo, stats and history, reminders, weekly backups, widgets, light/dark/auto,
+export/import.
+
+Widgets: the app writes a small file into the `group.com.mattdixon.jobjar` app group whenever it
+opens or closes, and the widgets read it. Draw a job opens the app (`jobjar://draw`) rather than
+drawing on the home screen. If the app group isn't available, which can happen when sideloading
+with a free Apple ID, Coming up shows "Open Job Jar to see what's due" instead of the list; Draw a
+job still works.
 
 Calendar events are tagged with a `jobjar://job/<id>` URL and the app only ever edits or deletes
 events carrying its own tag. Event ids aren't put in backups, since they only mean something on

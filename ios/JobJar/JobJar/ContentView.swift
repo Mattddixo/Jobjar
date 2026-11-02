@@ -58,9 +58,11 @@ struct ContentView: View {
                 repository.syncCalendar()
                 AutoBackup.runIfDue(modelContext: modelContext)
             }
-            // Reminders are scheduled ahead, so bring them up to date whenever we come and go.
+            // Reminders are scheduled ahead and the widgets show a copy, so bring both up to date
+            // whenever we come and go.
             if phase == .active || phase == .background {
                 ReminderScheduler.reschedule(jobs: (try? modelContext.fetch(FetchDescriptor<Job>())) ?? [])
+                WidgetSync.update(modelContext: modelContext)
             }
         }
     }
