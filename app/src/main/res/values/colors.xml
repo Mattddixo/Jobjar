@@ -2,4 +2,14 @@
 <resources>
     <!-- Behind the start-up screen and the app until it draws. Same as the app's page colour. -->
     <color name="window_background">#F6F7F7</color>
+
+    <!-- Home screen widgets -->
+    <color name="widget_background">#FFFFFF</color>
+    <color name="widget_text">#191D1C</color>
+    <color name="widget_text_secondary">#5B6664</color>
+    <color name="widget_accent">#1B5E57</color>
+    <color name="widget_on_accent">#FFFFFF</color>
+    <color name="widget_overdue">#B3261E</color>
+    <color name="widget_honey">#FCF1DE</color>
+    <color name="widget_on_honey">#3B2600</color>
 </resources>

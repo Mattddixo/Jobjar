@@ -33,7 +33,9 @@ final class UndoCenter {
         if !wroteEvent { notice("Booked, but it couldn't be added to your calendar.") }
     }
 
+    /// Every way of finishing something comes through here, so it's also where the tick buzzes.
     func offerCompleted(_ title: String, _ snapshot: UndoSnapshot) {
+        Haptics.done()
         offer("Completed: \(title)", snapshot)
     }
 

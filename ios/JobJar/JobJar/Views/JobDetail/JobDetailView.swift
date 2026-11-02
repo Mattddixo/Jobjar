@@ -117,6 +117,7 @@ struct JobDetailView: View {
                     Text(formatDueStatus(job) + suffix)
                         .font(.footnote)
                         .foregroundStyle(job.isOverdue() ? AnyShapeStyle(Color.red) : AnyShapeStyle(.secondary))
+                    RecentHistoryLine(jobId: job.id)
                 }
 
                 if let scheduled = job.scheduledDate {

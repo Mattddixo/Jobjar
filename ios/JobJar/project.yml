@@ -8,18 +8,22 @@ settings:
   base:
     SWIFT_VERSION: "5.0"
     IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+    # Shared by the app and its widgets, which must match.
+    MARKETING_VERSION: "1.3"
+    CURRENT_PROJECT_VERSION: "4"
 targets:
   JobJar:
     type: application
     platform: iOS
     sources:
       - path: JobJar
+    dependencies:
+      - target: JobJarWidgets
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mattdixon.jobjar
         PRODUCT_NAME: JobJar
-        MARKETING_VERSION: "1.2"
-        CURRENT_PROJECT_VERSION: "3"
+        CODE_SIGN_ENTITLEMENTS: JobJar/JobJar.entitlements
         TARGETED_DEVICE_FAMILY: "1,2"
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: Job Jar
@@ -31,6 +35,28 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         ENABLE_PREVIEWS: YES
+  # Home screen widgets: Draw a job and Coming up.
+  JobJarWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: JobJarWidgets
+      - path: JobJar/Shared
+    info:
+      path: JobJarWidgets-Info.plist
+      properties:
+        CFBundleDisplayName: Job Jar
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mattdixon.jobjar.widgets
+        PRODUCT_NAME: JobJarWidgets
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGN_ENTITLEMENTS: JobJarWidgets/JobJarWidgets.entitlements
+        SKIP_INSTALL: YES
   JobJarTests:
     type: bundle.unit-test
     platform: iOS

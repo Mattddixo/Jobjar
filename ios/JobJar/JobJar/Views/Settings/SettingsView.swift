@@ -28,6 +28,7 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Query private var allJobs: [Job]
+    @Query private var history: [Completion]
     @AppStorage("themeMode") private var themeMode = ThemeMode.system.rawValue
     @AppStorage(favourFillKey) private var favourFill = true
     @AppStorage(showComingUpKey) private var showComingUp = false
@@ -36,8 +37,10 @@ struct SettingsView: View {
     @State private var exportDocument: JobExportDocument? = nil
     @State private var showExporter = false
     @State private var showImporter = false
-    @State private var pendingImport: [JobRecord]? = nil
+    @State private var pendingImport: JobExport.Backup? = nil
     @State private var message: String? = nil
+    @AppStorage(AutoBackup.enabledKey) private var autoBackup = true
+    @AppStorage(AutoBackup.lastKey) private var lastBackupSeconds = 0.0
 
     private var repository: JobRepository { JobRepository(modelContext: modelContext) }
 
@@ -77,11 +80,13 @@ struct SettingsView: View {
                 Text("A slim line under the jar for repeating jobs that are overdue, due today or due soon.")
             }
 
+            ReminderSettingsSection()
+
             CalendarSettingsSection()
 
             Section {
                 Button {
-                    if let data = try? JobExport.encode(allJobs) {
+                    if let data = try? JobExport.encode(allJobs, history: history) {
                         exportDocument = JobExportDocument(data: data)
                         showExporter = true
                     } else {
@@ -95,13 +100,35 @@ struct SettingsView: View {
                 } label: {
                     Label("Import", systemImage: "square.and.arrow.down")
                 }
+                Toggle("Weekly backups", isOn: $autoBackup)
+                if autoBackup {
+                    Button {
+                        if AutoBackup.backUp(modelContext: modelContext) {
+                            message = "Backed up."
+                        } else {
+                            message = "Backup failed."
+                        }
+                    } label: {
+                        Label("Back up now", systemImage: "clock.arrow.circlepath")
+                    }
+                }
             } header: {
                 Text("Backup")
             } footer: {
-                Text(
-                    "Your jobs are only stored on this phone. Export a copy to keep somewhere safe, or to move " +
-                        "to a new phone. Backups work with the Android app too."
-                )
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(
+                        "Your jobs are stored on this phone, and in your iPhone's iCloud backup if that's on. Export a " +
+                            "copy to keep somewhere safe, or to move to a new phone. Backups work with the Android app too."
+                    )
+                    if autoBackup {
+                        Text(
+                            "Weekly backups are saved in Files › On My iPhone › Job Jar › Backups. The last 4 are kept. " +
+                                (lastBackupSeconds > 0
+                                    ? "Last backup: \(Date(timeIntervalSince1970: lastBackupSeconds).formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()))."
+                                    : "No backup yet.")
+                        )
+                    }
+                }
             }
 
             Section {
@@ -136,9 +163,9 @@ struct SettingsView: View {
                 message = "Couldn't read that file."
                 return
             }
-            switch JobExport.decode(data) {
-            case .success(let records):
-                pendingImport = records
+            switch JobExport.decodeBackup(data) {
+            case .success(let backup):
+                pendingImport = backup
             case .failure(.newerVersion):
                 message = "That backup is from a newer version. Update Job Jar and try again."
             case .failure(.notABackup):
@@ -153,14 +180,14 @@ struct SettingsView: View {
         ) {
             Button("Cancel", role: .cancel) { pendingImport = nil }
             Button("Import", role: .destructive) {
-                if let records = pendingImport {
-                    repository.replaceAll(with: records)
-                    message = "Imported \(countLabel(records.count, "job", "jobs"))."
+                if let backup = pendingImport {
+                    repository.replaceAll(with: backup.jobs, history: backup.history)
+                    message = "Imported \(countLabel(backup.jobs.count, "job", "jobs"))."
                 }
                 pendingImport = nil
             }
         } message: {
-            let incoming = pendingImport?.count ?? 0
+            let incoming = pendingImport?.jobs.count ?? 0
             Text(
                 "The backup has \(countLabel(incoming, "job", "jobs")). It'll replace the " +
                     "\(countLabel(allJobs.count, "job", "jobs")) you have now."

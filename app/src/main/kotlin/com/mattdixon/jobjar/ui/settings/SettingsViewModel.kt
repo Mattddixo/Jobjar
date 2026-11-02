@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.mattdixon.jobjar.data.Completion
 import com.mattdixon.jobjar.data.Job
 import com.mattdixon.jobjar.data.JobExport
 import com.mattdixon.jobjar.data.JobRepository
@@ -23,7 +24,7 @@ sealed interface DataMessage {
 }
 
 /** Parsed and waiting for the user to confirm. */
-data class PendingImport(val jobs: List<Job>, val currentCount: Int)
+data class PendingImport(val jobs: List<Job>, val currentCount: Int, val history: List<Completion> = emptyList())
 
 class SettingsViewModel(private val repository: JobRepository) : ViewModel() {
     private val _message = MutableStateFlow<DataMessage?>(null)
@@ -38,15 +39,14 @@ class SettingsViewModel(private val repository: JobRepository) : ViewModel() {
 
     fun export(resolver: ContentResolver, uri: Uri) {
         viewModelScope.launch {
-            val jobs = repository.exportJobs()
+            val count = repository.exportJobs().size
+            val text = repository.backupText(System.currentTimeMillis())
             val ok = withContext(Dispatchers.IO) {
                 runCatching {
-                    resolver.openOutputStream(uri, "wt")?.bufferedWriter()?.use {
-                        it.write(JobExport.write(jobs, System.currentTimeMillis()))
-                    } != null
+                    resolver.openOutputStream(uri, "wt")?.bufferedWriter()?.use { it.write(text) } != null
                 }.getOrDefault(false)
             }
-            _message.value = if (ok) DataMessage.Exported(jobs.size) else DataMessage.ExportFailed
+            _message.value = if (ok) DataMessage.Exported(count) else DataMessage.ExportFailed
         }
     }
 
@@ -63,7 +63,7 @@ class SettingsViewModel(private val repository: JobRepository) : ViewModel() {
             when (val result = withContext(Dispatchers.Default) { JobExport.parse(text) }) {
                 is JobExport.ParseResult.Failure -> _message.value = DataMessage.ImportFailed(result.reason)
                 is JobExport.ParseResult.Success ->
-                    _pendingImport.value = PendingImport(result.jobs, repository.exportJobs().size)
+                    _pendingImport.value = PendingImport(result.jobs, repository.exportJobs().size, result.completions)
             }
         }
     }
@@ -72,7 +72,7 @@ class SettingsViewModel(private val repository: JobRepository) : ViewModel() {
         val pending = _pendingImport.value ?: return
         _pendingImport.value = null
         viewModelScope.launch {
-            repository.replaceAllJobs(pending.jobs)
+            repository.replaceAllJobs(pending.jobs, pending.history)
             _message.value = DataMessage.Imported(pending.jobs.size)
         }
     }

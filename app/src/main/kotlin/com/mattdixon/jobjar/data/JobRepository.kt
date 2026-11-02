@@ -8,7 +8,8 @@ import kotlin.random.Random
 private const val MINUTE_MILLIS = 60L * 1000
 
 /** The rows a change touched, as they were before it. Pass to [JobRepository.undo]. */
-data class UndoSnapshot(val rows: List<Job>)
+/** The rows a change touched, as they were before it, plus any history entries it added. */
+data class UndoSnapshot(val rows: List<Job>, val completionIds: List<Long> = emptyList())
 
 /**
  * All the job rules live here.
@@ -19,6 +20,7 @@ data class UndoSnapshot(val rows: List<Job>)
  */
 class JobRepository(
     private val dao: JobDao,
+    private val completions: CompletionDao,
     private val calendar: CalendarGateway,
     private val transactions: TransactionRunner,
     private val clock: () -> Long = { System.currentTimeMillis() },
@@ -33,6 +35,17 @@ class JobRepository(
     fun subtasksOf(parentId: Long): Flow<List<Job>> = dao.getSubtasks(parentId)
 
     suspend fun removeCategory(category: String) = dao.clearCategory(category)
+
+    /** History, newest first, from [from] (inclusive) to [to] (exclusive). */
+    fun completionsBetween(from: Long, to: Long): Flow<List<Completion>> = completions.between(from, to)
+
+    /** The job's last few completions, newest first. */
+    fun recentCompletions(jobId: Long, limit: Int = 5): Flow<List<Completion>> = completions.recentFor(jobId, limit)
+
+    /** Adds the job to the history. */
+    private suspend fun logCompletion(job: Job, at: Long): Long = completions.insert(
+        Completion(jobId = job.id, title = job.title, estimatedMinutes = job.estimatedMinutes, category = job.category, completedAt = at)
+    )
 
     private class CalendarSync {
         val actions = mutableListOf<suspend (CalendarGateway) -> Unit>()
@@ -176,7 +189,10 @@ class JobRepository(
 
     /** Puts the rows back and re-adds any calendar events the change removed. */
     suspend fun undo(snapshot: UndoSnapshot) {
-        transactions.run { dao.upsertAll(snapshot.rows) }
+        transactions.run {
+            dao.upsertAll(snapshot.rows)
+            if (snapshot.completionIds.isNotEmpty()) completions.deleteIds(snapshot.completionIds)
+        }
         val now = clock()
         snapshot.rows.forEach { row ->
             // Past slots were never deleted (see removeUpcomingEvent), so there's nothing to re-add.
@@ -211,11 +227,12 @@ class JobRepository(
         val job = dao.getJob(jobId) ?: return@writeThenSync null
         val before = UndoSnapshot(familyOf(job))
         val now = clock()
+        val logged = mutableListOf<Long>()
         when {
             job.recurrenceDays != null ->
-                if (job.isPending(now, zone())) cycleRepeatingJob(job, now) else dao.setNextDueAt(job.id, null)
+                if (job.isPending(now, zone())) logged += cycleRepeatingJob(job, now) else dao.setNextDueAt(job.id, null)
             job.isDone -> {
-                dao.markNotDone(job.id)
+                markNotDone(job)
                 if (job.parentId != null) {
                     reopenParentIfDone(job.parentId)
                 } else {
@@ -225,14 +242,21 @@ class JobRepository(
             else -> {
                 clearSchedule(job, sync)
                 dao.markDone(job.id, now)
+                logged += logCompletion(job, now)
                 if (job.parentId != null) {
-                    autoCompleteParentIfFinished(job.parentId, now)
+                    autoCompleteParentIfFinished(job.parentId, now)?.let { logged += it }
                 } else {
                     completeOpenSubtasks(job.id, now, sync)
                 }
             }
         }
-        before
+        before.copy(completionIds = logged)
+    }
+
+    /** Reopens a job and takes its completion back out of the history. */
+    private suspend fun markNotDone(job: Job) {
+        dao.markNotDone(job.id)
+        job.completedAt?.let { completions.deleteFor(job.id, it) }
     }
 
     /**
@@ -242,8 +266,7 @@ class JobRepository(
     suspend fun completeCycle(jobId: Long): UndoSnapshot? = transactions.run {
         val job = dao.getJob(jobId)?.takeIf { it.recurrenceDays != null } ?: return@run null
         val before = UndoSnapshot(familyOf(job))
-        cycleRepeatingJob(job, clock())
-        before
+        before.copy(completionIds = listOf(cycleRepeatingJob(job, clock())))
     }
 
     private suspend fun clearSchedule(job: Job, sync: CalendarSync) {
@@ -313,20 +336,24 @@ class JobRepository(
     private suspend fun reopenSubtasksCompletedWith(parentId: Long, completedAt: Long) {
         dao.getSubtasksSnapshot(parentId)
             .filter { it.isDone && it.completedAt == completedAt }
-            .forEach { dao.markNotDone(it.id) }
+            .forEach { markNotDone(it) }
     }
 
     /** A new cycle's first due date: from [firstDue] if one was picked, else from today. */
     private fun startingDue(rule: RepeatRule, firstDue: Long?): Long? =
         if (firstDue != null) rule.firstDueFrom(firstDue, zone()) else rule.initialDue(clock(), zone())
 
-    /** Next cycle: bump the count, set the next due date, clear in-progress and the checklist ticks. */
-    private suspend fun cycleRepeatingJob(job: Job, now: Long) {
+    /**
+     * Next cycle: bump the count, set the next due date, clear in-progress and the checklist ticks.
+     * Returns the history entry's id.
+     */
+    private suspend fun cycleRepeatingJob(job: Job, now: Long): Long {
         val nextDue = job.repeatRule(zone())!!.nextDue(job.nextDueAt, now, zone())
         dao.cycleRepeating(job.id, completedAt = now, nextDueAt = nextDue)
         if (job.checklist.any { it.checked }) {
             dao.setChecklist(job.id, job.checklist.map { it.copy(checked = false) })
         }
+        return logCompletion(job, now)
     }
 
     /** Saves the job's checklist as given (trimmed, blank lines dropped). Empty removes it. */
@@ -348,22 +375,25 @@ class JobRepository(
         UndoSnapshot(listOf(job))
     }
 
-    private suspend fun autoCompleteParentIfFinished(parentId: Long, now: Long) {
+    /** Finishing the last subtask finishes the parent too. Returns its history entry's id, if it did. */
+    private suspend fun autoCompleteParentIfFinished(parentId: Long, now: Long): Long? {
         val siblings = dao.getSubtasksSnapshot(parentId)
-        if (siblings.isEmpty() || !siblings.all { it.isDone }) return
-        val parent = dao.getJob(parentId) ?: return
-        if (parent.isDone || parent.recurrenceDays != null) return
+        if (siblings.isEmpty() || !siblings.all { it.isDone }) return null
+        val parent = dao.getJob(parentId) ?: return null
+        if (parent.isDone || parent.recurrenceDays != null) return null
 
         // +1ms past the last subtask, so the parent never shares a timestamp with one you ticked
         // yourself (see reopenSubtasksCompletedWith).
         val latestSubtask = siblings.maxOf { it.completedAt ?: 0L }
-        dao.markDone(parentId, maxOf(now, latestSubtask + 1))
+        val completedAt = maxOf(now, latestSubtask + 1)
+        dao.markDone(parentId, completedAt)
+        return logCompletion(parent, completedAt)
     }
 
     /** Reopening a subtask reopens its parent. */
     private suspend fun reopenParentIfDone(parentId: Long) {
         val parent = dao.getJob(parentId) ?: return
-        if (parent.isDone) dao.markNotDone(parentId)
+        if (parent.isDone) markNotDone(parent)
     }
 
     /** Start/stop. Starting a booked job unbooks it. */
@@ -471,17 +501,24 @@ class JobRepository(
 
     suspend fun exportJobs(): List<Job> = dao.getAllJobs()
 
+    suspend fun exportCompletions(): List<Completion> = completions.getAll()
+
+    /** Everything, as a backup file's text (Settings > Export and the weekly backup). */
+    suspend fun backupText(exportedAt: Long): String = JobExport.write(exportJobs(), exportedAt, exportCompletions())
+
     /**
      * Import: replaces everything, keeping the ids so links survive. Then the calendar is brought
      * in line: events for jobs that are gone (or no longer booked) are deleted, and upcoming
      * bookings that don't have an event on this phone get one. Calendar ids in the file are only
-     * ever used after the ownership check.
+     * ever used after the ownership check. The history is replaced by the file's.
      */
-    suspend fun replaceAllJobs(jobs: List<Job>) {
+    suspend fun replaceAllJobs(jobs: List<Job>, history: List<Completion> = emptyList()) {
         val old = transactions.run {
             val previous = dao.getAllJobs()
             dao.deleteAll()
             dao.upsertAll(jobs)
+            completions.deleteAll()
+            completions.insertAll(history.map { it.copy(id = 0) })
             previous
         }
         val keptEvents = jobs.mapNotNullTo(mutableSetOf()) { job ->

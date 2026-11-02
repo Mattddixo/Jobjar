@@ -3,11 +3,11 @@ package com.mattdixon.jobjar.ui.joblist
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -55,11 +55,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -77,6 +77,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -89,23 +90,24 @@ import com.mattdixon.jobjar.data.isBooked
 import com.mattdixon.jobjar.data.isMissed
 import com.mattdixon.jobjar.data.isOverdue
 import com.mattdixon.jobjar.data.isPending
-import com.mattdixon.jobjar.ui.components.CategoryBadge
-import com.mattdixon.jobjar.ui.components.InfoBadge
-import com.mattdixon.jobjar.ui.components.SchedulePickerDialog
-import com.mattdixon.jobjar.ui.components.rememberCalendarResultNotice
-import com.mattdixon.jobjar.ui.components.TimeBucketBadge
-import com.mattdixon.jobjar.ui.components.TodayDateButton
-import com.mattdixon.jobjar.ui.components.dueStatusLabel
-import com.mattdixon.jobjar.ui.components.plural
-import com.mattdixon.jobjar.ui.components.recurrenceLabel
 import com.mattdixon.jobjar.ui.LocalUndoController
 import com.mattdixon.jobjar.ui.UndoEvent
 import com.mattdixon.jobjar.ui.UndoKind
 import com.mattdixon.jobjar.ui.UndoSnackbarEffect
+import com.mattdixon.jobjar.ui.components.CategoryBadge
+import com.mattdixon.jobjar.ui.components.InfoBadge
+import com.mattdixon.jobjar.ui.components.SchedulePickerDialog
+import com.mattdixon.jobjar.ui.components.TimeBucketBadge
+import com.mattdixon.jobjar.ui.components.TodayDateButton
+import com.mattdixon.jobjar.ui.components.doneHaptic
+import com.mattdixon.jobjar.ui.components.dueStatusLabel
+import com.mattdixon.jobjar.ui.components.plural
+import com.mattdixon.jobjar.ui.components.recurrenceLabel
+import com.mattdixon.jobjar.ui.components.rememberCalendarResultNotice
 import com.mattdixon.jobjar.ui.theme.Spacing
-import com.mattdixon.jobjar.ui.theme.appTopBarColors
 import com.mattdixon.jobjar.ui.theme.appCardBorder
 import com.mattdixon.jobjar.ui.theme.appCardColors
+import com.mattdixon.jobjar.ui.theme.appTopBarColors
 import com.mattdixon.jobjar.util.formatCost
 import com.mattdixon.jobjar.util.formatScheduledDateTime
 
@@ -133,8 +135,12 @@ fun JobListScreen(
     val undo = LocalUndoController.current
     val snackbarHostState = remember { SnackbarHostState() }
     UndoSnackbarEffect(snackbarHostState, isJobList = true)
+    val view = LocalView.current
     val onCompleted: (JobListItem) -> (UndoSnapshot) -> Unit = { item ->
-        { snapshot -> undo.offer(UndoEvent(UndoKind.COMPLETED, item.job.title, snapshot)) }
+        { snapshot ->
+            view.doneHaptic()
+            undo.offer(UndoEvent(UndoKind.COMPLETED, item.job.title, snapshot))
+        }
     }
 
     Scaffold(

@@ -196,6 +196,12 @@ fun SettingsScreen(
 
             HorizontalDivider()
 
+            Section(title = stringResource(R.string.settings_reminders)) {
+                ReminderSettings()
+            }
+
+            HorizontalDivider()
+
             Section(title = stringResource(R.string.settings_calendar)) {
                 CalendarSettings()
             }
@@ -222,6 +228,7 @@ fun SettingsScreen(
                     Icon(Icons.Filled.FileDownload, contentDescription = null)
                     Text(stringResource(R.string.settings_import), modifier = Modifier.padding(start = Spacing.sm))
                 }
+                AutoBackupSettings(repository)
             }
 
             HorizontalDivider()

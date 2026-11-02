@@ -8,6 +8,8 @@ private let jarFillCap = 15
 struct JarSummaryCard: View {
     let available: Int
     let inProgress: Int
+    /// Goes up with each draw; the jar gives a quick shake, like pulling a slip out.
+    var drawCount = 0
 
     private var slips: Int {
         guard available > 0 else { return 0 }
@@ -18,6 +20,17 @@ struct JarSummaryCard: View {
     var body: some View {
         HStack(spacing: 18) {
             JarGlyph(slips: slips)
+                .keyframeAnimator(initialValue: 0.0, trigger: drawCount) { content, angle in
+                    content.rotationEffect(.degrees(angle), anchor: .bottom)
+                } keyframes: { _ in
+                    KeyframeTrack {
+                        CubicKeyframe(-9, duration: 0.06)
+                        CubicKeyframe(8, duration: 0.08)
+                        CubicKeyframe(-5, duration: 0.08)
+                        CubicKeyframe(3, duration: 0.08)
+                        CubicKeyframe(0, duration: 0.12)
+                    }
+                }
                 .frame(width: 56, height: 68)
 
             VStack(alignment: .leading, spacing: 2) {

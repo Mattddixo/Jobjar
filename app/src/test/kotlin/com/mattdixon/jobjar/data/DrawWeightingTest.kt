@@ -47,7 +47,7 @@ class DrawWeightingTest {
     }
 
     private fun repoWith(dao: FakeJobDao, seed: Int) =
-        JobRepository(dao, FakeCalendar(), DirectTransactions, random = Random(seed))
+        JobRepository(dao, FakeCompletionDao(), FakeCalendar(), DirectTransactions, random = Random(seed))
 
     @Test
     fun oneJobInALongWindowLeansTowardJobsThatUseTheTime() = runTest {

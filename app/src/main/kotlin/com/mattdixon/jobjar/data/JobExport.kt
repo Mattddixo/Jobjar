@@ -9,26 +9,32 @@ import org.json.JSONObject
  * still read old files. The iOS app reads and writes the same format.
  *
  * ```json
- * { "format": "job-jar", "version": 1, "exportedAt": 1761000000000, "jobs": [ { "id": 1, ... } ] }
+ * { "format": "job-jar", "version": 1, "exportedAt": 1761000000000, "jobs": [ { "id": 1, ... } ],
+ *   "completions": [ { "jobId": 1, "title": "...", "completedAt": 1761000000000, ... } ] }
  * ```
+ *
+ * "completions" is the history; files from before it existed just don't have one.
  */
 object JobExport {
     private const val FORMAT = "job-jar"
     const val VERSION = 1
 
-    fun write(jobs: List<Job>, exportedAt: Long): String {
+    fun write(jobs: List<Job>, exportedAt: Long, completions: List<Completion> = emptyList()): String {
         val array = JSONArray()
         jobs.sortedBy { it.id }.forEach { array.put(it.toJson()) }
+        val history = JSONArray()
+        completions.sortedBy { it.completedAt }.forEach { history.put(it.toJson()) }
         return JSONObject()
             .put("format", FORMAT)
             .put("version", VERSION)
             .put("exportedAt", exportedAt)
             .put("jobs", array)
+            .put("completions", history)
             .toString(2)
     }
 
     sealed interface ParseResult {
-        data class Success(val jobs: List<Job>) : ParseResult
+        data class Success(val jobs: List<Job>, val completions: List<Completion> = emptyList()) : ParseResult
         data class Failure(val reason: Reason) : ParseResult
     }
 
@@ -55,7 +61,30 @@ object JobExport {
         if (raw.map { it.id }.toSet().size != raw.size || raw.any { it.id <= 0 }) {
             return ParseResult.Failure(Reason.CORRUPT)
         }
-        return ParseResult.Success(sanitize(raw))
+        // The history is a nice-to-have: entries that don't make sense are skipped, not fatal.
+        val history = root.optJSONArray("completions")?.let { array ->
+            (0 until array.length()).mapNotNull { array.optJSONObject(it)?.toCompletion() }
+        }.orEmpty()
+        return ParseResult.Success(sanitize(raw), history)
+    }
+
+    private fun Completion.toJson(): JSONObject = JSONObject()
+        .put("jobId", jobId)
+        .put("title", title)
+        .put("estimatedMinutes", estimatedMinutes)
+        .put("category", category)
+        .put("completedAt", completedAt)
+
+    private fun JSONObject.toCompletion(): Completion? {
+        val completedAt = optLong("completedAt", 0L).takeIf { it > 0 } ?: return null
+        val title = optString("title", "").trim().ifEmpty { return null }
+        return Completion(
+            jobId = optLong("jobId", 0L),
+            title = title,
+            estimatedMinutes = optInt("estimatedMinutes", 0).coerceAtLeast(0),
+            category = optString("category", ""),
+            completedAt = completedAt
+        )
     }
 
     private fun sanitize(jobs: List<Job>): List<Job> {

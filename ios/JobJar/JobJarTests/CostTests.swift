@@ -49,7 +49,7 @@ final class CostTests: XCTestCase {
     }
 
     func testAddingAndEditingAJobSavesItsCost() throws {
-        let container = try ModelContainer(for: Job.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+        let container = try ModelContainer(for: Job.self, Completion.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
         let repository = JobRepository(modelContext: container.mainContext, calendar: FakeCalendar())
         var edit = JobEdit(
             title: "Paint fence", notes: "", estimatedMinutes: 60, category: "", priority: .normal,
@@ -75,7 +75,7 @@ final class ChecklistTests: XCTestCase {
     private var repository: JobRepository!
 
     override func setUp() async throws {
-        container = try ModelContainer(for: Job.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+        container = try ModelContainer(for: Job.self, Completion.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
         repository = JobRepository(modelContext: container.mainContext, calendar: FakeCalendar())
     }
 

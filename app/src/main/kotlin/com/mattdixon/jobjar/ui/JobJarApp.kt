@@ -60,13 +60,24 @@ fun JobJarApp(
     onThemeModeChange: (ThemeMode) -> Unit,
     /** A job to open, e.g. from "Open in Job Jar" on a calendar event. */
     openJobId: Long? = null,
-    onOpenJobHandled: () -> Unit = {}
+    onOpenJobHandled: () -> Unit = {},
+    /** Goes up when the app is opened to draw a job. */
+    drawRequest: Int = 0
 ) {
     val navController = rememberNavController()
     LaunchedEffect(openJobId) {
         if (openJobId != null) {
             navController.navigate("job/$openJobId") { launchSingleTop = true }
             onOpenJobHandled()
+        }
+    }
+    // Opened to draw: back to the Jar tab, which draws (see DrawScreen's drawRequest).
+    LaunchedEffect(drawRequest) {
+        if (drawRequest > 0) {
+            navController.navigate(TopLevelDestination.Draw.route) {
+                popUpTo(navController.graph.findStartDestination().id)
+                launchSingleTop = true
+            }
         }
     }
     val appScope = rememberCoroutineScope()
@@ -109,6 +120,7 @@ fun JobJarApp(
                 composable(TopLevelDestination.Draw.route) {
                     DrawScreen(
                         repository = repository,
+                        drawRequest = drawRequest,
                         onOpenJob = { jobId -> navController.navigate("job/$jobId") },
                         onOpenSettings = openSettings,
                         onOpenComingUp = { navController.navigate(COMING_UP_ROUTE) { launchSingleTop = true } }

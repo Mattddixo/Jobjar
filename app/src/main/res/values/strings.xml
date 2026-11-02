@@ -312,7 +312,7 @@
     <string name="alert_hour_before">1 hour before</string>
     <string name="alert_day_before">1 day before</string>
     <string name="settings_your_data">Backup</string>
-    <string name="settings_data_explainer">Your jobs are only stored on this phone. Export a copy to keep somewhere safe, or to move to a new phone.</string>
+    <string name="settings_data_explainer">Your jobs are stored on this phone, and in your phone\'s own backup if that\'s on. Export a copy to keep somewhere safe, or to move to a new phone.</string>
     <string name="settings_export">Export</string>
     <string name="settings_import">Import</string>
     <plurals name="settings_exported">
@@ -376,4 +376,69 @@
     <string name="cd_coming_up_overdue">Something is overdue</string>
     <string name="cd_coming_up_expand">Show coming up</string>
     <string name="cd_coming_up_collapse">Hide coming up</string>
+
+    <!-- History -->
+    <string name="stats_week_this">This week</string>
+    <string name="stats_week_last">Last week</string>
+    <string name="stats_week_range">%1$s – %2$s</string>
+    <plurals name="stats_week_summary">
+        <item quantity="one">%1$d done · %2$s</item>
+        <item quantity="other">%1$d done · %2$s</item>
+    </plurals>
+    <string name="stats_week_empty_now">Nothing done yet this week.</string>
+    <string name="stats_week_empty_past">Nothing done that week.</string>
+    <string name="cd_previous_week">Previous week</string>
+    <string name="cd_next_week">Next week</string>
+    <string name="history_yesterday">Yesterday</string>
+    <string name="job_history_recent">Last done: %1$s</string>
+
+    <!-- Reminders -->
+    <string name="reminders_channel">Reminders</string>
+    <string name="reminder_due_line">%1$s · %2$s</string>
+    <plurals name="reminder_due_title">
+        <item quantity="one">%1$d repeating job coming due</item>
+        <item quantity="other">%1$d repeating jobs coming due</item>
+    </plurals>
+    <string name="reminder_nudge_title">Got a few minutes?</string>
+    <plurals name="reminder_nudge_text">
+        <item quantity="one">%1$d job in the jar. Tap to draw one.</item>
+        <item quantity="other">%1$d jobs in the jar. Tap to draw one.</item>
+    </plurals>
+    <string name="settings_reminders">Reminders</string>
+    <string name="settings_reminders_due">Repeating jobs coming due</string>
+    <string name="settings_reminders_due_explainer">When one\'s due or overdue, and when it starts showing early.</string>
+    <string name="settings_reminders_nudge">Daily nudge to draw a job</string>
+    <string name="settings_reminders_nudge_explainer">Tap it to open the app and draw.</string>
+    <string name="settings_reminders_time">Time</string>
+    <string name="settings_reminders_blocked">Notifications are off for Job Jar. Turn them on in your phone\'s settings.</string>
+
+    <!-- Weekly backups -->
+    <string name="settings_auto_backup">Weekly backups</string>
+    <string name="settings_auto_backup_explainer">Pick a folder, like Downloads or one your cloud storage syncs, and a backup is saved there every week. The last 4 are kept.</string>
+    <string name="settings_auto_backup_choose">Choose a folder</string>
+    <string name="settings_auto_backup_to">Saved weekly to %1$s. The last 4 are kept.</string>
+    <string name="settings_auto_backup_folder">your folder</string>
+    <string name="settings_auto_backup_last">Last backup: %1$s</string>
+    <string name="settings_auto_backup_never">No backup yet</string>
+    <string name="settings_auto_backup_now">Back up now</string>
+    <string name="settings_auto_backup_change">Change folder</string>
+    <string name="settings_auto_backup_off">Turn off</string>
+    <string name="settings_auto_backup_failed">Couldn\'t save to that folder. Try choosing it again.</string>
+
+    <!-- Widgets -->
+    <string name="widget_draw_name">Draw a job</string>
+    <string name="widget_coming_up_name">Coming up</string>
+    <string name="widget_draw_description">Draw a job from the home screen, using your Jar settings.</string>
+    <string name="widget_draw_prompt">Draw a job</string>
+    <string name="widget_draw_hint">Something that fits your time</string>
+    <string name="widget_draw">Draw</string>
+    <string name="widget_draw_again">Again</string>
+    <plurals name="widget_draw_count">
+        <item quantity="one">%1$d job in the jar</item>
+        <item quantity="other">%1$d jobs in the jar</item>
+    </plurals>
+    <string name="widget_draw_nothing">Nothing fits right now</string>
+    <string name="widget_draw_job_detail">%1$s · tap to open</string>
+    <string name="widget_coming_up_description">Repeating jobs that are overdue, due today or due soon.</string>
+    <string name="widget_coming_up_empty">Nothing due soon.</string>
 </resources>

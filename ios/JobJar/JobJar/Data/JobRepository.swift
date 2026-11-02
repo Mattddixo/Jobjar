@@ -176,6 +176,17 @@ struct JobRecord: Equatable {
 /// The jobs a change touched, as they were before it.
 struct UndoSnapshot: Equatable {
     let records: [JobRecord]
+    /// History entries the change added, removed again on undo.
+    var completionIds: [UUID] = []
+}
+
+/// A history entry as plain values, for import.
+struct CompletionRecord: Equatable {
+    var jobId: UUID?
+    var title: String
+    var estimatedMinutes: Int
+    var category: String = ""
+    var completedAt: Date
 }
 
 /// A drawn job and how many minutes it counts against the time budget.
@@ -200,6 +211,29 @@ struct JobRepository {
 
     private func save() {
         try? modelContext.save()
+    }
+
+    private func fetchHistory() -> [Completion] {
+        (try? modelContext.fetch(FetchDescriptor<Completion>())) ?? []
+    }
+
+    /// Adds the job to the history.
+    @discardableResult
+    private func logCompletion(_ job: Job, at time: Date) -> UUID {
+        let entry = Completion(jobId: job.id, title: job.title, estimatedMinutes: job.estimatedMinutes, category: job.category, completedAt: time)
+        modelContext.insert(entry)
+        return entry.id
+    }
+
+    /// Reopens a job and takes its completion back out of the history.
+    private func markNotDone(_ job: Job) {
+        if let completedAt = job.completedAt {
+            for entry in fetchHistory() where entry.jobId == job.id && entry.completedAt == completedAt {
+                modelContext.delete(entry)
+            }
+        }
+        job.isDone = false
+        job.completedAt = nil
     }
 
     /// Match the spelling other jobs already use ("home" -> "Home"). Ignores the job itself.
@@ -344,6 +378,12 @@ struct JobRepository {
                 restored.append(job)
             }
         }
+        if !snapshot.completionIds.isEmpty {
+            let ids = Set(snapshot.completionIds)
+            for entry in fetchHistory() where ids.contains(entry.id) {
+                modelContext.delete(entry)
+            }
+        }
         let now = now()
         for job in restored {
             // Past slots were never deleted (see removeUpcomingEvent), so there's nothing to re-add.
@@ -370,31 +410,32 @@ struct JobRepository {
         } else {
             family = [job] + allJobs.filter { $0.parentId == job.id }
         }
-        let snapshot = UndoSnapshot(records: family.map(JobRecord.init))
+        var snapshot = UndoSnapshot(records: family.map(JobRecord.init))
         let now = now()
 
         if job.recurrenceDays != nil {
             if job.isPending(now: now) {
-                cycle(job, now: now)
+                snapshot.completionIds.append(cycle(job, now: now))
             } else {
                 job.nextDueAt = nil
             }
         } else if job.isDone {
             let completedAt = job.completedAt
-            job.isDone = false
-            job.completedAt = nil
+            markNotDone(job)
             if let parentId = job.parentId {
                 reopenParentIfDone(parentId: parentId, allJobs: allJobs)
             } else if let completedAt {
                 for subtask in allJobs where subtask.parentId == job.id && subtask.isDone && subtask.completedAt == completedAt {
-                    subtask.isDone = false
-                    subtask.completedAt = nil
+                    markNotDone(subtask)
                 }
             }
         } else {
             markDone(job, at: now)
+            snapshot.completionIds.append(logCompletion(job, at: now))
             if let parentId = job.parentId {
-                autoCompleteParentIfFinished(parentId: parentId, allJobs: allJobs, now: now)
+                if let parentEntry = autoCompleteParentIfFinished(parentId: parentId, allJobs: allJobs, now: now) {
+                    snapshot.completionIds.append(parentEntry)
+                }
             } else {
                 for subtask in allJobs where subtask.parentId == job.id && !subtask.isDone {
                     markDone(subtask, at: now)
@@ -410,22 +451,25 @@ struct JobRepository {
     @discardableResult
     func completeCycle(_ job: Job) -> UndoSnapshot? {
         guard job.recurrenceDays != nil else { return nil }
-        let snapshot = UndoSnapshot(records: [JobRecord(job)])
-        cycle(job, now: now())
+        var snapshot = UndoSnapshot(records: [JobRecord(job)])
+        snapshot.completionIds.append(cycle(job, now: now()))
         save()
         return snapshot
     }
 
-    /// Next cycle: bump the count, set the next due date, clear in-progress and the checklist ticks.
-    private func cycle(_ job: Job, now: Date) {
-        guard let rule = job.repeatRule else { return }
-        job.nextDueAt = rule.nextDue(previousDue: job.nextDueAt, completedAt: now)
+    /// Next cycle: bump the count, set the next due date, clear in-progress and the checklist
+    /// ticks. Returns the history entry's id.
+    private func cycle(_ job: Job, now: Date) -> UUID {
+        if let rule = job.repeatRule {
+            job.nextDueAt = rule.nextDue(previousDue: job.nextDueAt, completedAt: now)
+        }
         job.completedAt = now
         job.completionCount += 1
         job.isInProgress = false
         if job.checklist.contains(where: \.checked) {
             job.checklist = job.checklist.map { ChecklistItem(text: $0.text, checked: false) }
         }
+        return logCompletion(job, at: now)
     }
 
     private func markDone(_ job: Job, at time: Date) {
@@ -435,22 +479,24 @@ struct JobRepository {
         job.completedAt = time
     }
 
-    private func autoCompleteParentIfFinished(parentId: UUID, allJobs: [Job], now: Date) {
+    /// Finishing the last subtask finishes the parent too. Returns its history entry's id, if it did.
+    private func autoCompleteParentIfFinished(parentId: UUID, allJobs: [Job], now: Date) -> UUID? {
         let siblings = allJobs.filter { $0.parentId == parentId }
-        guard !siblings.isEmpty, siblings.allSatisfy({ $0.isDone }) else { return }
+        guard !siblings.isEmpty, siblings.allSatisfy({ $0.isDone }) else { return nil }
         guard let parent = allJobs.first(where: { $0.id == parentId }),
-              !parent.isDone, parent.recurrenceDays == nil else { return }
+              !parent.isDone, parent.recurrenceDays == nil else { return nil }
         // A hair after the last subtask, so the parent never shares a timestamp with one you ticked
         // yourself.
         let latest = siblings.compactMap(\.completedAt).max() ?? now
-        markDone(parent, at: max(now, latest.addingTimeInterval(0.001)))
+        let completedAt = max(now, latest.addingTimeInterval(0.001))
+        markDone(parent, at: completedAt)
+        return logCompletion(parent, at: completedAt)
     }
 
     /// Reopening a subtask reopens its parent.
     private func reopenParentIfDone(parentId: UUID, allJobs: [Job]) {
         guard let parent = allJobs.first(where: { $0.id == parentId }), parent.isDone else { return }
-        parent.isDone = false
-        parent.completedAt = nil
+        markNotDone(parent)
     }
 
     /// Start / put back in the jar. Starting a booked job unbooks it.
@@ -556,6 +602,23 @@ struct JobRepository {
 
     /// Runs on launch: detaches subtasks from repeating jobs (older data) and merges categories
     /// that only differ by case.
+    /// Once, the first time a version with history runs: starts the history with what the jobs
+    /// already know (every finished one-off job, and the last time each repeating job was done),
+    /// same as Android's database upgrade. Subtasks finished along with their parent are left out.
+    func backfillHistoryOnce(defaults: UserDefaults = .standard) {
+        let key = "history_backfilled"
+        guard !defaults.bool(forKey: key) else { return }
+        let all = fetchAll()
+        let byId = Dictionary(all.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        for job in all {
+            guard let completedAt = job.completedAt, job.isDone || job.recurrenceDays != nil else { continue }
+            if let parentId = job.parentId, byId[parentId]?.completedAt == completedAt { continue }
+            logCompletion(job, at: completedAt)
+        }
+        save()
+        defaults.set(true, forKey: key)
+    }
+
     func applyLaunchRules() {
         let all = fetchAll()
         var changed = false
@@ -579,10 +642,19 @@ struct JobRepository {
 
     /// Import: replaces everything. The old jobs' calendar events go with them, and upcoming
     /// bookings in the file get new events on this phone (event ids aren't kept in backups).
-    func replaceAll(with records: [JobRecord]) {
+    func replaceAll(with records: [JobRecord], history: [CompletionRecord] = []) {
         for job in fetchAll() {
             removeUpcomingEvent(job)
             modelContext.delete(job)
+        }
+        for entry in fetchHistory() {
+            modelContext.delete(entry)
+        }
+        for entry in history {
+            modelContext.insert(Completion(
+                jobId: entry.jobId, title: entry.title, estimatedMinutes: entry.estimatedMinutes,
+                category: entry.category, completedAt: entry.completedAt
+            ))
         }
         let now = now()
         for record in records {

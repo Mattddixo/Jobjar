@@ -46,6 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -64,6 +65,7 @@ import com.mattdixon.jobjar.ui.LocalUndoController
 import com.mattdixon.jobjar.ui.UndoEvent
 import com.mattdixon.jobjar.ui.UndoKind
 import com.mattdixon.jobjar.ui.UndoSnackbarEffect
+import com.mattdixon.jobjar.ui.components.doneHaptic
 import com.mattdixon.jobjar.ui.components.dueStatusLabel
 import com.mattdixon.jobjar.ui.components.plural
 import com.mattdixon.jobjar.ui.components.recurrenceLabel
@@ -80,8 +82,10 @@ private const val CARD_ROWS = 5
 @Composable
 fun rememberCompleteCycle(repository: JobRepository): (Job) -> Unit {
     val undo = LocalUndoController.current
-    return remember(repository, undo) {
+    val view = LocalView.current
+    return remember(repository, undo, view) {
         { job ->
+            view.doneHaptic()
             undo.launchInApp {
                 repository.completeCycle(job.id)?.let { undo.offer(UndoEvent(UndoKind.COMPLETED, job.title, it)) }
             }

@@ -47,15 +47,34 @@ them off there, or open the full list.
 phone's calendar (and from there to Google Calendar if that's synced), and stays out of the
 jar until you start or finish it.
 
-**Stats.** Jobs done and time spent, overall and by category.
+**Drawing.** The jar gives a shake and the cards slide out, with a small buzz. Finishing a job
+buzzes too.
 
-**Settings.** Light / dark / auto, export and import, version.
+**Stats.** This week first: what you finished each day, with arrows to look back at earlier
+weeks. Then jobs done and time spent, overall and by category. A job's page shows when it was
+last done.
+
+**Reminders.** Off by default. In Settings you can turn on a notification when repeating jobs
+come due (or start showing early), a daily nudge to draw a job, or both, at a time you choose.
+Tapping the nudge opens the app and draws.
+
+**Widgets.** Two home screen widgets. Draw a job: on Android it draws right there with your Jar
+settings and shows the job (tap it to open); on iPhone it opens the app and draws. Coming up: the
+next few overdue and due-soon repeating jobs.
+
+**Settings.** Light / dark / auto, reminders, export and import, weekly backups, version.
 
 ## Your data
 
 Everything stays on the phone. There's no account and the app doesn't have internet
 permission. Settings > Export writes a JSON file you can keep anywhere, and Import reads one
-back (it asks before replacing anything). The same file works in the iOS app.
+back (it asks before replacing anything). The same file works in the iOS app, and it includes
+the history of what you've finished.
+
+Weekly backups: on Android, pick a folder once in Settings > Backup (Downloads, or one a cloud
+drive syncs) and a backup lands there each week. On iPhone they're on by default and go in the
+Files app under On My iPhone > Job Jar > Backups. Either way the last four are kept and Settings
+shows when the last one was. Restore one with Import.
 
 ## Building
 

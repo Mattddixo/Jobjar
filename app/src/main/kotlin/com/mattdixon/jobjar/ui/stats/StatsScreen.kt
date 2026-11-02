@@ -7,8 +7,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
@@ -70,9 +70,12 @@ fun StatsScreen(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(Spacing.xl),
             verticalArrangement = Arrangement.spacedBy(Spacing.xl)
         ) {
+            WeekHistoryCard(repository)
+
             val toDo = stringResource(R.string.stat_active_jobs) to state.activeCount.toString()
             val completed = stringResource(R.string.stat_completed) to state.completedCount.toString()
             val time = stringResource(R.string.stat_time_invested) to formatMinutes(state.totalMinutesCompleted)
@@ -104,8 +107,9 @@ fun StatsScreen(
             } else {
                 // Already sorted biggest first, so the first one sets the bar scale.
                 val maxMinutes = state.categoryStats.first().totalMinutes.coerceAtLeast(1)
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
-                    items(state.categoryStats, key = { it.category }) { stat ->
+                // One scroll for the page now the week's history sits above.
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
+                    state.categoryStats.forEach { stat ->
                         Card(colors = appCardColors(), border = appCardBorder(), modifier = Modifier.fillMaxWidth()) {
                             Column(
                                 modifier = Modifier
