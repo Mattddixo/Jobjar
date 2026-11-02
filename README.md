@@ -47,9 +47,8 @@ them off there, or open the full list.
 phone's calendar (and from there to Google Calendar if that's synced), and stays out of the
 jar until you start or finish it.
 
-**Drawing.** The cards slide out of the jar. The first draw each time you come to the Jar tab
-also gives the jar a shake; Draw again doesn't. With Reduce Motion (iPhone) or Remove animations
-(Android) on, there's no shake and the cards just appear. Finishing a job gives a small buzz
+**Drawing.** Each draw gives the jar a quick shake and the cards slide out. With Reduce Motion
+(iPhone) or Remove animations (Android) on, there's no shake and the cards just appear. Finishing a job gives a small buzz
 (unless the phone's own touch feedback / system haptics are off).
 
 **Stats.** This week first: what you finished each day, with arrows to look back at earlier

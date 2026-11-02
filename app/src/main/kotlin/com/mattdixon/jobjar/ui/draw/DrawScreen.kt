@@ -124,9 +124,8 @@ fun DrawScreen(
     val viewModel: DrawViewModel = viewModel(factory = DrawViewModel.Factory(repository, appContext))
     val state by viewModel.uiState.collectAsState()
     // Only draws made while you're here animate, not the cards already showing when you come back.
-    // The first one also shakes the jar; draws after that just bring out the cards.
     val drawCountOnOpen = remember { state.drawCount }
-    val firstDrawHere = state.drawCount == drawCountOnOpen + 1
+    val drawnHere = state.drawCount > drawCountOnOpen
     val reduceMotion = rememberReduceMotion()
     LaunchedEffect(drawRequest) {
         if (drawRequest > viewModel.handledDrawRequest) {
@@ -178,7 +177,7 @@ fun DrawScreen(
                 inProgressCount = state.inProgressCount,
                 isLoaded = state.isLoaded,
                 drawCount = state.drawCount,
-                shake = firstDrawHere,
+                shake = drawnHere,
                 reduceMotion = reduceMotion
             )
 
@@ -223,8 +222,8 @@ fun DrawScreen(
                     hasDrawnJobs -> DrawnJobsBatch(
                         entries = state.drawnJobs,
                         drawCount = state.drawCount,
-                        animate = state.drawCount > drawCountOnOpen && !reduceMotion,
-                        afterShake = firstDrawHere,
+                        animate = drawnHere && !reduceMotion,
+                        afterShake = drawnHere,
                         showBudgetSummary = !state.longJobsOnly && state.batchSize != DrawBatchSize.ONE,
                         availableMinutes = state.availableMinutes,
                         remainingMinutes = state.remainingMinutesAfterDraw,
@@ -275,8 +274,7 @@ private fun JarHero(
     modifier: Modifier = Modifier
 ) {
     val slips = if (pendingCount == 0) 0 else ceil(pendingCount * JAR_SLIPS.size / JAR_FILL_CAP.toFloat()).toInt().coerceIn(1, JAR_SLIPS.size)
-    // The first draw gives the jar a quick shake, like pulling a slip out (not with Remove
-    // animations on).
+    // Each draw gives the jar a quick shake, like pulling a slip out (not with Remove animations on).
     val tilt = remember { Animatable(0f) }
     LaunchedEffect(drawCount) {
         if (!shake || reduceMotion) return@LaunchedEffect
