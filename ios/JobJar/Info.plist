@@ -16,6 +16,11 @@
 			</array>
 		</dict>
 	</array>
+	<!-- Weekly backups go in Documents/Backups; these show it in the Files app. -->
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
 		<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>

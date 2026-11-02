@@ -503,6 +503,9 @@ class JobRepository(
 
     suspend fun exportCompletions(): List<Completion> = completions.getAll()
 
+    /** Everything, as a backup file's text (Settings > Export and the weekly backup). */
+    suspend fun backupText(exportedAt: Long): String = JobExport.write(exportJobs(), exportedAt, exportCompletions())
+
     /**
      * Import: replaces everything, keeping the ids so links survive. Then the calendar is brought
      * in line: events for jobs that are gone (or no longer booked) are deleted, and upcoming

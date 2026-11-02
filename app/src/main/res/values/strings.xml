@@ -312,7 +312,7 @@
     <string name="alert_hour_before">1 hour before</string>
     <string name="alert_day_before">1 day before</string>
     <string name="settings_your_data">Backup</string>
-    <string name="settings_data_explainer">Your jobs are only stored on this phone. Export a copy to keep somewhere safe, or to move to a new phone.</string>
+    <string name="settings_data_explainer">Your jobs are stored on this phone, and in your phone\'s own backup if that\'s on. Export a copy to keep somewhere safe, or to move to a new phone.</string>
     <string name="settings_export">Export</string>
     <string name="settings_import">Import</string>
     <plurals name="settings_exported">
@@ -411,4 +411,17 @@
     <string name="settings_reminders_nudge_explainer">Tap it to open the app and draw.</string>
     <string name="settings_reminders_time">Time</string>
     <string name="settings_reminders_blocked">Notifications are off for Job Jar. Turn them on in your phone\'s settings.</string>
+
+    <!-- Weekly backups -->
+    <string name="settings_auto_backup">Weekly backups</string>
+    <string name="settings_auto_backup_explainer">Pick a folder, like Downloads or one your cloud storage syncs, and a backup is saved there every week. The last 4 are kept.</string>
+    <string name="settings_auto_backup_choose">Choose a folder</string>
+    <string name="settings_auto_backup_to">Saved weekly to %1$s. The last 4 are kept.</string>
+    <string name="settings_auto_backup_folder">your folder</string>
+    <string name="settings_auto_backup_last">Last backup: %1$s</string>
+    <string name="settings_auto_backup_never">No backup yet</string>
+    <string name="settings_auto_backup_now">Back up now</string>
+    <string name="settings_auto_backup_change">Change folder</string>
+    <string name="settings_auto_backup_off">Turn off</string>
+    <string name="settings_auto_backup_failed">Couldn\'t save to that folder. Try choosing it again.</string>
 </resources>

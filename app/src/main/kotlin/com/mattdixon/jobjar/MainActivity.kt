@@ -17,6 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.lifecycleScope
+import com.mattdixon.jobjar.backup.AutoBackup
 import com.mattdixon.jobjar.data.CalendarScheduler
 import com.mattdixon.jobjar.data.ThemeMode
 import com.mattdixon.jobjar.data.ThemePreferences
@@ -86,6 +87,8 @@ class MainActivity : ComponentActivity() {
         // Pick up anything moved or deleted in the calendar app while we were away.
         val repository = (application as JobJarApplication).repository
         lifecycleScope.launch { repository.syncCalendar() }
+        // The weekly backup, if one's due and a folder's set.
+        lifecycleScope.launch { AutoBackup.runIfDue(this@MainActivity, repository) }
     }
 
     /**

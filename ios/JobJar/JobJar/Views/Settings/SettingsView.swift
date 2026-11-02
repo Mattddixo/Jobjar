@@ -39,6 +39,8 @@ struct SettingsView: View {
     @State private var showImporter = false
     @State private var pendingImport: JobExport.Backup? = nil
     @State private var message: String? = nil
+    @AppStorage(AutoBackup.enabledKey) private var autoBackup = true
+    @AppStorage(AutoBackup.lastKey) private var lastBackupSeconds = 0.0
 
     private var repository: JobRepository { JobRepository(modelContext: modelContext) }
 
@@ -98,13 +100,35 @@ struct SettingsView: View {
                 } label: {
                     Label("Import", systemImage: "square.and.arrow.down")
                 }
+                Toggle("Weekly backups", isOn: $autoBackup)
+                if autoBackup {
+                    Button {
+                        if AutoBackup.backUp(modelContext: modelContext) {
+                            message = "Backed up."
+                        } else {
+                            message = "Backup failed."
+                        }
+                    } label: {
+                        Label("Back up now", systemImage: "clock.arrow.circlepath")
+                    }
+                }
             } header: {
                 Text("Backup")
             } footer: {
-                Text(
-                    "Your jobs are only stored on this phone. Export a copy to keep somewhere safe, or to move " +
-                        "to a new phone. Backups work with the Android app too."
-                )
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(
+                        "Your jobs are stored on this phone, and in your iPhone's iCloud backup if that's on. Export a " +
+                            "copy to keep somewhere safe, or to move to a new phone. Backups work with the Android app too."
+                    )
+                    if autoBackup {
+                        Text(
+                            "Weekly backups are saved in Files › On My iPhone › Job Jar › Backups. The last 4 are kept. " +
+                                (lastBackupSeconds > 0
+                                    ? "Last backup: \(Date(timeIntervalSince1970: lastBackupSeconds).formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()))."
+                                    : "No backup yet.")
+                        )
+                    }
+                }
             }
 
             Section {

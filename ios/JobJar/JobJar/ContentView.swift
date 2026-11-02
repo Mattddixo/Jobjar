@@ -54,7 +54,10 @@ struct ContentView: View {
         .onChange(of: scenePhase, initial: true) { _, phase in
             let repository = JobRepository(modelContext: modelContext)
             // Pick up anything moved or deleted in the Calendar app while we were away.
-            if phase == .active { repository.syncCalendar() }
+            if phase == .active {
+                repository.syncCalendar()
+                AutoBackup.runIfDue(modelContext: modelContext)
+            }
             // Reminders are scheduled ahead, so bring them up to date whenever we come and go.
             if phase == .active || phase == .background {
                 ReminderScheduler.reschedule(jobs: (try? modelContext.fetch(FetchDescriptor<Job>())) ?? [])

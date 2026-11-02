@@ -39,16 +39,14 @@ class SettingsViewModel(private val repository: JobRepository) : ViewModel() {
 
     fun export(resolver: ContentResolver, uri: Uri) {
         viewModelScope.launch {
-            val jobs = repository.exportJobs()
-            val history = repository.exportCompletions()
+            val count = repository.exportJobs().size
+            val text = repository.backupText(System.currentTimeMillis())
             val ok = withContext(Dispatchers.IO) {
                 runCatching {
-                    resolver.openOutputStream(uri, "wt")?.bufferedWriter()?.use {
-                        it.write(JobExport.write(jobs, System.currentTimeMillis(), history))
-                    } != null
+                    resolver.openOutputStream(uri, "wt")?.bufferedWriter()?.use { it.write(text) } != null
                 }.getOrDefault(false)
             }
-            _message.value = if (ok) DataMessage.Exported(jobs.size) else DataMessage.ExportFailed
+            _message.value = if (ok) DataMessage.Exported(count) else DataMessage.ExportFailed
         }
     }
 
