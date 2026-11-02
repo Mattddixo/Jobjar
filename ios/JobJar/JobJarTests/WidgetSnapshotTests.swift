@@ -5,6 +5,8 @@ final class WidgetSnapshotTests: XCTestCase {
     private let calendar: Calendar = {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "Europe/London")!
+        // Without a locale, month names come out as "M11".
+        calendar.locale = Locale(identifier: "en_US")
         return calendar
     }()
 
