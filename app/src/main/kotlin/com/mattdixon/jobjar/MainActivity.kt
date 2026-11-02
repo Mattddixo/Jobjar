@@ -11,6 +11,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -27,10 +28,16 @@ class MainActivity : ComponentActivity() {
     /** Set when the app is opened for a particular job (from a calendar event). */
     private var openJobId by mutableStateOf<Long?>(null)
 
+    /** Goes up when the app is opened to draw (the daily nudge or the widget). */
+    private var drawRequest by mutableIntStateOf(0)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        if (savedInstanceState == null) openJobId = jobIdFrom(intent)
+        if (savedInstanceState == null) {
+            openJobId = jobIdFrom(intent)
+            if (intent.getBooleanExtra(EXTRA_DRAW, false)) drawRequest++
+        }
 
         val repository = (application as JobJarApplication).repository
 
@@ -61,7 +68,8 @@ class MainActivity : ComponentActivity() {
                         ThemePreferences.setThemeMode(context, mode)
                     },
                     openJobId = openJobId,
-                    onOpenJobHandled = { openJobId = null }
+                    onOpenJobHandled = { openJobId = null },
+                    drawRequest = drawRequest
                 )
             }
         }
@@ -70,6 +78,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         jobIdFrom(intent)?.let { openJobId = it }
+        if (intent.getBooleanExtra(EXTRA_DRAW, false)) drawRequest++
     }
 
     override fun onResume() {
@@ -80,14 +89,24 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * The job behind a calendar event's "open in app" link. The calendar app passes our
-     * `jobjar://job/<id>` tag; older calendar apps only pass the event, so look it up from that.
+     * The job to open: from a widget ([EXTRA_JOB_ID]), or behind a calendar event's "open in app"
+     * link. The calendar app passes our `jobjar://job/<id>` tag; older calendar apps only pass the
+     * event, so look it up from that.
      */
     private fun jobIdFrom(intent: Intent?): Long? {
+        intent?.getLongExtra(EXTRA_JOB_ID, 0L)?.takeIf { it > 0 }?.let { return it }
         if (intent?.action != CalendarContract.ACTION_HANDLE_CUSTOM_EVENT) return null
         CalendarScheduler.jobIdFromUri(intent.getStringExtra(CalendarContract.EXTRA_CUSTOM_APP_URI))?.let { return it }
         val eventId = intent.data?.lastPathSegment?.toLongOrNull() ?: return null
         return CalendarScheduler(this).jobIdForEvent(eventId)
+    }
+
+    companion object {
+        /** Open on the Jar tab and draw (the daily nudge, the widget). */
+        const val EXTRA_DRAW = "com.mattdixon.jobjar.extra.DRAW"
+
+        /** Open this job's page (the widgets). */
+        const val EXTRA_JOB_ID = "com.mattdixon.jobjar.extra.JOB_ID"
     }
 }
 

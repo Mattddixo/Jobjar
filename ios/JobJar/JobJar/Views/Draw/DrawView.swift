@@ -6,6 +6,8 @@ private let timePresets = [15, 30, 45, 60, 90, 120, 150, 180, 210]
 struct DrawView: View {
     var onOpenJob: (UUID) -> Void
     var onOpenComingUp: () -> Void = {}
+    /// Goes up when the app is opened to draw; each new value draws once.
+    var drawRequest = 0
 
     @Environment(\.modelContext) private var modelContext
     @Environment(UndoCenter.self) private var undoCenter
@@ -86,6 +88,7 @@ struct DrawView: View {
         }
         .onChange(of: categories, initial: true) { _, current in viewModel.pruneCategories(to: current) }
         .onChange(of: availableIds) { viewModel.dropStaleCards(allJobs: allJobs) }
+        .onChange(of: drawRequest) { viewModel.draw(repository: repository, allJobs: allJobs) }
     }
 }
 

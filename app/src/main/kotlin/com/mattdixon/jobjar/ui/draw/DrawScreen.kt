@@ -117,13 +117,21 @@ fun DrawScreen(
     repository: JobRepository,
     onOpenJob: (Long) -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenComingUp: () -> Unit
+    onOpenComingUp: () -> Unit,
+    /** Goes up when the app is opened to draw; each new value draws once. */
+    drawRequest: Int = 0
 ) {
     val appContext = LocalContext.current.applicationContext
     val viewModel: DrawViewModel = viewModel(factory = DrawViewModel.Factory(repository, appContext))
     val state by viewModel.uiState.collectAsState()
     // Only draws made while you're here animate, not the cards already showing when you come back.
     val drawCountOnOpen = remember { state.drawCount }
+    LaunchedEffect(drawRequest) {
+        if (drawRequest > viewModel.handledDrawRequest) {
+            viewModel.handledDrawRequest = drawRequest
+            viewModel.draw()
+        }
+    }
     var jobIdPendingSchedule by remember { mutableStateOf<Long?>(null) }
     val calendarNotice = rememberCalendarResultNotice()
     // Read each visit, so changes made in Settings or on the See all page show straight away.

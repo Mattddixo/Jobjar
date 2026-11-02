@@ -196,6 +196,12 @@ fun SettingsScreen(
 
             HorizontalDivider()
 
+            Section(title = stringResource(R.string.settings_reminders)) {
+                ReminderSettings()
+            }
+
+            HorizontalDivider()
+
             Section(title = stringResource(R.string.settings_calendar)) {
                 CalendarSettings()
             }

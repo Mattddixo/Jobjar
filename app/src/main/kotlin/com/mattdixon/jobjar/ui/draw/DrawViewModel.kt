@@ -148,6 +148,9 @@ class DrawViewModel(
      *
      * [excludeCurrent] (Draw again) leaves out everything already shown.
      */
+    /** The last "open and draw" request handled, so coming back to the tab doesn't draw again. */
+    var handledDrawRequest = 0
+
     fun draw(excludeCurrent: Boolean = false) {
         val current = _uiState.value
         val seedExcludeIds = if (excludeCurrent) {

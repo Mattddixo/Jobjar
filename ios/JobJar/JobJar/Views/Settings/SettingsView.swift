@@ -78,6 +78,8 @@ struct SettingsView: View {
                 Text("A slim line under the jar for repeating jobs that are overdue, due today or due soon.")
             }
 
+            ReminderSettingsSection()
+
             CalendarSettingsSection()
 
             Section {
