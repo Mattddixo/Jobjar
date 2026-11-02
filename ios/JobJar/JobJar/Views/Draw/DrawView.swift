@@ -51,7 +51,7 @@ struct DrawView: View {
 
                 PickerPanel(viewModel: viewModel, categories: categories)
 
-                Button(action: { viewModel.draw(repository: repository, allJobs: allJobs) }) {
+                Button(action: { draw() }) {
                     Label("Draw a job", systemImage: "shuffle")
                         .font(.headline)
                         .frame(maxWidth: .infinity)
@@ -63,14 +63,13 @@ struct DrawView: View {
                     DrawnJobsBatch(
                         entries: drawnJobs,
                         drawCount: viewModel.drawCount,
-                        afterShake: viewModel.drawCount > drawCountOnAppear && !reduceMotion,
                         showBudgetSummary: !viewModel.longJobsOnly && viewModel.batchSize != .one,
                         availableMinutes: viewModel.availableMinutes,
                         remainingMinutes: viewModel.remainingMinutesAfterDraw,
                         onOpen: onOpenJob,
                         onStart: { job in viewModel.startJob(job, repository: repository) },
                         onSchedule: { job in jobToSchedule = job },
-                        onRedraw: { viewModel.draw(repository: repository, allJobs: allJobs, excludeCurrent: true) },
+                        onRedraw: { draw(excludeCurrent: true) },
                         onCloseJar: { viewModel.clearDraw() }
                     )
                     .transition(.opacity)
@@ -93,11 +92,21 @@ struct DrawView: View {
         }
         .onChange(of: categories, initial: true) { _, current in viewModel.pruneCategories(to: current) }
         .onChange(of: availableIds) { viewModel.dropStaleCards(allJobs: allJobs) }
-        .onChange(of: drawRequest) { viewModel.draw(repository: repository, allJobs: allJobs) }
+        .onChange(of: drawRequest) { draw() }
         .onAppear { drawCountOnAppear = viewModel.drawCount }
         .onChange(of: viewModel.drawCount) { _, count in
             guard count > drawCountOnAppear, !reduceMotion else { return }
             shakes += 1
+        }
+    }
+}
+
+extension DrawView {
+    /// Draw again swaps the cards in place: the old ones fade, the new ones fade in, and everything
+    /// below eases to the new size rather than jumping. Just swaps with Reduce Motion on.
+    private func draw(excludeCurrent: Bool = false) {
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) {
+            viewModel.draw(repository: repository, allJobs: allJobs, excludeCurrent: excludeCurrent)
         }
     }
 }
@@ -209,8 +218,6 @@ private struct SectionLabel: View {
 private struct DrawnJobsBatch: View {
     let entries: [DrawnJobEntry]
     let drawCount: Int
-    /// The jar shook for this draw, so the cards wait for it.
-    let afterShake: Bool
     let showBudgetSummary: Bool
     let availableMinutes: Int
     let remainingMinutes: Int
@@ -227,16 +234,16 @@ private struct DrawnJobsBatch: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
-            ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+            ForEach(entries) { entry in
                 BatchJobCard(
                     entry: entry,
                     onOpen: { onOpen(entry.id) },
                     onStart: { onStart(entry.job) },
                     onSchedule: { onSchedule(entry.job) }
                 )
-                .modifier(DrawnCardEntrance(index: index, afterShake: afterShake))
                 // A new draw is a new card, even if the same job comes out again.
                 .id("\(drawCount)-\(entry.id)")
+                .transition(.opacity)
             }
             HStack(spacing: 10) {
                 Button(action: onRedraw) {
@@ -249,32 +256,6 @@ private struct DrawnJobsBatch: View {
             .buttonStyle(.bordered)
             .font(.subheadline)
         }
-    }
-}
-
-/// Each draw's cards drop out of the jar one after another: a short slide down with a little grow
-/// and fade, staggered so a batch reads as slips coming out one at a time. Same as Android. With
-/// Reduce Motion on they just fade in.
-private struct DrawnCardEntrance: ViewModifier {
-    let index: Int
-    let afterShake: Bool
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var appeared = false
-
-    func body(content: Content) -> some View {
-        let moves = !reduceMotion
-        content
-            .opacity(appeared ? 1 : 0)
-            .offset(y: appeared || !moves ? 0 : -24)
-            .scaleEffect(appeared || !moves ? 1 : 0.92)
-            .onAppear {
-                // Let the jar's shake lead, when there is one.
-                let delay = (afterShake ? 0.12 : 0) + Double(index) * 0.08
-                let animation: Animation = moves ? .spring(response: 0.42, dampingFraction: 0.72) : .easeOut(duration: 0.2)
-                withAnimation(animation.delay(delay)) {
-                    appeared = true
-                }
-            }
     }
 }
 
