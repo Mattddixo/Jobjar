@@ -1,4 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="window_background">#141716</color>
+
+    <!-- Home screen widgets -->
+    <color name="widget_background">#1C2120</color>
+    <color name="widget_text">#E3E8E7</color>
+    <color name="widget_text_secondary">#B3BDBB</color>
+    <color name="widget_accent">#8CCFC3</color>
+    <color name="widget_on_accent">#00382F</color>
+    <color name="widget_overdue">#F2B8B5</color>
+    <color name="widget_honey">#3F3220</color>
+    <color name="widget_on_honey">#F6E3C4</color>
 </resources>

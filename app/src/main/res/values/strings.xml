@@ -424,4 +424,21 @@
     <string name="settings_auto_backup_change">Change folder</string>
     <string name="settings_auto_backup_off">Turn off</string>
     <string name="settings_auto_backup_failed">Couldn\'t save to that folder. Try choosing it again.</string>
+
+    <!-- Widgets -->
+    <string name="widget_draw_name">Draw a job</string>
+    <string name="widget_coming_up_name">Coming up</string>
+    <string name="widget_draw_description">Draw a job from the home screen, using your Jar settings.</string>
+    <string name="widget_draw_prompt">Draw a job</string>
+    <string name="widget_draw_hint">Something that fits your time</string>
+    <string name="widget_draw">Draw</string>
+    <string name="widget_draw_again">Again</string>
+    <plurals name="widget_draw_count">
+        <item quantity="one">%1$d job in the jar</item>
+        <item quantity="other">%1$d jobs in the jar</item>
+    </plurals>
+    <string name="widget_draw_nothing">Nothing fits right now</string>
+    <string name="widget_draw_job_detail">%1$s · tap to open</string>
+    <string name="widget_coming_up_description">Repeating jobs that are overdue, due today or due soon.</string>
+    <string name="widget_coming_up_empty">Nothing due soon.</string>
 </resources>

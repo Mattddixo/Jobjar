@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The drawn job, on the same honey colour as the Jar tab's cards. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/widget_honey" />
+    <corners android:radius="14dp" />
+</shape>

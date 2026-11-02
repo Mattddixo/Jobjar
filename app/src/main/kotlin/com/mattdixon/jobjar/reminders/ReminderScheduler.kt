@@ -18,12 +18,11 @@ import com.mattdixon.jobjar.data.ReminderPreferences
 import com.mattdixon.jobjar.data.dueReminders
 import com.mattdixon.jobjar.data.isAvailableToDraw
 import com.mattdixon.jobjar.data.nextReminderAt
+import com.mattdixon.jobjar.util.dueText
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import java.time.Instant
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 
 private const val ACTION_REMIND = "com.mattdixon.jobjar.action.REMIND"
 private const val CHANNEL_ID = "reminders"
@@ -99,7 +98,7 @@ class ReminderReceiver : BroadcastReceiver() {
 
     /** "Bins is due today", or "3 repeating jobs" with a line each. Tapping opens the app. */
     private fun dueNotification(context: Context, due: List<DueReminder>, now: Long, zone: ZoneId): Notification {
-        val lines = due.map { context.getString(R.string.reminder_due_line, it.title, dueText(context, it.daysUntil, now, zone)) }
+        val lines = due.map { context.getString(R.string.reminder_due_line, it.title, context.dueText(it.daysUntil, now, zone)) }
         val title = if (due.size == 1) lines.single() else context.resources.getQuantityString(R.plurals.reminder_due_title, due.size, due.size)
         val style = Notification.InboxStyle().also { inbox -> lines.forEach { inbox.addLine(it) } }
         return Notification.Builder(context, CHANNEL_ID)
@@ -121,18 +120,6 @@ class ReminderReceiver : BroadcastReceiver() {
             .setContentIntent(openApp(context, draw = true))
             .setAutoCancel(true)
             .build()
-
-    /** "due today", "overdue 2 days", "due tomorrow", "due Fri", "due Mar 3". */
-    private fun dueText(context: Context, daysUntil: Int, now: Long, zone: ZoneId): String = when {
-        daysUntil < 0 -> context.resources.getQuantityString(R.plurals.overdue_n_days, -daysUntil, -daysUntil)
-        daysUntil == 0 -> context.getString(R.string.due_today)
-        daysUntil == 1 -> context.getString(R.string.due_tomorrow_plain)
-        else -> {
-            val date = Instant.ofEpochMilli(now).atZone(zone).toLocalDate().plusDays(daysUntil.toLong())
-            val pattern = if (daysUntil < 7) "EEE" else "MMM d"
-            context.getString(R.string.due_on, date.format(DateTimeFormatter.ofPattern(pattern)))
-        }
-    }
 
     private fun openApp(context: Context, draw: Boolean): PendingIntent = PendingIntent.getActivity(
         context,

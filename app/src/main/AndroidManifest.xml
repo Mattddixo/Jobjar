@@ -52,6 +52,30 @@
                 <action android:name="android.intent.action.TIMEZONE_CHANGED" />
             </intent-filter>
         </receiver>
+
+        <receiver
+            android:name=".widgets.DrawWidget"
+            android:exported="true"
+            android:label="@string/widget_draw_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_draw_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widgets.ComingUpWidget"
+            android:exported="true"
+            android:label="@string/widget_coming_up_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_coming_up_info" />
+        </receiver>
     </application>
 
 </manifest>
