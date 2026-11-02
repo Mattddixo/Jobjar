@@ -14,7 +14,7 @@ struct DrawView: View {
     @Query(sort: \Job.createdAt, order: .reverse) private var allJobs: [Job]
     @State private var viewModel = DrawViewModel()
     @State private var jobToSchedule: Job? = nil
-    /// Only the first draw after you arrive shakes the jar; draws after that just bring out the cards.
+    /// Draws made while you're here shake the jar, not the cards already showing when you come back.
     @State private var drawCountOnAppear = 0
     @State private var shakes = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -63,7 +63,7 @@ struct DrawView: View {
                     DrawnJobsBatch(
                         entries: drawnJobs,
                         drawCount: viewModel.drawCount,
-                        afterShake: viewModel.drawCount == drawCountOnAppear + 1 && !reduceMotion,
+                        afterShake: viewModel.drawCount > drawCountOnAppear && !reduceMotion,
                         showBudgetSummary: !viewModel.longJobsOnly && viewModel.batchSize != .one,
                         availableMinutes: viewModel.availableMinutes,
                         remainingMinutes: viewModel.remainingMinutesAfterDraw,
@@ -96,7 +96,7 @@ struct DrawView: View {
         .onChange(of: drawRequest) { viewModel.draw(repository: repository, allJobs: allJobs) }
         .onAppear { drawCountOnAppear = viewModel.drawCount }
         .onChange(of: viewModel.drawCount) { _, count in
-            guard count == drawCountOnAppear + 1, !reduceMotion else { return }
+            guard count > drawCountOnAppear, !reduceMotion else { return }
             shakes += 1
         }
     }

@@ -8,7 +8,7 @@ private let jarFillCap = 15
 struct JarSummaryCard: View {
     let available: Int
     let inProgress: Int
-    /// Goes up to give the jar a quick shake, like pulling a slip out (the first draw on the Jar tab).
+    /// Goes up to give the jar a quick shake, like pulling a slip out (each draw).
     var shakes = 0
 
     private var slips: Int {
