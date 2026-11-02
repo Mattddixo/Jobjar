@@ -163,7 +163,6 @@ final class DrawViewModel {
         noMatchFound = drawnJobs.isEmpty
         if !drawnJobs.isEmpty {
             drawCount += 1
-            Haptics.draw()
         }
     }
 

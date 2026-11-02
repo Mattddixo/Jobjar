@@ -14,6 +14,10 @@ struct DrawView: View {
     @Query(sort: \Job.createdAt, order: .reverse) private var allJobs: [Job]
     @State private var viewModel = DrawViewModel()
     @State private var jobToSchedule: Job? = nil
+    /// Only the first draw after you arrive shakes the jar; draws after that just bring out the cards.
+    @State private var drawCountOnAppear = 0
+    @State private var shakes = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(showComingUpKey) private var showComingUp = false
     @AppStorage(comingUpRangeKey) private var comingUpRange = defaultComingUpRange
 
@@ -30,7 +34,7 @@ struct DrawView: View {
         let drawnJobs = viewModel.drawnJobs.filter { availableIds.contains($0.id) }
         ScrollView {
             VStack(spacing: 14) {
-                JarSummaryCard(available: availableIds.count, inProgress: allJobs.filter(\.isInProgress).count, drawCount: viewModel.drawCount)
+                JarSummaryCard(available: availableIds.count, inProgress: allJobs.filter(\.isInProgress).count, shakes: shakes)
 
                 if showComingUp {
                     ComingUpCard(
@@ -59,6 +63,7 @@ struct DrawView: View {
                     DrawnJobsBatch(
                         entries: drawnJobs,
                         drawCount: viewModel.drawCount,
+                        afterShake: viewModel.drawCount == drawCountOnAppear + 1 && !reduceMotion,
                         showBudgetSummary: !viewModel.longJobsOnly && viewModel.batchSize != .one,
                         availableMinutes: viewModel.availableMinutes,
                         remainingMinutes: viewModel.remainingMinutesAfterDraw,
@@ -89,6 +94,13 @@ struct DrawView: View {
         .onChange(of: categories, initial: true) { _, current in viewModel.pruneCategories(to: current) }
         .onChange(of: availableIds) { viewModel.dropStaleCards(allJobs: allJobs) }
         .onChange(of: drawRequest) { viewModel.draw(repository: repository, allJobs: allJobs) }
+        .onAppear { drawCountOnAppear = viewModel.drawCount }
+        .onChange(of: viewModel.drawCount) { _, count in
+            guard count == drawCountOnAppear + 1 else { return }
+            // A buzz either way; the shake is skipped with Reduce Motion on.
+            Haptics.draw()
+            if !reduceMotion { shakes += 1 }
+        }
     }
 }
 
@@ -199,6 +211,8 @@ private struct SectionLabel: View {
 private struct DrawnJobsBatch: View {
     let entries: [DrawnJobEntry]
     let drawCount: Int
+    /// The jar shook for this draw, so the cards wait for it.
+    let afterShake: Bool
     let showBudgetSummary: Bool
     let availableMinutes: Int
     let remainingMinutes: Int
@@ -222,7 +236,7 @@ private struct DrawnJobsBatch: View {
                     onStart: { onStart(entry.job) },
                     onSchedule: { onSchedule(entry.job) }
                 )
-                .modifier(DrawnCardEntrance(index: index))
+                .modifier(DrawnCardEntrance(index: index, afterShake: afterShake))
                 // A new draw is a new card, even if the same job comes out again.
                 .id("\(drawCount)-\(entry.id)")
             }
@@ -241,19 +255,25 @@ private struct DrawnJobsBatch: View {
 }
 
 /// Each draw's cards drop out of the jar one after another: a short slide down with a little grow
-/// and fade, staggered so a batch reads as slips coming out one at a time. Same as Android.
+/// and fade, staggered so a batch reads as slips coming out one at a time. Same as Android. With
+/// Reduce Motion on they just fade in.
 private struct DrawnCardEntrance: ViewModifier {
     let index: Int
+    let afterShake: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var appeared = false
 
     func body(content: Content) -> some View {
+        let moves = !reduceMotion
         content
             .opacity(appeared ? 1 : 0)
-            .offset(y: appeared ? 0 : -24)
-            .scaleEffect(appeared ? 1 : 0.92)
+            .offset(y: appeared || !moves ? 0 : -24)
+            .scaleEffect(appeared || !moves ? 1 : 0.92)
             .onAppear {
-                // Let the jar's shake lead.
-                withAnimation(.spring(response: 0.42, dampingFraction: 0.72).delay(0.12 + Double(index) * 0.08)) {
+                // Let the jar's shake lead, when there is one.
+                let delay = (afterShake ? 0.12 : 0) + Double(index) * 0.08
+                let animation: Animation = moves ? .spring(response: 0.42, dampingFraction: 0.72) : .easeOut(duration: 0.2)
+                withAnimation(animation.delay(delay)) {
                     appeared = true
                 }
             }
