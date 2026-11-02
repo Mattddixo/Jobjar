@@ -45,36 +45,38 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.mattdixon.jobjar.R
 import com.mattdixon.jobjar.data.Job
 import com.mattdixon.jobjar.data.JobRepository
 import com.mattdixon.jobjar.data.isBooked
-import com.mattdixon.jobjar.data.isOverdue
 import com.mattdixon.jobjar.data.isMissed
+import com.mattdixon.jobjar.data.isOverdue
 import com.mattdixon.jobjar.data.isPending
 import com.mattdixon.jobjar.data.remainingMinutes
 import com.mattdixon.jobjar.data.totalCostCents
+import com.mattdixon.jobjar.ui.LocalUndoController
+import com.mattdixon.jobjar.ui.UndoEvent
+import com.mattdixon.jobjar.ui.UndoKind
+import com.mattdixon.jobjar.ui.UndoSnackbarEffect
 import com.mattdixon.jobjar.ui.components.CategoryBadge
 import com.mattdixon.jobjar.ui.components.ChecklistSection
 import com.mattdixon.jobjar.ui.components.InfoBadge
 import com.mattdixon.jobjar.ui.components.SchedulePickerDialog
-import com.mattdixon.jobjar.ui.components.rememberCalendarResultNotice
 import com.mattdixon.jobjar.ui.components.SubtasksSection
 import com.mattdixon.jobjar.ui.components.TimeBucketBadge
+import com.mattdixon.jobjar.ui.components.doneHaptic
+import com.mattdixon.jobjar.ui.components.dueStatusLabel
+import com.mattdixon.jobjar.ui.components.plural
+import com.mattdixon.jobjar.ui.components.recurrenceLabel
+import com.mattdixon.jobjar.ui.components.rememberCalendarResultNotice
 import com.mattdixon.jobjar.ui.theme.AppShapes
 import com.mattdixon.jobjar.ui.theme.Spacing
 import com.mattdixon.jobjar.ui.theme.appTopBarColors
 import com.mattdixon.jobjar.util.formatCost
 import com.mattdixon.jobjar.util.formatMinutes
-import com.mattdixon.jobjar.ui.LocalUndoController
-import com.mattdixon.jobjar.ui.UndoEvent
-import com.mattdixon.jobjar.ui.UndoKind
-import com.mattdixon.jobjar.ui.UndoSnackbarEffect
-import com.mattdixon.jobjar.ui.components.dueStatusLabel
-import com.mattdixon.jobjar.ui.components.plural
-import com.mattdixon.jobjar.ui.components.recurrenceLabel
 import com.mattdixon.jobjar.util.formatScheduledDateTime
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -108,13 +110,17 @@ fun JobDetailScreen(
 
     val scope = rememberCoroutineScope()
     val undo = LocalUndoController.current
+    val view = LocalView.current
     val snackbarHostState = remember { SnackbarHostState() }
     UndoSnackbarEffect(snackbarHostState)
     fun toggleDone(target: Job) {
         val completing = target.isPending()
         scope.launch {
             val snapshot = repository.toggleDone(target.id)
-            if (snapshot != null && completing) undo.offer(UndoEvent(UndoKind.COMPLETED, target.title, snapshot))
+            if (snapshot != null && completing) {
+                view.doneHaptic()
+                undo.offer(UndoEvent(UndoKind.COMPLETED, target.title, snapshot))
+            }
         }
     }
     var showDeleteDialog by remember { mutableStateOf(false) }

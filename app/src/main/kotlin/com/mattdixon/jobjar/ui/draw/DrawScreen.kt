@@ -1,6 +1,10 @@
 package com.mattdixon.jobjar.ui.draw
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.keyframes
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -36,17 +40,18 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -58,9 +63,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -79,22 +87,24 @@ import com.mattdixon.jobjar.ui.comingup.rememberCompleteCycle
 import com.mattdixon.jobjar.ui.components.CategoryBadge
 import com.mattdixon.jobjar.ui.components.InfoBadge
 import com.mattdixon.jobjar.ui.components.SchedulePickerDialog
-import com.mattdixon.jobjar.ui.components.rememberCalendarResultNotice
 import com.mattdixon.jobjar.ui.components.TimeBucketBadge
 import com.mattdixon.jobjar.ui.components.TodayDateButton
+import com.mattdixon.jobjar.ui.components.drawHaptic
+import com.mattdixon.jobjar.ui.components.plural
+import com.mattdixon.jobjar.ui.components.recurrenceLabel
+import com.mattdixon.jobjar.ui.components.rememberCalendarResultNotice
 import com.mattdixon.jobjar.ui.theme.AppShapes
-import com.mattdixon.jobjar.ui.theme.Spacing
-import com.mattdixon.jobjar.ui.theme.appTopBarColors
 import com.mattdixon.jobjar.ui.theme.JarLid
 import com.mattdixon.jobjar.ui.theme.JarLidBand
 import com.mattdixon.jobjar.ui.theme.JarSlips
 import com.mattdixon.jobjar.ui.theme.LocalAppColors
+import com.mattdixon.jobjar.ui.theme.Spacing
 import com.mattdixon.jobjar.ui.theme.appCardBorder
 import com.mattdixon.jobjar.ui.theme.appCardColors
+import com.mattdixon.jobjar.ui.theme.appTopBarColors
 import com.mattdixon.jobjar.util.formatMinutes
-import com.mattdixon.jobjar.ui.components.plural
-import com.mattdixon.jobjar.ui.components.recurrenceLabel
 import kotlin.math.ceil
+import kotlinx.coroutines.delay
 
 private val TIME_PRESETS = listOf(15, 30, 45, 60, 90, 120, 150, 180, 210)
 
@@ -112,6 +122,8 @@ fun DrawScreen(
     val appContext = LocalContext.current.applicationContext
     val viewModel: DrawViewModel = viewModel(factory = DrawViewModel.Factory(repository, appContext))
     val state by viewModel.uiState.collectAsState()
+    // Only draws made while you're here animate, not the cards already showing when you come back.
+    val drawCountOnOpen = remember { state.drawCount }
     var jobIdPendingSchedule by remember { mutableStateOf<Long?>(null) }
     val calendarNotice = rememberCalendarResultNotice()
     // Read each visit, so changes made in Settings or on the See all page show straight away.
@@ -151,7 +163,13 @@ fun DrawScreen(
                 .padding(horizontal = Spacing.xl, vertical = Spacing.lg),
             verticalArrangement = Arrangement.spacedBy(Spacing.lg)
         ) {
-            JarHero(pendingCount = state.pendingCount, inProgressCount = state.inProgressCount, isLoaded = state.isLoaded)
+            JarHero(
+                pendingCount = state.pendingCount,
+                inProgressCount = state.inProgressCount,
+                isLoaded = state.isLoaded,
+                drawCount = state.drawCount,
+                animate = state.drawCount > drawCountOnOpen
+            )
 
             if (showComingUp) {
                 ComingUpCard(
@@ -193,6 +211,8 @@ fun DrawScreen(
                 when {
                     hasDrawnJobs -> DrawnJobsBatch(
                         entries = state.drawnJobs,
+                        drawCount = state.drawCount,
+                        animate = state.drawCount > drawCountOnOpen,
                         showBudgetSummary = !state.longJobsOnly && state.batchSize != DrawBatchSize.ONE,
                         availableMinutes = state.availableMinutes,
                         remainingMinutes = state.remainingMinutesAfterDraw,
@@ -233,8 +253,34 @@ fun DrawScreen(
  * line (hidden when zero).
  */
 @Composable
-private fun JarHero(pendingCount: Int, inProgressCount: Int, isLoaded: Boolean, modifier: Modifier = Modifier) {
+private fun JarHero(
+    pendingCount: Int,
+    inProgressCount: Int,
+    isLoaded: Boolean,
+    drawCount: Int,
+    animate: Boolean,
+    modifier: Modifier = Modifier
+) {
     val slips = if (pendingCount == 0) 0 else ceil(pendingCount * JAR_SLIPS.size / JAR_FILL_CAP.toFloat()).toInt().coerceIn(1, JAR_SLIPS.size)
+    // Each draw gives the jar a quick shake, like pulling a slip out, and a buzz.
+    val shake = remember { Animatable(0f) }
+    val view = LocalView.current
+    LaunchedEffect(drawCount) {
+        if (!animate) return@LaunchedEffect
+        view.drawHaptic()
+        shake.snapTo(0f)
+        shake.animateTo(
+            0f,
+            keyframes {
+                durationMillis = 420
+                -9f at 60
+                8f at 140
+                -5f at 220
+                3f at 300
+                0f at 420
+            }
+        )
+    }
     Card(
         shape = AppShapes.panel,
         colors = appCardColors(),
@@ -247,7 +293,15 @@ private fun JarHero(pendingCount: Int, inProgressCount: Int, isLoaded: Boolean, 
                 .padding(horizontal = Spacing.xl, vertical = Spacing.lg),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            JarGlyph(slips = slips, modifier = Modifier.size(width = 56.dp, height = 68.dp))
+            JarGlyph(
+                slips = slips,
+                modifier = Modifier
+                    .size(width = 56.dp, height = 68.dp)
+                    .graphicsLayer {
+                        rotationZ = shake.value
+                        transformOrigin = TransformOrigin(0.5f, 1f)
+                    }
+            )
             Spacer(modifier = Modifier.width(Spacing.xl))
             Column {
                 Text(
@@ -502,6 +556,8 @@ private fun EmptyStateText(text: String) {
 @Composable
 private fun DrawnJobsBatch(
     entries: List<DrawnJobEntry>,
+    drawCount: Int,
+    animate: Boolean,
     showBudgetSummary: Boolean,
     availableMinutes: Int,
     remainingMinutes: Int,
@@ -526,15 +582,17 @@ private fun DrawnJobsBatch(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        entries.forEach { entry ->
+        entries.forEachIndexed { index, entry ->
             key(entry.job.id) {
-                BatchJobCard(
-                    entry = entry,
-                    isBusy = isBusy,
-                    onOpen = { onOpen(entry.job.id) },
-                    onStart = { onStart(entry.job.id) },
-                    onScheduleRequest = { onScheduleRequest(entry.job.id) }
-                )
+                DrawnCardEntrance(index = index, drawCount = drawCount, animate = animate) {
+                    BatchJobCard(
+                        entry = entry,
+                        isBusy = isBusy,
+                        onOpen = { onOpen(entry.job.id) },
+                        onStart = { onStart(entry.job.id) },
+                        onScheduleRequest = { onScheduleRequest(entry.job.id) }
+                    )
+                }
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(Spacing.md)) {
@@ -559,6 +617,33 @@ private fun DrawnJobsBatch(
                 Text(stringResource(R.string.draw_close_jar), style = MaterialTheme.typography.labelMedium)
             }
         }
+    }
+}
+
+/**
+ * Each draw's cards drop out of the jar one after another: a short slide down with a little
+ * grow and fade, staggered so a batch reads as slips coming out one at a time. Cards that are
+ * already showing (after Start takes one away) don't play it again.
+ */
+@Composable
+private fun DrawnCardEntrance(index: Int, drawCount: Int, animate: Boolean, content: @Composable () -> Unit) {
+    val progress = remember(drawCount) { Animatable(if (animate) 0f else 1f) }
+    LaunchedEffect(drawCount) {
+        if (!animate) return@LaunchedEffect
+        // Let the jar's shake lead.
+        delay(120L + index * 80L)
+        progress.animateTo(1f, spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMediumLow))
+    }
+    Box(
+        modifier = Modifier.graphicsLayer {
+            val p = progress.value
+            alpha = p.coerceIn(0f, 1f)
+            translationY = (1f - p) * -32.dp.toPx()
+            scaleX = 0.92f + 0.08f * p
+            scaleY = 0.92f + 0.08f * p
+        }
+    ) {
+        content()
     }
 }
 

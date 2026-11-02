@@ -56,6 +56,8 @@ data class DrawUiState(
     val remainingMinutesAfterDraw: Int = 0,
     val excludedIds: List<Long> = emptyList(),
     val isDrawing: Boolean = false,
+    /** Goes up by one each draw that found something, to play the draw animation and buzz. */
+    val drawCount: Int = 0,
     val noMatchFound: Boolean = false,
     /** Jobs that could be drawn right now. Drives the jar picture. */
     val pendingCount: Int = 0,
@@ -186,7 +188,8 @@ class DrawViewModel(
                 remainingMinutesAfterDraw = remaining,
                 excludedIds = seedExcludeIds,
                 isDrawing = false,
-                noMatchFound = entries.isEmpty()
+                noMatchFound = entries.isEmpty(),
+                drawCount = _uiState.value.drawCount + if (entries.isEmpty()) 0 else 1
             )
         }
     }

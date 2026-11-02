@@ -72,6 +72,8 @@ final class DrawViewModel {
     private(set) var remainingMinutesAfterDraw: Int = 0
     private(set) var excludedIds: Set<UUID> = []
     private(set) var noMatchFound: Bool = false
+    /// Goes up by one each draw that found something, to play the draw animation.
+    private(set) var drawCount = 0
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -159,6 +161,10 @@ final class DrawViewModel {
         remainingMinutesAfterDraw = remaining
         excludedIds = seedExcluded
         noMatchFound = drawnJobs.isEmpty
+        if !drawnJobs.isEmpty {
+            drawCount += 1
+            Haptics.draw()
+        }
     }
 
     private func buildContext(job: Job, allJobs: [Job]) -> DrawnJobContext {

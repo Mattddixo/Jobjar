@@ -28,7 +28,7 @@ struct DrawView: View {
         let drawnJobs = viewModel.drawnJobs.filter { availableIds.contains($0.id) }
         ScrollView {
             VStack(spacing: 14) {
-                JarSummaryCard(available: availableIds.count, inProgress: allJobs.filter(\.isInProgress).count)
+                JarSummaryCard(available: availableIds.count, inProgress: allJobs.filter(\.isInProgress).count, drawCount: viewModel.drawCount)
 
                 if showComingUp {
                     ComingUpCard(
@@ -56,6 +56,7 @@ struct DrawView: View {
                 if !drawnJobs.isEmpty {
                     DrawnJobsBatch(
                         entries: drawnJobs,
+                        drawCount: viewModel.drawCount,
                         showBudgetSummary: !viewModel.longJobsOnly && viewModel.batchSize != .one,
                         availableMinutes: viewModel.availableMinutes,
                         remainingMinutes: viewModel.remainingMinutesAfterDraw,
@@ -194,6 +195,7 @@ private struct SectionLabel: View {
 /// Never mind. Drawing doesn't take anything out of the jar, so Never mind just clears the list.
 private struct DrawnJobsBatch: View {
     let entries: [DrawnJobEntry]
+    let drawCount: Int
     let showBudgetSummary: Bool
     let availableMinutes: Int
     let remainingMinutes: Int
@@ -210,13 +212,16 @@ private struct DrawnJobsBatch: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
-            ForEach(entries) { entry in
+            ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
                 BatchJobCard(
                     entry: entry,
                     onOpen: { onOpen(entry.id) },
                     onStart: { onStart(entry.job) },
                     onSchedule: { onSchedule(entry.job) }
                 )
+                .modifier(DrawnCardEntrance(index: index))
+                // A new draw is a new card, even if the same job comes out again.
+                .id("\(drawCount)-\(entry.id)")
             }
             HStack(spacing: 10) {
                 Button(action: onRedraw) {
@@ -229,6 +234,26 @@ private struct DrawnJobsBatch: View {
             .buttonStyle(.bordered)
             .font(.subheadline)
         }
+    }
+}
+
+/// Each draw's cards drop out of the jar one after another: a short slide down with a little grow
+/// and fade, staggered so a batch reads as slips coming out one at a time. Same as Android.
+private struct DrawnCardEntrance: ViewModifier {
+    let index: Int
+    @State private var appeared = false
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(appeared ? 1 : 0)
+            .offset(y: appeared ? 0 : -24)
+            .scaleEffect(appeared ? 1 : 0.92)
+            .onAppear {
+                // Let the jar's shake lead.
+                withAnimation(.spring(response: 0.42, dampingFraction: 0.72).delay(0.12 + Double(index) * 0.08)) {
+                    appeared = true
+                }
+            }
     }
 }
 
