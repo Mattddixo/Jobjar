@@ -68,7 +68,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -89,7 +88,6 @@ import com.mattdixon.jobjar.ui.components.InfoBadge
 import com.mattdixon.jobjar.ui.components.SchedulePickerDialog
 import com.mattdixon.jobjar.ui.components.TimeBucketBadge
 import com.mattdixon.jobjar.ui.components.TodayDateButton
-import com.mattdixon.jobjar.ui.components.drawHaptic
 import com.mattdixon.jobjar.ui.components.plural
 import com.mattdixon.jobjar.ui.components.recurrenceLabel
 import com.mattdixon.jobjar.ui.components.rememberCalendarResultNotice
@@ -277,14 +275,11 @@ private fun JarHero(
     modifier: Modifier = Modifier
 ) {
     val slips = if (pendingCount == 0) 0 else ceil(pendingCount * JAR_SLIPS.size / JAR_FILL_CAP.toFloat()).toInt().coerceIn(1, JAR_SLIPS.size)
-    // The first draw gives the jar a quick shake, like pulling a slip out, and a buzz. Just the
-    // buzz with Remove animations on.
+    // The first draw gives the jar a quick shake, like pulling a slip out (not with Remove
+    // animations on).
     val tilt = remember { Animatable(0f) }
-    val view = LocalView.current
     LaunchedEffect(drawCount) {
-        if (!shake) return@LaunchedEffect
-        view.drawHaptic()
-        if (reduceMotion) return@LaunchedEffect
+        if (!shake || reduceMotion) return@LaunchedEffect
         tilt.snapTo(0f)
         tilt.animateTo(
             0f,

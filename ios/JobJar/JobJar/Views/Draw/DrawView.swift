@@ -96,10 +96,8 @@ struct DrawView: View {
         .onChange(of: drawRequest) { viewModel.draw(repository: repository, allJobs: allJobs) }
         .onAppear { drawCountOnAppear = viewModel.drawCount }
         .onChange(of: viewModel.drawCount) { _, count in
-            guard count == drawCountOnAppear + 1 else { return }
-            // A buzz either way; the shake is skipped with Reduce Motion on.
-            Haptics.draw()
-            if !reduceMotion { shakes += 1 }
+            guard count == drawCountOnAppear + 1, !reduceMotion else { return }
+            shakes += 1
         }
     }
 }
