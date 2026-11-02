@@ -73,29 +73,7 @@ schemes:
     build:
       targets:
         JobJar: all
-        # Home screen widgets: Draw a job and Coming up.
-  JobJarWidgets:
-    type: app-extension
-    platform: iOS
-    sources:
-      - path: JobJarWidgets
-      - path: JobJar/Shared
-    info:
-      path: JobJarWidgets-Info.plist
-      properties:
-        CFBundleDisplayName: Job Jar
-        CFBundleShortVersionString: $(MARKETING_VERSION)
-        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
-        NSExtension:
-          NSExtensionPointIdentifier: com.apple.widgetkit-extension
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.mattdixon.jobjar.widgets
-        PRODUCT_NAME: JobJarWidgets
-        TARGETED_DEVICE_FAMILY: "1,2"
-        CODE_SIGN_ENTITLEMENTS: JobJarWidgets/JobJarWidgets.entitlements
-        SKIP_INSTALL: YES
-  JobJarTests: [test]
+        JobJarTests: [test]
     test:
       targets:
         - JobJarTests
