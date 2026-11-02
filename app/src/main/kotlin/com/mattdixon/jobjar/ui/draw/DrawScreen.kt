@@ -1,10 +1,10 @@
 package com.mattdixon.jobjar.ui.draw
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.keyframes
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -103,7 +103,6 @@ import com.mattdixon.jobjar.ui.theme.appCardColors
 import com.mattdixon.jobjar.ui.theme.appTopBarColors
 import com.mattdixon.jobjar.util.formatMinutes
 import kotlin.math.ceil
-import kotlinx.coroutines.delay
 
 private val TIME_PRESETS = listOf(15, 30, 45, 60, 90, 120, 150, 180, 210)
 
@@ -222,8 +221,6 @@ fun DrawScreen(
                     hasDrawnJobs -> DrawnJobsBatch(
                         entries = state.drawnJobs,
                         drawCount = state.drawCount,
-                        animate = drawnHere && !reduceMotion,
-                        afterShake = drawnHere,
                         showBudgetSummary = !state.longJobsOnly && state.batchSize != DrawBatchSize.ONE,
                         availableMinutes = state.availableMinutes,
                         remainingMinutes = state.remainingMinutesAfterDraw,
@@ -567,8 +564,6 @@ private fun EmptyStateText(text: String) {
 private fun DrawnJobsBatch(
     entries: List<DrawnJobEntry>,
     drawCount: Int,
-    animate: Boolean,
-    afterShake: Boolean,
     showBudgetSummary: Boolean,
     availableMinutes: Int,
     remainingMinutes: Int,
@@ -593,16 +588,31 @@ private fun DrawnJobsBatch(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        entries.forEachIndexed { index, entry ->
-            key(entry.job.id) {
-                DrawnCardEntrance(index = index, drawCount = drawCount, animate = animate, afterShake = afterShake) {
-                    BatchJobCard(
-                        entry = entry,
-                        isBusy = isBusy,
-                        onOpen = { onOpen(entry.job.id) },
-                        onStart = { onStart(entry.job.id) },
-                        onScheduleRequest = { onScheduleRequest(entry.job.id) }
-                    )
+        // Draw again swaps the cards in place: the old ones fade, the new ones fade in, and the
+        // space between eases to the new size, so the buttons below glide rather than jump.
+        // Starting one (same draw) just closes its gap.
+        AnimatedContent(
+            targetState = DrawnBatch(drawCount, entries),
+            contentKey = { it.drawCount },
+            transitionSpec = {
+                fadeIn(tween(200, delayMillis = 80)) togetherWith fadeOut(tween(80)) using SizeTransform(clip = false)
+            },
+            label = "drawn-batch"
+        ) { batch ->
+            Column(
+                verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+                modifier = Modifier.animateContentSize()
+            ) {
+                batch.entries.forEach { entry ->
+                    key(entry.job.id) {
+                        BatchJobCard(
+                            entry = entry,
+                            isBusy = isBusy,
+                            onOpen = { onOpen(entry.job.id) },
+                            onStart = { onStart(entry.job.id) },
+                            onScheduleRequest = { onScheduleRequest(entry.job.id) }
+                        )
+                    }
                 }
             }
         }
@@ -631,32 +641,8 @@ private fun DrawnJobsBatch(
     }
 }
 
-/**
- * Each draw's cards drop out of the jar one after another: a short slide down with a little
- * grow and fade, staggered so a batch reads as slips coming out one at a time. Cards that are
- * already showing (after Start takes one away) don't play it again.
- */
-@Composable
-private fun DrawnCardEntrance(index: Int, drawCount: Int, animate: Boolean, afterShake: Boolean, content: @Composable () -> Unit) {
-    val progress = remember(drawCount) { Animatable(if (animate) 0f else 1f) }
-    LaunchedEffect(drawCount) {
-        if (!animate) return@LaunchedEffect
-        // Let the jar's shake lead, when there is one.
-        delay((if (afterShake) 120L else 0L) + index * 80L)
-        progress.animateTo(1f, spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMediumLow))
-    }
-    Box(
-        modifier = Modifier.graphicsLayer {
-            val p = progress.value
-            alpha = p.coerceIn(0f, 1f)
-            translationY = (1f - p) * -32.dp.toPx()
-            scaleX = 0.92f + 0.08f * p
-            scaleY = 0.92f + 0.08f * p
-        }
-    ) {
-        content()
-    }
-}
+/** One draw's cards; a new draw (Draw again) is a new batch even if a job comes out again. */
+private data class DrawnBatch(val drawCount: Int, val entries: List<DrawnJobEntry>)
 
 /**
  * A drawn job, on the honey card. Tap for details. Actions are Start and Schedule; finishing
