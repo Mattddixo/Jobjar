@@ -17,6 +17,8 @@ struct StatsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                WeekHistoryCard()
+
                 // Spent only appears once something with a cost has been completed; then the cards
                 // go two by two so none of them gets squeezed.
                 if stats.spentCents > 0 {

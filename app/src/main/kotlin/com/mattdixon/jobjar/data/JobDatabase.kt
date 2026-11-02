@@ -9,10 +9,11 @@ import androidx.room.withTransaction
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [Job::class], version = 14, exportSchema = true)
+@Database(entities = [Job::class, Completion::class], version = 15, exportSchema = true)
 @TypeConverters(Converters::class)
 abstract class JobDatabase : RoomDatabase() {
     abstract fun jobDao(): JobDao
+    abstract fun completionDao(): CompletionDao
 
     companion object {
         @Volatile
@@ -147,11 +148,34 @@ abstract class JobDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * The history. Starts with what the jobs already know: every finished one-off job, and the
+         * last time each repeating job was done (earlier ones weren't kept). Subtasks finished
+         * along with their parent (same completedAt) are left out, as they are from now on.
+         */
+        val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `completions` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`jobId` INTEGER NOT NULL, `title` TEXT NOT NULL, `estimatedMinutes` INTEGER NOT NULL, " +
+                        "`category` TEXT NOT NULL, `completedAt` INTEGER NOT NULL)"
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_completions_completedAt` ON `completions` (`completedAt`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_completions_jobId` ON `completions` (`jobId`)")
+                db.execSQL(
+                    "INSERT INTO completions (jobId, title, estimatedMinutes, category, completedAt) " +
+                        "SELECT j.id, j.title, j.estimatedMinutes, j.category, j.completedAt FROM jobs j " +
+                        "WHERE j.completedAt IS NOT NULL AND (j.isDone = 1 OR j.recurrenceDays IS NOT NULL) " +
+                        "AND NOT EXISTS (SELECT 1 FROM jobs p WHERE p.id = j.parentId AND p.completedAt = j.completedAt)"
+                )
+            }
+        }
+
         /** Also used by MigrationTest. */
         val ALL_MIGRATIONS = arrayOf(
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
             MIGRATION_6_9, MIGRATION_7_9, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
-            MIGRATION_12_13, MIGRATION_13_14
+            MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15
         )
 
         fun getInstance(context: Context): JobDatabase =

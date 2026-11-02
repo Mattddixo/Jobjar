@@ -44,6 +44,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.mattdixon.jobjar.R
@@ -78,6 +79,10 @@ import com.mattdixon.jobjar.util.formatScheduledDateTime
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -97,6 +102,9 @@ fun JobDetailScreen(
 
     val subtasksFlow = remember(repository, jobId) { repository.subtasksOf(jobId) }
     val subtasks by subtasksFlow.collectAsState(initial = emptyList())
+
+    val historyFlow = remember(repository, jobId) { repository.recentCompletions(jobId) }
+    val history by historyFlow.collectAsState(initial = emptyList())
 
     val scope = rememberCoroutineScope()
     val undo = LocalUndoController.current
@@ -214,6 +222,21 @@ fun JobDetailScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = if (currentJob.isOverdue()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    if (history.isNotEmpty()) {
+                        val locale = LocalConfiguration.current.locales[0]
+                        val zone = ZoneId.systemDefault()
+                        val thisYear = LocalDate.now(zone).year
+                        // "Last done: Oct 12, Sep 14, Aug 10" (with the year once it isn't this one).
+                        val dates = history.joinToString(", ") { entry ->
+                            val date = Instant.ofEpochMilli(entry.completedAt).atZone(zone).toLocalDate()
+                            date.format(DateTimeFormatter.ofPattern(if (date.year == thisYear) "MMM d" else "MMM d, yyyy", locale))
+                        }
+                        Text(
+                            stringResource(R.string.job_history_recent, dates),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
 
                 if (currentJob.scheduledDate != null) {

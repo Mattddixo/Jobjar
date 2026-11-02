@@ -73,6 +73,43 @@ class FakeJobDao : JobDao {
 }
 
 /** Fake calendar that tags events with the job id, like the real one. */
+class FakeCompletionDao : CompletionDao {
+    private val rows = MutableStateFlow<List<Completion>>(emptyList())
+    private var nextId = 1L
+
+    val all: List<Completion> get() = rows.value
+
+    override suspend fun insert(completion: Completion): Long {
+        val id = nextId++
+        rows.value = rows.value + completion.copy(id = id)
+        return id
+    }
+
+    override suspend fun insertAll(completions: List<Completion>) {
+        completions.forEach { insert(it) }
+    }
+
+    override suspend fun deleteIds(ids: List<Long>) {
+        rows.value = rows.value.filterNot { it.id in ids }
+    }
+
+    override suspend fun deleteFor(jobId: Long, completedAt: Long) {
+        rows.value = rows.value.filterNot { it.jobId == jobId && it.completedAt == completedAt }
+    }
+
+    override suspend fun deleteAll() {
+        rows.value = emptyList()
+    }
+
+    override suspend fun getAll(): List<Completion> = rows.value.sortedBy { it.completedAt }
+
+    override fun between(from: Long, to: Long): Flow<List<Completion>> =
+        rows.map { list -> list.filter { it.completedAt in from until to }.sortedByDescending { it.completedAt } }
+
+    override fun recentFor(jobId: Long, limit: Int): Flow<List<Completion>> =
+        rows.map { list -> list.filter { it.jobId == jobId }.sortedByDescending { it.completedAt }.take(limit) }
+}
+
 class FakeCalendar : CalendarGateway {
     data class Event(val jobId: Long, val title: String, val start: Long, val end: Long, val notes: String = "")
 

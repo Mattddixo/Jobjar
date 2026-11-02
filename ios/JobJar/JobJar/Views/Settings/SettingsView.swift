@@ -28,6 +28,7 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Query private var allJobs: [Job]
+    @Query private var history: [Completion]
     @AppStorage("themeMode") private var themeMode = ThemeMode.system.rawValue
     @AppStorage(favourFillKey) private var favourFill = true
     @AppStorage(showComingUpKey) private var showComingUp = false
@@ -36,7 +37,7 @@ struct SettingsView: View {
     @State private var exportDocument: JobExportDocument? = nil
     @State private var showExporter = false
     @State private var showImporter = false
-    @State private var pendingImport: [JobRecord]? = nil
+    @State private var pendingImport: JobExport.Backup? = nil
     @State private var message: String? = nil
 
     private var repository: JobRepository { JobRepository(modelContext: modelContext) }
@@ -81,7 +82,7 @@ struct SettingsView: View {
 
             Section {
                 Button {
-                    if let data = try? JobExport.encode(allJobs) {
+                    if let data = try? JobExport.encode(allJobs, history: history) {
                         exportDocument = JobExportDocument(data: data)
                         showExporter = true
                     } else {
@@ -136,9 +137,9 @@ struct SettingsView: View {
                 message = "Couldn't read that file."
                 return
             }
-            switch JobExport.decode(data) {
-            case .success(let records):
-                pendingImport = records
+            switch JobExport.decodeBackup(data) {
+            case .success(let backup):
+                pendingImport = backup
             case .failure(.newerVersion):
                 message = "That backup is from a newer version. Update Job Jar and try again."
             case .failure(.notABackup):
@@ -153,14 +154,14 @@ struct SettingsView: View {
         ) {
             Button("Cancel", role: .cancel) { pendingImport = nil }
             Button("Import", role: .destructive) {
-                if let records = pendingImport {
-                    repository.replaceAll(with: records)
-                    message = "Imported \(countLabel(records.count, "job", "jobs"))."
+                if let backup = pendingImport {
+                    repository.replaceAll(with: backup.jobs, history: backup.history)
+                    message = "Imported \(countLabel(backup.jobs.count, "job", "jobs"))."
                 }
                 pendingImport = nil
             }
         } message: {
-            let incoming = pendingImport?.count ?? 0
+            let incoming = pendingImport?.jobs.count ?? 0
             Text(
                 "The backup has \(countLabel(incoming, "job", "jobs")). It'll replace the " +
                     "\(countLabel(allJobs.count, "job", "jobs")) you have now."

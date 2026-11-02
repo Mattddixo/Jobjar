@@ -12,6 +12,6 @@ struct JobJarApp: App {
                 .environment(undoCenter)
                 .preferredColorScheme(ThemeMode(rawValue: themeMode)?.colorScheme)
         }
-        .modelContainer(for: Job.self)
+        .modelContainer(for: [Job.self, Completion.self])
     }
 }

@@ -14,7 +14,7 @@ import kotlinx.coroutines.launch
 class JobJarApplication : Application() {
     private val database: JobDatabase by lazy { JobDatabase.getInstance(this) }
     val repository: JobRepository by lazy {
-        JobRepository(database.jobDao(), CalendarScheduler(this), RoomTransactionRunner(database))
+        JobRepository(database.jobDao(), database.completionDao(), CalendarScheduler(this), RoomTransactionRunner(database))
     }
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)

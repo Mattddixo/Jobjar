@@ -45,6 +45,15 @@ class JobExportTest {
     }
 
     @Test
+    fun historyRoundTripsAndOldFilesHaveNone() {
+        val history = listOf(Completion(jobId = 5, title = "Car registration", estimatedMinutes = 20, category = "Car", completedAt = 1000))
+        val parsed = JobExport.parse(JobExport.write(jobs, 1, history)) as JobExport.ParseResult.Success
+        assertEquals(history, parsed.completions)
+        val old = JobExport.parse("""{"format":"job-jar","version":1,"jobs":[]}""") as JobExport.ParseResult.Success
+        assertTrue(old.completions.isEmpty())
+    }
+
+    @Test
     fun checklistStorageIsLenient() {
         val items = listOf(ChecklistItem("Bin bags", checked = true), ChecklistItem("Gloves"))
         assertEquals(items, decodeChecklist(encodeChecklist(items)))

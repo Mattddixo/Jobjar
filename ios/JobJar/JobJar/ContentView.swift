@@ -33,7 +33,11 @@ struct ContentView: View {
             .tag(AppTab.stats)
         }
         .overlay(alignment: .bottom) { UndoToast() }
-        .task { JobRepository(modelContext: modelContext).applyLaunchRules() }
+        .task {
+            let repository = JobRepository(modelContext: modelContext)
+            repository.applyLaunchRules()
+            repository.backfillHistoryOnce()
+        }
         .onOpenURL { url in
             guard let id = DeviceCalendar.jobId(from: url) else { return }
             selectedTab = .jobs

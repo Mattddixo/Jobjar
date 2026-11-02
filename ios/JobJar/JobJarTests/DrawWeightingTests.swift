@@ -59,7 +59,7 @@ final class DrawWeightingTests: XCTestCase {
     }
 
     private func makeRepository(seed: UInt64) throws -> (JobRepository, ModelContainer) {
-        let container = try ModelContainer(for: Job.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+        let container = try ModelContainer(for: Job.self, Completion.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
         let random = SeededUnit(seed: seed)
         var repository = JobRepository(modelContext: container.mainContext, calendar: FakeCalendar())
         repository.randomUnit = { random.next() }

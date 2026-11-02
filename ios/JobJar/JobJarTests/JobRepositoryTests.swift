@@ -77,7 +77,7 @@ final class JobRepositoryTests: XCTestCase {
     private var repository: JobRepository!
 
     override func setUp() async throws {
-        container = try ModelContainer(for: Job.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+        container = try ModelContainer(for: Job.self, Completion.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
         calendar = FakeCalendar()
         repository = JobRepository(modelContext: container.mainContext, calendar: calendar, now: { [unowned self] in clock })
     }
@@ -361,6 +361,51 @@ final class JobRepositoryTests: XCTestCase {
         XCTAssertEqual(job.nextDueAt, expected)
         repository.updateJob(job, with: change, allJobs: all, firstDue: clock)
         XCTAssertEqual(job.nextDueAt, bins.firstOnOrAfter(clock))
+    }
+
+    // MARK: History
+
+    private var history: [String] {
+        ((try? container.mainContext.fetch(FetchDescriptor<Completion>(sortBy: [SortDescriptor(\.completedAt)]))) ?? []).map(\.title)
+    }
+
+    func testCompletingLogsItAndUndoTakesItBack() {
+        let shelf = add("Shelf")
+        let snapshot = repository.toggleDone(shelf, allJobs: all)
+        XCTAssertEqual(history, ["Shelf"])
+        repository.undo(snapshot)
+        XCTAssertEqual(history, [])
+        repository.toggleDone(shelf, allJobs: all)
+        repository.toggleDone(shelf, allJobs: all)
+        XCTAssertEqual(history, [], "unticking takes it back out")
+    }
+
+    func testAParentFinishedWithItsSubtasksIsOneEntry() {
+        let parent = add("Garage", minutes: 60)
+        add("Sweep", minutes: 20, parent: parent)
+        add("Sort", minutes: 20, parent: parent)
+        repository.toggleDone(parent, allJobs: all)
+        XCTAssertEqual(history, ["Garage"])
+    }
+
+    func testTheLastSubtaskLogsItselfAndTheParent() {
+        let parent = add("Garage", minutes: 60)
+        let sweep = add("Sweep", minutes: 20, parent: parent)
+        let sort = add("Sort", minutes: 20, parent: parent)
+        repository.toggleDone(sweep, allJobs: all)
+        let snapshot = repository.toggleDone(sort, allJobs: all)
+        XCTAssertEqual(Set(history), ["Sweep", "Sort", "Garage"])
+        repository.undo(snapshot)
+        XCTAssertEqual(history, ["Sweep"])
+    }
+
+    func testRepeatsAreLoggedAndKeptAfterDeleting() {
+        let bins = add("Bins", repeatDays: 1)
+        repository.toggleDone(bins, allJobs: all)
+        repository.completeCycle(bins)
+        XCTAssertEqual(history, ["Bins", "Bins"])
+        repository.deleteJob(bins, allJobs: all)
+        XCTAssertEqual(history.count, 2, "history outlives the job")
     }
 
     func testOverdueJobsAreDrawnLikeHighPriority() {

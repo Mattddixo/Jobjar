@@ -376,4 +376,19 @@
     <string name="cd_coming_up_overdue">Something is overdue</string>
     <string name="cd_coming_up_expand">Show coming up</string>
     <string name="cd_coming_up_collapse">Hide coming up</string>
+
+    <!-- History -->
+    <string name="stats_week_this">This week</string>
+    <string name="stats_week_last">Last week</string>
+    <string name="stats_week_range">%1$s – %2$s</string>
+    <plurals name="stats_week_summary">
+        <item quantity="one">%1$d done · %2$s</item>
+        <item quantity="other">%1$d done · %2$s</item>
+    </plurals>
+    <string name="stats_week_empty_now">Nothing done yet this week.</string>
+    <string name="stats_week_empty_past">Nothing done that week.</string>
+    <string name="cd_previous_week">Previous week</string>
+    <string name="cd_next_week">Next week</string>
+    <string name="history_yesterday">Yesterday</string>
+    <string name="job_history_recent">Last done: %1$s</string>
 </resources>

@@ -31,6 +31,22 @@ enum JobExport {
         var version: Int
         var exportedAt: Int64
         var jobs: [Entry]
+        /// The history. Files from before it existed don't have one.
+        var completions: [HistoryEntry]?
+    }
+
+    private struct HistoryEntry: Codable {
+        var jobId: Int64?
+        var title: String?
+        var estimatedMinutes: Int?
+        var category: String?
+        var completedAt: Int64?
+    }
+
+    /// What a backup holds.
+    struct Backup {
+        var jobs: [JobRecord]
+        var history: [CompletionRecord]
     }
 
     private struct Entry: Codable {
@@ -65,7 +81,7 @@ enum JobExport {
     private static func millis(_ date: Date) -> Int64 { Int64((date.timeIntervalSince1970 * 1000).rounded()) }
     private static func date(_ millis: Int64) -> Date { Date(timeIntervalSince1970: Double(millis) / 1000) }
 
-    static func encode(_ jobs: [Job], exportedAt: Date = .now) throws -> Data {
+    static func encode(_ jobs: [Job], history: [Completion] = [], exportedAt: Date = .now) throws -> Data {
         let ordered = jobs.sorted { $0.createdAt < $1.createdAt }
         var numbers: [UUID: Int64] = [:]
         for (index, job) in ordered.enumerated() {
@@ -101,14 +117,25 @@ enum JobExport {
                 checklist: job.checklist
             )
         }
+        let completions = history.sorted { $0.completedAt < $1.completedAt }.map { entry in
+            HistoryEntry(
+                jobId: entry.jobId.flatMap { numbers[$0] }, title: entry.title, estimatedMinutes: entry.estimatedMinutes,
+                category: entry.category, completedAt: millis(entry.completedAt)
+            )
+        }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        return try encoder.encode(File(format: format, version: version, exportedAt: millis(exportedAt), jobs: entries))
+        return try encoder.encode(File(format: format, version: version, exportedAt: millis(exportedAt), jobs: entries, completions: completions))
     }
 
     /// Also fixes up anything the app would never save itself, in case the file was edited:
     /// missing, nested or repeating parents, and dependencies on non-siblings.
     static func decode(_ data: Data) -> Result<[JobRecord], Failure> {
+        decodeBackup(data).map(\.jobs)
+    }
+
+    /// The jobs and the history. History entries that don't make sense are skipped, not fatal.
+    static func decodeBackup(_ data: Data) -> Result<Backup, Failure> {
         let decoder = JSONDecoder()
         guard let header = try? decoder.decode(Header.self, from: data), header.format == format else {
             return .failure(.notABackup)
@@ -174,7 +201,15 @@ enum JobExport {
                 leadDays: fields.leadDays
             )
         }
-        return .success(records)
+        let history = (file.completions ?? []).compactMap { entry -> CompletionRecord? in
+            guard let completedAt = entry.completedAt, completedAt > 0,
+                  let title = entry.title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty else { return nil }
+            return CompletionRecord(
+                jobId: entry.jobId.flatMap { uuids[$0] }, title: title, estimatedMinutes: max(entry.estimatedMinutes ?? 0, 0),
+                category: entry.category ?? "", completedAt: date(completedAt)
+            )
+        }
+        return .success(Backup(jobs: records, history: history))
     }
 }
 

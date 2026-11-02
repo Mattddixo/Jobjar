@@ -60,6 +60,7 @@ class MigrationTest {
             db.execSQL("ALTER TABLE jobs ADD COLUMN repeatMonth INTEGER DEFAULT NULL")
             db.execSQL("ALTER TABLE jobs ADD COLUMN leadDays INTEGER NOT NULL DEFAULT 0")
         }
+        if (version >= 14) db.execSQL("ALTER TABLE jobs ADD COLUMN repeatWeekOfMonth INTEGER DEFAULT NULL")
 
         val insert = "INSERT INTO jobs (id, title, notes, estimatedMinutes, category, priority, isDone, createdAt, " +
             "timesDrawn, parentId, recurrenceDays, dependsOnSubtaskId) VALUES (?, ?, '', ?, 'Home', 'NORMAL', ?, 1, 0, ?, ?, ?)"
@@ -68,6 +69,10 @@ class MigrationTest {
         db.execSQL(insert, arrayOf<Any?>(3, "Garage", 120, 0, null, null, null))
         db.execSQL(insert, arrayOf<Any?>(4, "Sort", 30, 0, 3, null, null))
         db.execSQL(insert, arrayOf<Any?>(5, "Haul", 30, 0, 3, null, 4))
+        // Some history to carry over: a finished job, a subtask finished along with it (same time),
+        // and a repeating job's last completion.
+        db.execSQL("UPDATE jobs SET isDone = 1, completedAt = 500 WHERE id IN (3, 4)")
+        db.execSQL("UPDATE jobs SET completedAt = 400, completionCount = 2 WHERE id = 1")
         db.version = version
         db.close()
     }
@@ -95,6 +100,9 @@ class MigrationTest {
     @Test
     fun upgradesFromVersion13() = runTest { checkRecentUpgrade(13) }
 
+    @Test
+    fun upgradesFromVersion14() = runTest { checkRecentUpgrade(14) }
+
     /** Versions after the standalone rework only add columns. */
     private suspend fun checkRecentUpgrade(fromVersion: Int) {
         createLegacyDatabase(fromVersion)
@@ -109,6 +117,12 @@ class MigrationTest {
             assertEquals(RepeatAnchor.COMPLETION, chore.repeatAnchor)
             assertEquals(0, chore.leadDays)
             assertEquals(null, chore.repeatWeekOfMonth)
+            val history = db.completionDao().getAll()
+            assertEquals(
+                "finished jobs and repeating jobs' last time, not subtasks finished with their parent",
+                listOf("Water plants", "Garage"),
+                history.map { it.title }
+            )
             assertEquals(RepeatRule(interval = 7), chore.repeatRule())
         } finally {
             db.close()

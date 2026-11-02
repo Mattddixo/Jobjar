@@ -15,7 +15,8 @@ class JobRepositoryTest {
     private var now = LocalDateTime.of(2026, 3, 2, 9, 0).atZone(zone).toInstant().toEpochMilli() // a Monday
     private val dao = FakeJobDao()
     private val calendar = FakeCalendar()
-    private val repo = JobRepository(dao, calendar, DirectTransactions, clock = { now }, zone = { zone })
+    private val history = FakeCompletionDao()
+    private val repo = JobRepository(dao, history, calendar, DirectTransactions, clock = { now }, zone = { zone })
 
     private suspend fun add(title: String, minutes: Int = 30, parentId: Long? = null, recurrenceDays: Int? = null, weekdays: Int? = null, category: String = "") =
         repo.addJob(Job(title = title, estimatedMinutes = minutes, parentId = parentId, recurrenceDays = recurrenceDays, repeatWeekdays = weekdays, category = category))
@@ -248,9 +249,61 @@ class JobRepositoryTest {
         assertNull("without one it's due now", dao.row(repo.addJob(Job(title = "Edge", estimatedMinutes = 30).withRepeatRule(mow))).nextDueAt)
     }
 
+    // --- History ---
+
+    @Test
+    fun completingLogsItAndUndoTakesItBack() = runTest {
+        val job = add("Shelf")
+        val snapshot = repo.toggleDone(job)!!
+        assertEquals(listOf("Shelf"), history.all.map { it.title })
+        repo.undo(snapshot)
+        assertTrue(history.all.isEmpty())
+        assertFalse(dao.row(job).isDone)
+    }
+
+    @Test
+    fun untickingTakesItOutOfTheHistory() = runTest {
+        val job = add("Shelf")
+        repo.toggleDone(job)
+        repo.toggleDone(job)
+        assertTrue(history.all.isEmpty())
+    }
+
+    @Test
+    fun aParentFinishedWithItsSubtasksIsOneEntry() = runTest {
+        val parent = add("Garage", 120)
+        add("Sweep", parentId = parent)
+        add("Sort", parentId = parent)
+        repo.toggleDone(parent)
+        assertEquals(listOf("Garage"), history.all.map { it.title })
+    }
+
+    @Test
+    fun theLastSubtaskLogsItselfAndTheParent() = runTest {
+        val parent = add("Garage", 120)
+        val sweep = add("Sweep", parentId = parent)
+        val sort = add("Sort", parentId = parent)
+        repo.toggleDone(sweep)
+        val snapshot = repo.toggleDone(sort)!!
+        assertEquals(listOf("Sweep", "Sort", "Garage"), history.all.map { it.title })
+        repo.undo(snapshot)
+        assertEquals("undo takes back both from that tick", listOf("Sweep"), history.all.map { it.title })
+    }
+
+    @Test
+    fun eachRepeatIsLoggedAndKeptAfterDeleting() = runTest {
+        val chore = add("Water plants", recurrenceDays = 1)
+        repo.toggleDone(chore)
+        now += 2 * 86_400_000L
+        repo.completeCycle(chore)
+        assertEquals(2, history.all.count { it.jobId == chore })
+        repo.deleteJob(chore)
+        assertEquals("history outlives the job", 2, history.all.size)
+    }
+
     @Test
     fun overdueJobsAreDrawnLikeHighPriority() = runTest {
-        val seeded = JobRepository(dao, calendar, DirectTransactions, clock = { now }, zone = { zone }, random = kotlin.random.Random(7))
+        val seeded = JobRepository(dao, history, calendar, DirectTransactions, clock = { now }, zone = { zone }, random = kotlin.random.Random(7))
         now = LocalDateTime.of(2026, 2, 27, 9, 0).atZone(zone).toInstant().toEpochMilli()
         val overdue = addRule("Filter", RepeatRule(interval = 1, unit = RepeatUnit.MONTH, anchor = RepeatAnchor.SCHEDULE, monthDay = 1))
         val other = repo.addJob(Job(title = "Shelf", estimatedMinutes = 20, priority = Priority.LOW))
