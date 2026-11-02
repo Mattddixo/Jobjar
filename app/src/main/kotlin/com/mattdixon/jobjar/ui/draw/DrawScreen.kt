@@ -68,7 +68,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -89,10 +88,10 @@ import com.mattdixon.jobjar.ui.components.InfoBadge
 import com.mattdixon.jobjar.ui.components.SchedulePickerDialog
 import com.mattdixon.jobjar.ui.components.TimeBucketBadge
 import com.mattdixon.jobjar.ui.components.TodayDateButton
-import com.mattdixon.jobjar.ui.components.drawHaptic
 import com.mattdixon.jobjar.ui.components.plural
 import com.mattdixon.jobjar.ui.components.recurrenceLabel
 import com.mattdixon.jobjar.ui.components.rememberCalendarResultNotice
+import com.mattdixon.jobjar.ui.components.rememberReduceMotion
 import com.mattdixon.jobjar.ui.theme.AppShapes
 import com.mattdixon.jobjar.ui.theme.JarLid
 import com.mattdixon.jobjar.ui.theme.JarLidBand
@@ -125,7 +124,10 @@ fun DrawScreen(
     val viewModel: DrawViewModel = viewModel(factory = DrawViewModel.Factory(repository, appContext))
     val state by viewModel.uiState.collectAsState()
     // Only draws made while you're here animate, not the cards already showing when you come back.
+    // The first one also shakes the jar; draws after that just bring out the cards.
     val drawCountOnOpen = remember { state.drawCount }
+    val firstDrawHere = state.drawCount == drawCountOnOpen + 1
+    val reduceMotion = rememberReduceMotion()
     LaunchedEffect(drawRequest) {
         if (drawRequest > viewModel.handledDrawRequest) {
             viewModel.handledDrawRequest = drawRequest
@@ -176,7 +178,8 @@ fun DrawScreen(
                 inProgressCount = state.inProgressCount,
                 isLoaded = state.isLoaded,
                 drawCount = state.drawCount,
-                animate = state.drawCount > drawCountOnOpen
+                shake = firstDrawHere,
+                reduceMotion = reduceMotion
             )
 
             if (showComingUp) {
@@ -220,7 +223,8 @@ fun DrawScreen(
                     hasDrawnJobs -> DrawnJobsBatch(
                         entries = state.drawnJobs,
                         drawCount = state.drawCount,
-                        animate = state.drawCount > drawCountOnOpen,
+                        animate = state.drawCount > drawCountOnOpen && !reduceMotion,
+                        afterShake = firstDrawHere,
                         showBudgetSummary = !state.longJobsOnly && state.batchSize != DrawBatchSize.ONE,
                         availableMinutes = state.availableMinutes,
                         remainingMinutes = state.remainingMinutesAfterDraw,
@@ -266,18 +270,18 @@ private fun JarHero(
     inProgressCount: Int,
     isLoaded: Boolean,
     drawCount: Int,
-    animate: Boolean,
+    shake: Boolean,
+    reduceMotion: Boolean,
     modifier: Modifier = Modifier
 ) {
     val slips = if (pendingCount == 0) 0 else ceil(pendingCount * JAR_SLIPS.size / JAR_FILL_CAP.toFloat()).toInt().coerceIn(1, JAR_SLIPS.size)
-    // Each draw gives the jar a quick shake, like pulling a slip out, and a buzz.
-    val shake = remember { Animatable(0f) }
-    val view = LocalView.current
+    // The first draw gives the jar a quick shake, like pulling a slip out (not with Remove
+    // animations on).
+    val tilt = remember { Animatable(0f) }
     LaunchedEffect(drawCount) {
-        if (!animate) return@LaunchedEffect
-        view.drawHaptic()
-        shake.snapTo(0f)
-        shake.animateTo(
+        if (!shake || reduceMotion) return@LaunchedEffect
+        tilt.snapTo(0f)
+        tilt.animateTo(
             0f,
             keyframes {
                 durationMillis = 420
@@ -306,7 +310,7 @@ private fun JarHero(
                 modifier = Modifier
                     .size(width = 56.dp, height = 68.dp)
                     .graphicsLayer {
-                        rotationZ = shake.value
+                        rotationZ = tilt.value
                         transformOrigin = TransformOrigin(0.5f, 1f)
                     }
             )
@@ -566,6 +570,7 @@ private fun DrawnJobsBatch(
     entries: List<DrawnJobEntry>,
     drawCount: Int,
     animate: Boolean,
+    afterShake: Boolean,
     showBudgetSummary: Boolean,
     availableMinutes: Int,
     remainingMinutes: Int,
@@ -592,7 +597,7 @@ private fun DrawnJobsBatch(
         }
         entries.forEachIndexed { index, entry ->
             key(entry.job.id) {
-                DrawnCardEntrance(index = index, drawCount = drawCount, animate = animate) {
+                DrawnCardEntrance(index = index, drawCount = drawCount, animate = animate, afterShake = afterShake) {
                     BatchJobCard(
                         entry = entry,
                         isBusy = isBusy,
@@ -634,12 +639,12 @@ private fun DrawnJobsBatch(
  * already showing (after Start takes one away) don't play it again.
  */
 @Composable
-private fun DrawnCardEntrance(index: Int, drawCount: Int, animate: Boolean, content: @Composable () -> Unit) {
+private fun DrawnCardEntrance(index: Int, drawCount: Int, animate: Boolean, afterShake: Boolean, content: @Composable () -> Unit) {
     val progress = remember(drawCount) { Animatable(if (animate) 0f else 1f) }
     LaunchedEffect(drawCount) {
         if (!animate) return@LaunchedEffect
-        // Let the jar's shake lead.
-        delay(120L + index * 80L)
+        // Let the jar's shake lead, when there is one.
+        delay((if (afterShake) 120L else 0L) + index * 80L)
         progress.animateTo(1f, spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMediumLow))
     }
     Box(
