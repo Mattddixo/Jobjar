@@ -5,6 +5,7 @@ enum Route: Hashable {
     case jobDetail(UUID)
     case addEditJob(jobId: UUID?, parentId: UUID?)
     case comingUp
+    case spending
 }
 
 enum AppTab: Hashable {
@@ -28,10 +29,7 @@ struct ContentView: View {
             JobsTab(jobToOpen: $jobToOpen)
                 .tabItem { Label("Jobs", systemImage: "list.bullet") }
                 .tag(AppTab.jobs)
-            NavigationStack {
-                StatsView()
-                    .settingsButton()
-            }
+            StatsTab()
             .tabItem { Label("Stats", systemImage: "chart.bar") }
             .tag(AppTab.stats)
         }
@@ -112,7 +110,21 @@ private struct JobsTab: View {
     }
 }
 
-/// Destinations shared by the Jar and Jobs tabs.
+private struct StatsTab: View {
+    @State private var path = NavigationPath()
+
+    var body: some View {
+        NavigationStack(path: $path) {
+            StatsView()
+                .settingsButton()
+                .navigationDestination(for: Route.self) { route in
+                    RouteDestination(route: route, path: $path)
+                }
+        }
+    }
+}
+
+/// Destinations shared by the tabs.
 private struct RouteDestination: View {
     let route: Route
     @Binding var path: NavigationPath
@@ -137,6 +149,8 @@ private struct RouteDestination: View {
             )
         case .comingUp:
             ComingUpView(onOpenJob: { id in path.append(Route.jobDetail(id)) })
+        case .spending:
+            SpendingView(onOpenJob: { id in path.append(Route.jobDetail(id)) })
         }
     }
 }
