@@ -1,5 +1,6 @@
 package com.mattdixon.jobjar.ui.stats
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,12 +11,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -23,9 +26,11 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mattdixon.jobjar.R
@@ -43,7 +48,8 @@ import com.mattdixon.jobjar.util.formatMinutes
 @Composable
 fun StatsScreen(
     repository: JobRepository,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    onOpenSpending: () -> Unit = {}
 ) {
     val viewModel: StatsViewModel = viewModel(factory = StatsViewModel.Factory(repository))
     val state by viewModel.uiState.collectAsState()
@@ -80,16 +86,26 @@ fun StatsScreen(
             val completed = stringResource(R.string.stat_completed) to state.completedCount.toString()
             val time = stringResource(R.string.stat_time_invested) to formatMinutes(state.totalMinutesCompleted)
             // Spent only appears once something with a cost has been completed; then the cards go
-            // two by two so none of them gets squeezed.
-            val rows = if (state.spentCents > 0) {
-                listOf(listOf(toDo, completed), listOf(time, stringResource(R.string.stat_spent) to formatCost(state.spentCents)))
-            } else {
-                listOf(listOf(toDo, completed, time))
-            }
+            // two by two so none of them gets squeezed. Tapping it shows where the money went.
             Column(verticalArrangement = Arrangement.spacedBy(Spacing.lg)) {
-                rows.forEach { cards ->
+                if (state.spentCents > 0) {
                     Row(horizontalArrangement = Arrangement.spacedBy(Spacing.lg)) {
-                        cards.forEach { (label, value) ->
+                        StatCard(label = toDo.first, value = toDo.second, modifier = Modifier.weight(1f))
+                        StatCard(label = completed.first, value = completed.second, modifier = Modifier.weight(1f))
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.lg)) {
+                        StatCard(label = time.first, value = time.second, modifier = Modifier.weight(1f))
+                        StatCard(
+                            label = stringResource(R.string.stat_spent),
+                            value = formatCost(state.spentCents),
+                            onClick = onOpenSpending,
+                            onClickLabel = stringResource(R.string.cd_open_spending),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.lg)) {
+                        listOf(toDo, completed, time).forEach { (label, value) ->
                             StatCard(label = label, value = value, modifier = Modifier.weight(1f))
                         }
                     }
@@ -152,15 +168,34 @@ fun StatsScreen(
     }
 }
 
+/** With [onClick], the card is a button and shows a chevron so it reads as one. */
 @Composable
-private fun StatCard(label: String, value: String, modifier: Modifier = Modifier) {
-    Card(colors = appCardColors(), border = appCardBorder(), modifier = modifier) {
-        Column(
-            modifier = Modifier.padding(Spacing.xl),
-            verticalArrangement = Arrangement.spacedBy(Spacing.xs)
-        ) {
-            Text(value, style = MaterialTheme.typography.titleLarge)
-            Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun StatCard(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+    onClickLabel: String? = null
+) {
+    Card(
+        colors = appCardColors(),
+        border = appCardBorder(),
+        modifier = if (onClick != null) {
+            modifier
+                .clip(CardDefaults.shape)
+                .clickable(onClickLabel = onClickLabel, role = Role.Button, onClick = onClick)
+        } else {
+            modifier
+        }
+    ) {
+        Row(modifier = Modifier.padding(Spacing.xl), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+                Text(value, style = MaterialTheme.typography.titleLarge)
+                Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (onClick != null) {
+                Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }

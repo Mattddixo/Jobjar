@@ -56,6 +56,12 @@ animations (Android) on, there's no shake. Finishing a job gives a small buzz
 weeks. Then jobs done and time spent, overall and by category. A job's page shows when it was
 last done.
 
+**Spending.** Give jobs a cost and Stats shows what you've spent; tap it for where the money went.
+All time or a year at a time, grouped by category (biggest first, with each one's share), and
+within each the jobs that cost the most, how many times they were done and when last. Repeating
+jobs count every time they're finished. Categories show their top five with Show all for the
+rest, so it stays readable after years of jobs. Tap a job to open it.
+
 **Reminders.** Off by default. In Settings you can turn on a notification when repeating jobs
 come due (or start showing early), a daily nudge to draw a job, or both, at a time you choose.
 Tapping the nudge opens the app and draws.

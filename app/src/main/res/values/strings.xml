@@ -288,6 +288,33 @@
     <string name="stats_empty_hint">Finish a few jobs and your stats will show up here.</string>
     <string name="stats_category_summary">%1$d completed · %2$s</string>
     <string name="stats_category_summary_with_cost">%1$d completed · %2$s · %3$s</string>
+    <string name="cd_open_spending">See what the money went on</string>
+    <string name="spending_title">Spending</string>
+    <string name="spending_all_time">All time</string>
+    <plurals name="spending_summary_all_time">
+        <item quantity="one">All time, on %d job</item>
+        <item quantity="other">All time, on %d jobs</item>
+    </plurals>
+    <plurals name="spending_summary_year">
+        <item quantity="one">In %2$s, on %1$d job</item>
+        <item quantity="other">In %2$s, on %1$d jobs</item>
+    </plurals>
+    <string name="spending_undated_note">%1$s of this is from repeat jobs finished before Job Jar kept dates, so it isn\'t in any year.</string>
+    <string name="spending_empty">Nothing with a cost has been finished yet.</string>
+    <string name="spending_share">%1$d%%</string>
+    <string name="spending_show_all">Show all %1$d</string>
+    <string name="spending_show_fewer">Show fewer</string>
+    <string name="spending_done">Done</string>
+    <string name="spending_done_on">Done %1$s</string>
+    <plurals name="spending_done_times">
+        <item quantity="one">Done %d time</item>
+        <item quantity="other">Done %d times</item>
+    </plurals>
+    <plurals name="spending_done_times_last">
+        <item quantity="one">Done %1$d time, last %2$s</item>
+        <item quantity="other">Done %1$d times, last %2$s</item>
+    </plurals>
+    <string name="spending_part_of">Part of %1$s · %2$s</string>
 
     <!-- Settings -->
     <string name="settings_title">Settings</string>
