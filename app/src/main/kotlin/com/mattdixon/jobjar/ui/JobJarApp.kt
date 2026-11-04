@@ -39,11 +39,13 @@ import com.mattdixon.jobjar.ui.draw.DrawScreen
 import com.mattdixon.jobjar.ui.jobdetail.JobDetailScreen
 import com.mattdixon.jobjar.ui.joblist.JobListScreen
 import com.mattdixon.jobjar.ui.settings.SettingsScreen
+import com.mattdixon.jobjar.ui.stats.SpendingScreen
 import com.mattdixon.jobjar.ui.stats.StatsScreen
 import com.mattdixon.jobjar.ui.theme.LocalAppColors
 
 private const val SETTINGS_ROUTE = "settings"
 private const val COMING_UP_ROUTE = "coming-up"
+private const val SPENDING_ROUTE = "spending"
 
 private sealed class TopLevelDestination(val route: String, @StringRes val labelRes: Int, val icon: ImageVector) {
     data object Draw : TopLevelDestination("draw", R.string.tab_jar, Icons.Filled.Shuffle)
@@ -142,7 +144,18 @@ fun JobJarApp(
                     )
                 }
                 composable(TopLevelDestination.Stats.route) {
-                    StatsScreen(repository = repository, onOpenSettings = openSettings)
+                    StatsScreen(
+                        repository = repository,
+                        onOpenSettings = openSettings,
+                        onOpenSpending = { navController.navigate(SPENDING_ROUTE) { launchSingleTop = true } }
+                    )
+                }
+                composable(SPENDING_ROUTE) {
+                    SpendingScreen(
+                        repository = repository,
+                        onOpenJob = { jobId -> navController.navigate("job/$jobId") },
+                        onBack = { navController.popBackStack() }
+                    )
                 }
                 composable(SETTINGS_ROUTE) {
                     SettingsScreen(
