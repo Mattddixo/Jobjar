@@ -29,7 +29,12 @@ struct StatsView: View {
                         }
                         GridRow {
                             StatCard(label: "Time spent", value: formatMinutes(stats.totalMinutesCompleted))
-                            StatCard(label: "Spent", value: formatCost(stats.spentCents))
+                            // Shows where the money went.
+                            NavigationLink(value: Route.spending) {
+                                StatCard(label: "Spent", value: formatCost(stats.spentCents), showsChevron: true)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityHint("Shows what the money went on")
                         }
                     }
                 } else {
@@ -80,15 +85,26 @@ struct StatsView: View {
 private struct StatCard: View {
     let label: String
     let value: String
+    /// For the one that opens something, so it reads as a button.
+    var showsChevron = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(value).font(.title2.weight(.bold))
-            Text(label).font(.caption).foregroundStyle(.secondary)
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(value).font(.title2.weight(.bold))
+                Text(label).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+            if showsChevron {
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
         .cardStyle()
+        .contentShape(Rectangle())
     }
 }
 
